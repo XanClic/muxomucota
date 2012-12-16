@@ -2,9 +2,9 @@
 #include <syscall.h>
 
 
-noreturn void daemonize(void)
+noreturn void daemonize(const char *service)
 {
-    syscall0(SYS_DAEMONIZE);
+    syscall1(SYS_DAEMONIZE, (uintptr_t)service);
 
     for (;;);
 }

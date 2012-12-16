@@ -2,6 +2,7 @@
 #include <cpu.h>
 #include <cpu-state.h>
 #include <errno.h>
+#include <ipc.h>
 #include <kassert.h>
 #include <kmalloc.h>
 #include <limits.h>
@@ -13,18 +14,15 @@
 #include <sys/types.h>
 
 
-lock_t runqueue_lock = locked;
+// FIXME: Die Ringlisten sind doof.
 
 
-process_t *current_process, *idle_process, *runqueue;
+lock_t runqueue_lock = unlocked, daemons_lock = unlocked, zombies_lock = unlocked, dead_lock = unlocked; // haha dead_lock
+
+
+process_t *current_process, *idle_process, *runqueue, *daemons, *zombies, *dead;
 
 static pid_t pid_counter = 0;
-
-
-void start_doing_stuff(void)
-{
-    runqueue_lock = unlocked;
-}
 
 
 process_t *create_empty_process(const char *name)
@@ -57,7 +55,7 @@ process_t *create_empty_process(const char *name)
 
 void make_process_entry(process_t *proc, void (*address)(void), void *stack)
 {
-    initialize_cpu_state(proc->cpu_state, address, stack);
+    initialize_cpu_state(proc->cpu_state, address, stack, 0);
 
     proc->status = PROCESS_ACTIVE;
 }
@@ -76,7 +74,7 @@ void make_idle_process(void)
     idle_process->popup_stack_mask = NULL;
     idle_process->popup_stack_index = -1;
 
-    idle_process->runqueue_next = idle_process;
+    idle_process->next = idle_process;
 
 
     alloc_cpu_state(idle_process);
@@ -87,36 +85,120 @@ void make_idle_process(void)
 }
 
 
-void register_process(process_t *proc)
-{
-    // FIXME: Locking
+void q_register_process(process_t **list, process_t *proc);
 
-    if (runqueue != NULL)
+// Locking muss der Aufrufer machen
+void q_register_process(process_t **list, process_t *proc)
+{
+    if (*list != NULL)
     {
-        proc->runqueue_next = runqueue->runqueue_next;
-        runqueue->runqueue_next = proc;
+        proc->next = (*list)->next;
+        (*list)->next = proc;
     }
     else
     {
-        proc->runqueue_next = proc;
-        runqueue = proc;
+        proc->next = proc;
+        *list = proc;
     }
+}
+
+
+void register_process(process_t *proc)
+{
+    kassert_exec(lock(&runqueue_lock));
+
+    q_register_process(&runqueue, proc);
+
+    unlock(&runqueue_lock);
+}
+
+
+// Locking muss der Aufrufer machen
+void q_unregister_process(process_t **list, process_t *proc);
+
+void q_unregister_process(process_t **list, process_t *proc)
+{
+    process_t **lp = list;
+
+    // FIXME: Prozess nicht in der Liste
+
+    if (proc == proc->next)
+    {
+        *list = NULL;
+        return;
+    }
+
+    // Weil Ring
+    lp = &(*lp)->next;
+
+    while (*lp != proc)
+        lp = &(*lp)->next;
+
+    if (*list == proc)
+        *list = proc->next;
+
+    *lp = proc->next;
+}
+
+
+pid_t find_daemon_by_name(const char *name)
+{
+    kassert_exec(lock(&daemons_lock));
+
+    process_t *p = daemons;
+
+    if (!strncmp(p->name, name, sizeof(p->name)))
+    {
+        unlock(&daemons_lock);
+        return p->pid;
+    }
+
+    do
+        p = p->next;
+    while (strncmp(p->name, name, sizeof(p->name)) && (p != daemons));
+
+    unlock(&daemons_lock);
+
+    return (p != NULL) ? p->pid : -1;
+}
+
+
+static process_t *find_process_in(process_t **list, pid_t pid);
+
+static process_t *find_process_in(process_t **list, pid_t pid)
+{
+    process_t *p = *list;
+
+    if (p->pid == pid)
+        return p;
+
+    do
+        p = p->next;
+    while ((p->pid != pid) && (p != *list));
+
+    if (p->pid == pid)
+        return p;
+
+    return NULL;
 }
 
 
 process_t *find_process(pid_t pid)
 {
-    process_t *initial = runqueue, *rq = initial;
+    process_t *p;
 
-    if (rq->pid != pid)
-        do
-            rq = rq->runqueue_next;
-        while ((rq->pid != pid) && (rq != initial));
+    kassert_exec(lock(&runqueue_lock));
+    p = find_process_in(&runqueue, pid);
+    unlock(&runqueue_lock);
 
-    if (rq == initial)
-        return NULL;
+    if (p != NULL)
+        return p;
 
-    return rq;
+    kassert_exec(lock(&daemons_lock));
+    p = find_process_in(&daemons,  pid);
+    unlock(&daemons_lock);
+
+    return p;
 }
 
 
@@ -147,7 +229,21 @@ void destroy_process_struct(process_t *proc)
 
 void destroy_process(process_t *proc)
 {
+    kassert_exec(lock(&runqueue_lock));
+
     proc->status = PROCESS_ZOMBIE;
+
+    q_unregister_process(&runqueue, proc);
+
+    // yay potentieller dead lock (FIXME, btw)
+    kassert_exec(lock(&zombies_lock));
+
+    q_register_process(&zombies, proc);
+
+    unlock(&zombies_lock);
+
+    unlock(&runqueue_lock);
+
 
     if (proc == current_process)
         for (;;)
@@ -162,24 +258,75 @@ void destroy_this_popup_thread(void)
     if ((psi < 0) || (psi >= POPUP_STACKS))
         return;
 
+    kfree(current_process->popup_tmp);
+
     process_t *pg = find_process(current_process->pgid);
 
     kassert(pg != NULL);
 
     pg->popup_stack_mask[psi / LONG_BIT] &= ~(1 << (psi % LONG_BIT));
 
+
+    kassert_exec(lock(&runqueue_lock));
+
     current_process->status = PROCESS_DESTRUCT;
+
+    q_unregister_process(&runqueue, current_process);
+
+    // yay potentieller dead lock (FIXME, btw)
+    kassert_exec(lock(&dead_lock));
+
+    q_register_process(&dead, current_process);
+
+    unlock(&dead_lock);
+
+    unlock(&runqueue_lock);
+
 
     for (;;)
         cpu_halt();
 }
 
 
-void daemonize_process(process_t *proc)
+void sweep_dead_processes(void)
 {
-    // TODO: Aus der Runqueue nehmen
+    if (dead == NULL)
+        return;
+
+    process_t *p = dead;
+
+    do
+    {
+        process_t *np = p->next;
+
+        destroy_process_struct(p);
+
+        p = np;
+    }
+    while (p != dead);
+
+    dead = NULL;
+}
+
+
+void daemonize_process(process_t *proc, const char *name)
+{
+    strncpy(proc->name, name, sizeof(proc->name));
+
+    kassert_exec(lock(&runqueue_lock));
 
     proc->status = PROCESS_DAEMON;
+
+    q_unregister_process(&runqueue, proc);
+
+    // yay potentieller dead lock (FIXME, btw)
+    kassert_exec(lock(&daemons_lock));
+
+    q_register_process(&daemons, proc);
+
+    unlock(&daemons_lock);
+
+    unlock(&runqueue_lock);
 
     if (proc == current_process)
         for (;;)
@@ -187,7 +334,7 @@ void daemonize_process(process_t *proc)
 }
 
 
-int popup(process_t *proc)
+int popup(process_t *proc, int func_index, const void *buffer, size_t length)
 {
     if (proc->popup_stack_mask == NULL)
         return -EINVAL;
@@ -229,6 +376,8 @@ int popup(process_t *proc)
     pop->pid = pid_counter++; // FIXME: Atomic
     pop->pgid = proc->pid;
 
+    pop->errno = proc->errno;
+
     pop->name[0] = 0;
 
     pop->popup_stack_mask = NULL;
@@ -238,17 +387,26 @@ int popup(process_t *proc)
     alloc_cpu_state(pop);
 
 
+    if (buffer == NULL)
+        pop->popup_tmp = NULL;
+    else
+    {
+        pop->popup_tmp = kmalloc(length);
+        pop->popup_tmp_sz = length;
+
+        memcpy(pop->popup_tmp, buffer, length);
+    }
+
+
     pop->vmmc = proc->vmmc;
 
     use_vmm_context(pop->vmmc);
 
 
-    initialize_cpu_state(pop->cpu_state, proc->popup_entry, (void *)stack_top);
+    initialize_cpu_state(pop->cpu_state, proc->popup_entry, (void *)stack_top, 1, func_index);
 
 
-    // FIXME: Atomic
-    pop->runqueue_next = proc->runqueue_next;
-    proc->runqueue_next = pop;
+    register_process(pop);
 
 
     pop->status = PROCESS_ACTIVE;

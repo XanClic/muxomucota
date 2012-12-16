@@ -66,3 +66,18 @@ char *strncpy(char *restrict d, const char *restrict s, size_t n)
 
     return d;
 }
+
+
+int strncmp(const char *restrict s1, const char *restrict s2, size_t n)
+{
+    while (n--)
+    {
+        if (*(s1++) != *s2)
+            return (unsigned char)s2[0] - (unsigned char)s1[-1];
+
+        if (!*(s2++))
+            return 0;
+    }
+
+    return 0;
+}

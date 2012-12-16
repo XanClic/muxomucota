@@ -151,7 +151,7 @@ uintptr_t kernel_unmap(void *virt, size_t length)
         return (uintptr_t)virt;
 
 
-    int bi = (uintptr_t)virt >> 12;
+    int bi = ((uintptr_t)virt - HMEM_BASE) >> 12;
     int pages = (length + ((uintptr_t)virt & 0xFFF) + 4095) >> 12;
 
 
@@ -163,7 +163,7 @@ uintptr_t kernel_unmap(void *virt, size_t length)
     for (int i = 0; i < pages; i++)
     {
         kpt[bi + i] = MAP_NP;
-        invlpg((uintptr_t)(bi + i) << 12);
+        invlpg(((uintptr_t)(bi + i) << 12) + HMEM_BASE);
     }
 
     unlock(&kpt_lock);
