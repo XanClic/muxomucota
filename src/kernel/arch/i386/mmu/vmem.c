@@ -1,0 +1,455 @@
+#include <kassert.h>
+#include <lock.h>
+#include <pmm.h>
+#include <stdbool.h>
+#include <string.h>
+#include <vmem.h>
+
+#include <arch-vmem.h>
+#include <arch-constants.h>
+
+
+extern const void hpstructs;
+
+static uint32_t *kpd, *kpt;
+static lock_t kpt_lock = unlocked;
+
+
+void vmmc_clear_user(vmm_context_t *context);
+
+
+void change_vmm_context(const vmm_context_t *ctx)
+{
+    __asm__ __volatile__ ("mov cr3,%0;" :: "r"(ctx->arch.cr3));
+}
+
+static void invlpg(uintptr_t address)
+{
+    __asm__ __volatile__ ("invlpg [%0];" :: "r"(address));
+}
+
+
+void arch_init_virtual_memory(vmm_context_t *primctx)
+{
+    primctx->arch.cr3 = (uintptr_t)&hpstructs - PHYS_BASE;
+    primctx->arch.pd = (uint32_t *)&hpstructs;
+
+
+    kpd = primctx->arch.pd;
+    kpt = kpd + 1024;
+
+
+    unsigned i = 0;
+
+    for (; i < (PHYS_BASE >> 22); i++)
+        kpd[i] = MAP_NP;
+
+    for (; i < (HMEM_BASE >> 22); i++)
+        kpd[i] = (((uintptr_t)i << 22) - PHYS_BASE) | MAP_PR | MAP_RW | MAP_OS | MAP_GB | MAP_CC | MAP_4M;
+
+    for (; i < (UNMP_BASE >> 22); i++)
+        kpd[i] = ((uintptr_t)kpt - PHYS_BASE + (i - (HMEM_BASE >> 22)) * 4096) | MAP_PR | MAP_RW | MAP_OS | MAP_GB | MAP_CC | MAP_4K;
+
+    kpd[i] = MAP_NP;
+
+
+    for (i = 0; i < ((UNMP_BASE - HMEM_BASE) >> 12); i++)
+        kpt[i] = MAP_NP;
+
+
+    change_vmm_context(primctx);
+
+
+    init_gdt();
+}
+
+
+void *kernel_map(uintptr_t phys, size_t length)
+{
+    if (phys + length <= HMEM_BASE - PHYS_BASE)
+        return (void *)(phys | PHYS_BASE);
+
+
+    uintptr_t off = phys & 0xFFF;
+
+    phys &= ~0xFFF;
+
+
+    int pages = (length + off + 4095) >> 12;
+
+
+    // TODO: Irgendwie optimieren
+    for (int i = 0; i < (int)((UNMP_BASE - HMEM_BASE) >> 12); i++)
+    {
+        if (kpt[i] == MAP_NP)
+        {
+            kassert_exec(lock(&kpt_lock));
+
+            int j;
+            for (j = 0; j < pages; j++)
+                if (kpt[i + j] != MAP_NP)
+                    break;
+
+            if (kpt[i + j] != MAP_NP)
+            {
+                unlock(&kpt_lock);
+                i += j;
+                continue;
+            }
+
+            for (j = 0; j < pages; j++)
+                kpt[i + j] = (phys + j * 4096) | MAP_PR | MAP_RW | MAP_OS | MAP_GB | MAP_CC;
+
+            unlock(&kpt_lock);
+
+            return (void *)(HMEM_BASE + (uintptr_t)i * 4096 + off);
+        }
+    }
+
+
+    return NULL;
+}
+
+
+void *kernel_map_nc(uintptr_t *pageframe_list, int frames)
+{
+    for (int i = 0; i < (int)((UNMP_BASE - HMEM_BASE) >> 12); i++)
+    {
+        if (kpt[i] == MAP_NP)
+        {
+            kassert_exec(lock(&kpt_lock));
+
+            int j;
+            for (j = 0; j < frames; j++)
+                if (kpt[i + j] != MAP_NP)
+                    break;
+
+            if (kpt[i + j] != MAP_NP)
+            {
+                unlock(&kpt_lock);
+                i += j;
+                continue;
+            }
+
+            for (j = 0; j < frames; j++)
+                kpt[i + j] = pageframe_list[j] | MAP_PR | MAP_RW | MAP_OS | MAP_GB | MAP_CC;
+
+            unlock(&kpt_lock);
+
+            return (void *)(HMEM_BASE + (uintptr_t)i * 4096);
+        }
+    }
+
+
+    return NULL;
+}
+
+
+uintptr_t kernel_unmap(void *virt, size_t length)
+{
+    if ((uintptr_t)virt < HMEM_BASE)
+        return (uintptr_t)virt;
+
+
+    int bi = (uintptr_t)virt >> 12;
+    int pages = (length + ((uintptr_t)virt & 0xFFF) + 4095) >> 12;
+
+
+    uintptr_t phys = (kpt[bi] & ~0xFFF) | ((uintptr_t)virt & 0xFFF);
+
+
+    kassert_exec(lock(&kpt_lock));
+
+    for (int i = 0; i < pages; i++)
+    {
+        kpt[bi + i] = MAP_NP;
+        invlpg((uintptr_t)(bi + i) << 12);
+    }
+
+    unlock(&kpt_lock);
+
+
+    return phys;
+}
+
+
+void *vmmc_user_map(vmm_context_t *context, uintptr_t phys, size_t length, unsigned flags)
+{
+    uintptr_t off = phys & 0xFFF;
+
+    phys &= ~0xFFF;
+
+
+    int pages = (length + off + 4095) >> 12;
+
+
+    int current_block_size = 0;
+
+
+    kassert_exec(lock(&context->arch.lock));
+
+
+    int pdi, pti = 0;
+
+
+    for (pdi = USER_MAP_BASE >> 22; pdi < (int)(KERNEL_BASE >> 22); pdi++)
+    {
+        uint32_t *pt;
+
+        if (context->arch.pd[pdi] & MAP_PR)
+        {
+            pt = kernel_map(context->arch.pd[pdi] & ~0xFFF, 4096);
+
+            for (pti = 0; pti < 1024; pti++)
+            {
+                if (pt[pti] & MAP_PR)
+                    current_block_size = 0;
+                else
+                {
+                    current_block_size++;
+
+                    // s. u.
+                    if (current_block_size < pages)
+                        break;
+                }
+            }
+
+            kernel_unmap(pt, 4096);
+        }
+        else
+        {
+            current_block_size += 1024;
+
+            pti = 1024;
+        }
+
+        // In der Schleifenbedingung wäre das doof, weil vorher noch inkrementiert würde
+        if (current_block_size >= pages)
+            break;
+    }
+
+
+    if (current_block_size < pages)
+    {
+        unlock(&context->arch.lock);
+
+        return NULL;
+    }
+
+
+
+    uintptr_t end = ((uintptr_t)pdi << 22) | ((uintptr_t)pti << 12);
+
+    uintptr_t start = end - ((uintptr_t)current_block_size * 4096);
+
+    // TODO: Muss aber auch nicht sein.
+    for (int i = 0; i < pages; i++)
+        vmmc_map_user_page_unlocked(context, (void *)(start + (ptrdiff_t)i * 4096), phys + (ptrdiff_t)i * 4096, flags);
+
+
+    unlock(&context->arch.lock);
+
+
+    return (void *)start;
+}
+
+
+void create_vmm_context_arch(vmm_context_t *context)
+{
+    context->arch.cr3 = pmm_alloc(1);
+    context->arch.pd = kernel_map(context->arch.cr3, 4096);
+
+    memcpy(context->arch.pd, kpd, 4096);
+
+    context->arch.lock = unlocked;
+}
+
+
+void destroy_vmm_context(vmm_context_t *context)
+{
+    vmmc_clear_user(context);
+
+    kassert_exec(lock(&context->arch.lock));
+
+    kernel_unmap(context->arch.pd, 4096);
+    pmm_free(context->arch.cr3, 1);
+}
+
+
+void vmmc_map_user_page_unlocked(const vmm_context_t *context, void *virt, uintptr_t phys, unsigned flags)
+{
+    if (IS_KERNEL(virt))
+        return;
+
+    unsigned pdi = (uintptr_t)virt >> 22;
+    unsigned pti = ((uintptr_t)virt >> 12) & 0x3FF;
+
+    uint32_t *pt;
+
+    if (context->arch.pd[pdi] & MAP_PR)
+        pt = kernel_map(context->arch.pd[pdi] & ~0xFFF, 4096);
+    else
+    {
+        unsigned lazy_flags = 0;
+        if (context->arch.pd[pdi] & MAP_US)
+            lazy_flags = (context->arch.pd[pdi] & MAP_RW) | MAP_US;
+
+        context->arch.pd[pdi] = pmm_alloc(1) | MAP_PR | (lazy_flags ? lazy_flags : MAP_RW | MAP_US) | MAP_CC | MAP_LC | MAP_4K;
+        pt = kernel_map(context->arch.pd[pdi] & ~0xFFF, 4096);
+        memsetptr(pt, lazy_flags, 1024);
+    }
+
+    pt[pti] = (phys & ~0xFFF) | MAP_PR | (flags & (VMM_UW | VMM_PW) ? MAP_RW : 0) | (flags & (VMM_UR | VMM_UW | VMM_UX) ? MAP_US : 0) | MAP_CC | MAP_LC;
+
+    kernel_unmap(pt, 4096);
+}
+
+void vmmc_map_user_page(vmm_context_t *context, void *virt, uintptr_t phys, unsigned flags)
+{
+    kassert_exec(lock(&context->arch.lock));
+
+    vmmc_map_user_page_unlocked(context, virt, phys, flags);
+
+    unlock(&context->arch.lock);
+}
+
+
+void vmmc_lazy_map_area(vmm_context_t *context, void *virt, ptrdiff_t sz, unsigned flags)
+{
+    unsigned pdi = (uintptr_t)virt >> 22;
+    unsigned pti = ((uintptr_t)virt >> 12) & 0x3FF;
+
+    if (sz & (PAGE_SIZE - 1))
+        sz = (sz >> PAGE_SHIFT) + 1;
+    else
+        sz >>= PAGE_SHIFT;
+
+    kassert_exec(lock(&context->arch.lock));
+
+    while (sz > 0)
+    {
+        if (!(context->arch.pd[pdi] & MAP_PR) && ((unsigned)sz >= 1024) && !pti)
+        {
+            context->arch.pd[pdi++] = (flags & (VMM_UW | VMM_PW) ? MAP_RW : 0) | MAP_US | MAP_4K;
+            sz -= 1024;
+        }
+        else
+        {
+            uint32_t *pt;
+
+            if (context->arch.pd[pdi] & MAP_PR)
+            {
+                pt = kernel_map(context->arch.pd[pdi] & ~0xFFF, 4096);
+
+                for (unsigned i = pti; (i < 1024) && (sz > 0); i++)
+                {
+                    if (!(pt[i] & MAP_PR))
+                        pt[i] = (flags & (VMM_UW | VMM_PW) ? MAP_RW : 0) | MAP_US;
+
+                    sz--;
+                }
+            }
+            else
+            {
+                uintptr_t phys = pmm_alloc(1);
+                context->arch.pd[pdi] = phys | MAP_PR | MAP_RW | MAP_US | MAP_CC | MAP_LC | MAP_4K;
+                pt = kernel_map(phys, 4096);
+
+                size_t memsetsz = 1024 - pti;
+                if (memsetsz > (size_t)sz)
+                    memsetsz = sz;
+
+                memsetptr(pt + pti, (flags & (VMM_UW | VMM_PW) ? MAP_RW : 0) | MAP_US, memsetsz);
+
+                sz -= memsetsz;
+            }
+
+            kernel_unmap(pt, 4096);
+
+            pti = 0;
+            pdi++;
+        }
+    }
+
+    unlock(&context->arch.lock);
+}
+
+
+bool vmmc_do_cow(vmm_context_t *context, void *address)
+{
+    (void)context;
+    (void)address;
+
+    return false;
+}
+
+bool vmmc_do_lazy_map(vmm_context_t *context, void *address)
+{
+    unsigned pdi = (uintptr_t)address >> 22;
+    unsigned pti = ((uintptr_t)address >> 12) & 0x3FF;
+
+    kassert_exec(lock(&context->arch.lock));
+
+    uint32_t pde = context->arch.pd[pdi];
+
+    if (!(pde & MAP_US))
+    {
+        unlock(&context->arch.lock);
+        return false;
+    }
+
+    uint32_t *pt;
+
+    if (pde & MAP_PR)
+        pt = kernel_map(pde & ~0xFFF, 4096);
+    else
+    {
+        kassert(!(pde & MAP_4M));
+
+        uintptr_t phys = pmm_alloc(1);
+        context->arch.pd[pdi] = (pde & MAP_RW) | MAP_US | MAP_PR | MAP_CC | MAP_LC | MAP_4K | phys;
+        pt = kernel_map(phys, 4096);
+
+        memsetptr(pt, (pde & MAP_RW) | MAP_US, 1024);
+    }
+
+    if ((pt[pti] & (MAP_PR | MAP_US)) != MAP_US)
+    {
+        unlock(&context->arch.lock);
+
+        kernel_unmap(pt, 4096);
+        return false;
+    }
+
+    pt[pti] = (pt[pti] & MAP_RW) | MAP_US | MAP_PR | MAP_CC | MAP_LC | pmm_alloc(1);
+
+    unlock(&context->arch.lock);
+
+    kernel_unmap(pt, 4096);
+
+    return true;
+}
+
+
+void vmmc_clear_user(vmm_context_t *context)
+{
+    kassert_exec(lock(&context->arch.lock));
+
+    for (unsigned pdi = 0; pdi < (PHYS_BASE >> 22); pdi++)
+    {
+        if (!(context->arch.pd[pdi] & MAP_PR))
+            continue;
+
+        uint32_t *pt = kernel_map(context->arch.pd[pdi] & ~0xFFF, 4096);
+
+        for (unsigned pti = 0; pti < 1024; pti++)
+            if (pt[pti] & MAP_PR)
+                pmm_free(pt[pti] & ~0xFFF, 1);
+
+        kernel_unmap(pt, 4096);
+
+        pmm_free(context->arch.pd[pdi] & ~0xFFF, 1);
+    }
+
+    unlock(&context->arch.lock);
+}
