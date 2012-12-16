@@ -28,9 +28,6 @@ void main(void *boot_info)
     init_system_timer();
 
 
-    make_idle_process();
-
-
     int prime_procs = prime_process_count();
 
     for (int i = 0; i < prime_procs; i++)
@@ -47,7 +44,7 @@ void main(void *boot_info)
     }
 
 
-    start_doing_stuff();
+    make_idle_process();
 
 
     for (;;)

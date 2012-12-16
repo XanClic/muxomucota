@@ -36,7 +36,7 @@ typedef struct process
     struct cpu_state *cpu_state;
     vmm_context_t *vmmc;
 
-    struct process *runqueue_next;
+    struct process *next;
 
     struct process_arch_info arch;
 
@@ -44,17 +44,19 @@ typedef struct process
 
     int *errno;
 
+
+    // TODO: Ein paar Unions
     void (*popup_entry)(void);
     uint_fast32_t *popup_stack_mask;
 
     int popup_stack_index;
+
+    void *popup_tmp;
+    size_t popup_tmp_sz;
 } process_t;
 
 
 extern process_t *current_process;
-
-
-void start_doing_stuff(void);
 
 
 struct cpu_state *dispatch(struct cpu_state *state);
@@ -70,7 +72,7 @@ void make_idle_process(void);
 
 void make_process_entry(process_t *proc, void (*address)(void), void *stack);
 void alloc_cpu_state(process_t *proc);
-void initialize_cpu_state(struct cpu_state *state, void (*entry)(void), void *stack);
+void initialize_cpu_state(struct cpu_state *state, void (*entry)(void), void *stack, int parcount, ...);
 
 void register_process(process_t *proc);
 
@@ -80,13 +82,13 @@ void set_process_popup_entry(process_t *proc, void (*entry)(void));
 process_t *find_process(pid_t pid);
 
 
-int popup(process_t *proc);
+int popup(process_t *proc, int func_index, const void *buffer, size_t length);
 
 
 pid_t create_process_from_image(const char *name, const void *address, size_t size);
 
 
-void daemonize_process(process_t *proc);
+void daemonize_process(process_t *proc, const char *name);
 
 
 void destroy_process_struct(process_t *proc);
@@ -95,5 +97,8 @@ void destroy_process_arch_struct(process_t *proc);
 void destroy_process(process_t *proc);
 
 void destroy_this_popup_thread(void);
+
+
+void sweep_dead_processes(void);
 
 #endif

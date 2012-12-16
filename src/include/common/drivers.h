@@ -4,6 +4,6 @@
 #include <stdnoreturn.h>
 
 
-noreturn void daemonize(void);
+noreturn void daemonize(const char *service);
 
 #endif

@@ -36,7 +36,7 @@ bool get_boot_info(void *info)
 
     mmap = (struct memory_map *)(mboot->mmap_addr | PHYS_BASE);
 
-    for (struct memory_map *entry = mmap; (int)(entry - mmap) < mboot->mmap_length; mmap_length++)
+    for (struct memory_map *entry = mmap; entry - mmap < (int)mboot->mmap_length; mmap_length++)
         entry = (struct memory_map *)((uintptr_t)entry + entry->size + sizeof(entry->size));
 
 
