@@ -1,0 +1,18 @@
+#ifndef _ARCH_CONSTANTS_H
+#define _ARCH_CONSTANTS_H
+
+#define KERNEL_BASE 0xF0000000U
+
+#define PHYS_BASE 0xF0000000U
+#define HMEM_BASE 0xF0400000U
+#define UNMP_BASE 0xFFC00000U
+
+#define USER_STACK_BASE 0x70000000U
+#define USER_STACK_TOP  0x80000000U
+#define USER_MAP_BASE   0xC0000000U
+
+#define IRQ_COUNT 16
+
+#define IS_KERNEL(x) ((uintptr_t)(x) >= PHYS_BASE)
+
+#endif
