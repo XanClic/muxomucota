@@ -1,10 +1,10 @@
 #include <ipc.h>
 
 
-extern void (*popup_entries[])(void);
+extern uintptr_t (*popup_entries[])(void);
 
 
-void popup_handler(int index, void (*handler)(void))
+void popup_handler(int index, uintptr_t (*handler)(void))
 {
     // FIXME: Überlauf und so
     popup_entries[index] = handler;

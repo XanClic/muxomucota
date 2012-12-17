@@ -1,5 +1,4 @@
 #include <arch-constants.h>
-#include <cpu.h>
 #include <cpu-state.h>
 #include <errno.h>
 #include <ipc.h>
@@ -231,8 +230,6 @@ void destroy_process(process_t *proc)
 {
     kassert_exec(lock(&runqueue_lock));
 
-    proc->status = PROCESS_ZOMBIE;
-
     q_unregister_process(&runqueue, proc);
 
     // yay potentieller dead lock (FIXME, btw)
@@ -242,12 +239,14 @@ void destroy_process(process_t *proc)
 
     unlock(&zombies_lock);
 
+    proc->status = PROCESS_ZOMBIE;
+
     unlock(&runqueue_lock);
 
 
     if (proc == current_process)
         for (;;)
-            cpu_halt();
+            yield();
 }
 
 
@@ -267,9 +266,14 @@ void destroy_this_popup_thread(void)
     pg->popup_stack_mask[psi / LONG_BIT] &= ~(1 << (psi % LONG_BIT));
 
 
-    kassert_exec(lock(&runqueue_lock));
+    // TODO: Userstack freigeben
 
-    current_process->status = PROCESS_DESTRUCT;
+
+    if (current_process->popup_zombify)
+        destroy_process(current_process);
+
+
+    kassert_exec(lock(&runqueue_lock));
 
     q_unregister_process(&runqueue, current_process);
 
@@ -280,11 +284,45 @@ void destroy_this_popup_thread(void)
 
     unlock(&dead_lock);
 
+    current_process->status = PROCESS_DESTRUCT;
+
     unlock(&runqueue_lock);
 
 
     for (;;)
-        cpu_halt();
+        yield();
+}
+
+
+uintptr_t raw_waitpid(pid_t pid)
+{
+    volatile process_t *proc = (volatile process_t *)find_process(pid);
+
+    if (proc == NULL)
+    {
+        kassert_exec(lock(&zombies_lock));
+        proc = (volatile process_t *)find_process_in(&zombies, pid);
+        unlock(&zombies_lock);
+
+        // FIXME: Fehlermitteilung
+        if (proc == NULL)
+            return 0;
+    }
+
+
+    // FIXME: Das ist alles ziemlich fehleranfällig
+    while (proc->status != PROCESS_ZOMBIE)
+        yield();
+
+    kassert_exec(lock(&zombies_lock));
+    q_unregister_process(&zombies, (process_t *)proc);
+    unlock(&zombies_lock);
+
+    uintptr_t exit_val = proc->exit_info;
+
+    destroy_process_struct((process_t *)proc);
+
+    return exit_val;
 }
 
 
@@ -315,8 +353,6 @@ void daemonize_process(process_t *proc, const char *name)
 
     kassert_exec(lock(&runqueue_lock));
 
-    proc->status = PROCESS_DAEMON;
-
     q_unregister_process(&runqueue, proc);
 
     // yay potentieller dead lock (FIXME, btw)
@@ -326,15 +362,17 @@ void daemonize_process(process_t *proc, const char *name)
 
     unlock(&daemons_lock);
 
+    proc->status = PROCESS_DAEMON;
+
     unlock(&runqueue_lock);
 
     if (proc == current_process)
         for (;;)
-            cpu_halt();
+            yield();
 }
 
 
-int popup(process_t *proc, int func_index, const void *buffer, size_t length)
+pid_t popup(process_t *proc, int func_index, const void *buffer, size_t length, bool zombify)
 {
     if (proc->popup_stack_mask == NULL)
         return -EINVAL;
@@ -398,6 +436,9 @@ int popup(process_t *proc, int func_index, const void *buffer, size_t length)
     }
 
 
+    pop->popup_zombify = zombify;
+
+
     pop->vmmc = proc->vmmc;
 
     use_vmm_context(pop->vmmc);
@@ -412,5 +453,5 @@ int popup(process_t *proc, int func_index, const void *buffer, size_t length)
     pop->status = PROCESS_ACTIVE;
 
 
-    return 0;
+    return pop->pid;
 }
