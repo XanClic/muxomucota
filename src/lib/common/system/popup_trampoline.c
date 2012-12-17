@@ -3,17 +3,19 @@
 #include <stddef.h>
 
 
-void (*popup_entries[MAX_POPUP_HANDLERS])(void);
+uintptr_t (*popup_entries[MAX_POPUP_HANDLERS])(void);
 
 
 void _popup_ll_trampoline(uintptr_t func_index) __attribute__((weak));
 
 void _popup_ll_trampoline(uintptr_t func_index)
 {
-    if (popup_entries[func_index] != NULL)
-        popup_entries[func_index]();
+    uintptr_t retval = 0;
 
-    popup_exit();
+    if (popup_entries[func_index] != NULL)
+        retval = popup_entries[func_index]();
+
+    popup_exit(retval);
 }
 
 
@@ -21,8 +23,10 @@ void _popup_trampoline(int func_index);
 
 void _popup_trampoline(int func_index)
 {
-    if (popup_entries[func_index] != NULL)
-        popup_entries[func_index]();
+    uintptr_t retval = 0;
 
-    popup_exit();
+    if (popup_entries[func_index] != NULL)
+        retval = popup_entries[func_index]();
+
+    popup_exit(retval);
 }

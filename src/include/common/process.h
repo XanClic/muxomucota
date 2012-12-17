@@ -2,6 +2,7 @@
 #define _PROCESS_H
 
 #include <arch-process.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <vmem.h>
@@ -53,6 +54,11 @@ typedef struct process
 
     void *popup_tmp;
     size_t popup_tmp_sz;
+
+    bool popup_zombify;
+
+
+    uintptr_t exit_info;
 } process_t;
 
 
@@ -82,7 +88,10 @@ void set_process_popup_entry(process_t *proc, void (*entry)(void));
 process_t *find_process(pid_t pid);
 
 
-int popup(process_t *proc, int func_index, const void *buffer, size_t length);
+void yield(void);
+
+
+pid_t popup(process_t *proc, int func_index, const void *buffer, size_t length, bool zombify);
 
 
 pid_t create_process_from_image(const char *name, const void *address, size_t size);
@@ -97,6 +106,9 @@ void destroy_process_arch_struct(process_t *proc);
 void destroy_process(process_t *proc);
 
 void destroy_this_popup_thread(void);
+
+
+uintptr_t raw_waitpid(pid_t pid);
 
 
 void sweep_dead_processes(void);

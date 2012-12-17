@@ -8,9 +8,9 @@
 uint8_t *text_mem;
 
 
-static void handler(void);
+static uintptr_t handler(void);
 
-static void handler(void)
+static uintptr_t handler(void)
 {
     size_t incoming = popup_get_message(NULL, 0);
 
@@ -24,6 +24,8 @@ static void handler(void)
         text_mem[2 * i    ] = msg[i];
         text_mem[2 * i + 1] = 7;
     }
+
+    return 0;
 }
 
 

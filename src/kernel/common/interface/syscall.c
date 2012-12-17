@@ -45,6 +45,7 @@ uintptr_t syscall5(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, uin
             return 0;
 
         case SYS_POPUP_EXIT:
+            current_process->exit_info = p0;
             destroy_this_popup_thread();
             *current_process->errno = EINVAL;
             return 0;
@@ -62,9 +63,11 @@ uintptr_t syscall5(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, uin
                 *current_process->errno = ESRCH;
                 return 0;
             }
-            int ret = popup(proc, p1, (const void *)p2, p3);
+            pid_t ret = popup(proc, p1, (const void *)p2, p3, p4);
             if (ret < 0)
                 *current_process->errno = -ret;
+            else if (p4)
+                return raw_waitpid(ret);
             return 0;
         }
 
