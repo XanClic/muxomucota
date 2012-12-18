@@ -8,7 +8,7 @@ int errno;
 
 extern int main(int argc, char *argv[], char *envp[]);
 
-extern void _popup_ll_trampoline(int func_index);
+extern void _popup_ll_trampoline(int func_index, uintptr_t shmid);
 
 noreturn void _start(void);
 
@@ -16,7 +16,7 @@ noreturn void _start(void)
 {
     set_errno(&errno);
 
-    popup_entry((void (*)(void))&_popup_ll_trampoline);
+    popup_entry(&_popup_ll_trampoline);
 
     exit(main(0, NULL, NULL));
 

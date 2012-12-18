@@ -85,6 +85,65 @@ uintptr_t syscall5(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, uin
                 return -1;
             }
             return find_daemon_by_name((const char *)p0);
+
+        case SYS_SHM_CREATE:
+            return vmmc_create_shm(p0);
+
+        case SYS_SHM_OPEN:
+            if (!IS_KERNEL(p0))
+            {
+                *current_process->errno = EINVAL;
+                return 0;
+            }
+            // FIXME: p0 (shm_id) noch besser testen
+            return (uintptr_t)vmmc_open_shm(current_process->vmmc, p0, p1);
+
+        case SYS_SHM_CLOSE:
+            if (!IS_KERNEL(p0))
+            {
+                *current_process->errno = EINVAL;
+                return 0;
+            }
+            else if (IS_KERNEL(p1))
+            {
+                *current_process->errno = EFAULT;
+                return 0;
+            }
+            // FIXME: p0 (shm_id) noch besser testen; außerdem p1 testen
+            // (oder besser: gar nicht vom Benutzer nehmen)
+            vmmc_close_shm(current_process->vmmc, p0, (void *)p1);
+            return 0;
+
+        case SYS_SHM_SIZE:
+            if (!IS_KERNEL(p0))
+            {
+                *current_process->errno = EINVAL;
+                return 0;
+            }
+            // FIXME: p0 (shm_id) noch besser testen
+            return vmmc_get_shm_size(p0);
+
+        case SYS_IPC_SHM:
+        {
+            if (!IS_KERNEL(p2))
+            {
+                *current_process->errno = EINVAL;
+                return 0;
+            }
+            process_t *proc = find_process(p0);
+            if (proc == NULL)
+            {
+                *current_process->errno = ESRCH;
+                return 0;
+            }
+            // FIXME: p2 (shm_id) noch besser testen
+            pid_t ret = popup_shm(proc, p1, p2, p3);
+            if (ret < 0)
+                *current_process->errno = -ret;
+            else if (p3)
+                return raw_waitpid(ret);
+            return 0;
+        }
     }
 
     *current_process->errno = ENOSYS;

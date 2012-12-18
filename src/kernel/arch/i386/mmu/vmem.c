@@ -173,16 +173,8 @@ uintptr_t kernel_unmap(void *virt, size_t length)
 }
 
 
-void *vmmc_user_map(vmm_context_t *context, uintptr_t phys, size_t length, unsigned flags)
+void *vmmc_user_map_sg(vmm_context_t *context, uintptr_t *phys, int pages, unsigned flags)
 {
-    uintptr_t off = phys & 0xFFF;
-
-    phys &= ~0xFFF;
-
-
-    int pages = (length + off + 4095) >> 12;
-
-
     int current_block_size = 0;
 
 
@@ -200,18 +192,12 @@ void *vmmc_user_map(vmm_context_t *context, uintptr_t phys, size_t length, unsig
         {
             pt = kernel_map(context->arch.pd[pdi] & ~0xFFF, 4096);
 
-            for (pti = 0; pti < 1024; pti++)
+            for (pti = 0; (pti < 1024) && (current_block_size < pages); pti++)
             {
                 if (pt[pti] & MAP_PR)
                     current_block_size = 0;
                 else
-                {
                     current_block_size++;
-
-                    // s. u.
-                    if (current_block_size < pages)
-                        break;
-                }
             }
 
             kernel_unmap(pt, 4096);
@@ -223,7 +209,9 @@ void *vmmc_user_map(vmm_context_t *context, uintptr_t phys, size_t length, unsig
             pti = 1024;
         }
 
-        // In der Schleifenbedingung wäre das doof, weil vorher noch inkrementiert würde
+        // In der Schleifenbedingung wäre das doof, weil vorher noch inkrementiert würde.
+        // Und das wäre doof, weil pti schon eins zu groß ist (und damit exakt das Ende
+        // markiert).
         if (current_block_size >= pages)
             break;
     }
@@ -244,13 +232,26 @@ void *vmmc_user_map(vmm_context_t *context, uintptr_t phys, size_t length, unsig
 
     // TODO: Muss aber auch nicht sein.
     for (int i = 0; i < pages; i++)
-        vmmc_map_user_page_unlocked(context, (void *)(start + (ptrdiff_t)i * 4096), phys + (ptrdiff_t)i * 4096, flags);
+        vmmc_map_user_page_unlocked(context, (void *)(start + (ptrdiff_t)i * 4096), phys[i] & ~0xFFF, flags);
 
 
     unlock(&context->arch.lock);
 
 
     return (void *)start;
+}
+
+
+void *vmmc_user_map(vmm_context_t *context, uintptr_t phys, size_t length, unsigned flags)
+{
+    int pages = (length + (phys & 0xFFF) + 4095) >> 12;
+
+    uintptr_t phys_sg[pages];
+
+    for (int i = 0; i < pages; i++)
+        phys_sg[i] = phys + (uintptr_t)i * 4096;
+
+    return vmmc_user_map_sg(context, phys_sg, pages, flags);
 }
 
 
@@ -449,6 +450,39 @@ void vmmc_clear_user(vmm_context_t *context)
         kernel_unmap(pt, 4096);
 
         pmm_free(context->arch.pd[pdi] & ~0xFFF, 1);
+    }
+
+    unlock(&context->arch.lock);
+}
+
+
+void vmmc_user_unmap(vmm_context_t *context, void *virt, size_t length)
+{
+    unsigned pdi_start = (uintptr_t)virt >> 22;
+    unsigned pdi_end = ((uintptr_t)virt + length + (1 << 22) - 1) >> 22;
+
+    kassert_exec(lock(&context->arch.lock));
+
+    for (unsigned pdi = pdi_start; pdi < pdi_end; pdi++)
+    {
+        if (!(context->arch.pd[pdi] & MAP_PR))
+            continue;
+
+        unsigned pti_start = (pdi > pdi_start) ? 0 : ((uintptr_t)virt >> 12) & 0x3FF;
+        unsigned pti_end = (pdi < pdi_end - 1) ? 1024 : (((uintptr_t)virt + length + 1023) >> 12) & 0x3FF;
+
+        uint32_t *pt = kernel_map(context->arch.pd[pdi] & ~0xFFF, 4096);
+
+        for (unsigned pti = pti_start; pti < pti_end; pti++)
+            pt[pti] = MAP_NP;
+
+        kernel_unmap(pt, 4096);
+
+        if ((pti_start == 0) && (pti_end == 1024))
+        {
+            pmm_free(context->arch.pd[pdi] & ~0xFFF, 1);
+            context->arch.pd[pdi] = MAP_NP;
+        }
     }
 
     unlock(&context->arch.lock);

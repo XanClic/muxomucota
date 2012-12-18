@@ -1,6 +1,7 @@
 #include <drivers.h>
 #include <drivers/memory.h>
 #include <ipc.h>
+#include <shm.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -8,22 +9,21 @@
 uint8_t *text_mem;
 
 
-static uintptr_t handler(void);
+static uintptr_t handler(uintptr_t shmid);
 
-static uintptr_t handler(void)
+static uintptr_t handler(uintptr_t shmid)
 {
-    size_t incoming = popup_get_message(NULL, 0);
+    int incoming = shm_size(shmid);
 
-    char msg[incoming + 1];
-    popup_get_message(msg, incoming);
+    char *msg = shm_open(shmid, VMM_UR);
 
-    msg[incoming] = 0;
-
-    for (int i = 0; msg[i]; i++)
+    for (int i = 0; msg[i] && (i < incoming); i++)
     {
         text_mem[2 * i    ] = msg[i];
         text_mem[2 * i + 1] = 7;
     }
+
+    shm_close(shmid, msg);
 
     return 0;
 }
@@ -35,7 +35,7 @@ int main(void)
 
     memset(text_mem, 0, 80 * 25 * 2);
 
-    popup_handler(0, handler);
+    popup_shm_handler(0, handler);
 
     daemonize("tty");
 }
