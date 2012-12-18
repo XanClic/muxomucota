@@ -203,3 +203,23 @@ void pmm_free(uintptr_t start, int count)
 
     unlock(&bitmap_lock);
 }
+
+
+void pmm_use(uintptr_t start, int count)
+{
+    kassert(!(start & (PAGE_SIZE - 1)));
+    kassert(count > 0);
+
+
+    kassert_exec(lock(&bitmap_lock));
+
+    int base = (start - mem_base) >> PAGE_SHIFT;
+
+    for (int i = 0; i < count; i++)
+    {
+        kassert(bitmap[base + i]); // Wenn das bisher unused ist, ist das doof.
+        bitmap[base + i]++;
+    }
+
+    unlock(&bitmap_lock);
+}

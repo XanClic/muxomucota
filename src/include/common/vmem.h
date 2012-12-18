@@ -56,8 +56,16 @@ void vmmc_map_user_page(vmm_context_t *context, void *virt, uintptr_t phys, unsi
 void vmmc_lazy_map_area(vmm_context_t *context, void *virt, ptrdiff_t sz, unsigned flags);
 
 void *vmmc_user_map(vmm_context_t *context, uintptr_t phys, size_t length, unsigned flags);
+void *vmmc_user_map_sg(vmm_context_t *context, uintptr_t *phys, int pages, unsigned flags);
+
+void vmmc_user_unmap(vmm_context_t *context, void *virt, size_t length);
 
 bool vmmc_do_cow(vmm_context_t *context, void *address);
 bool vmmc_do_lazy_map(vmm_context_t *context, void *address);
+
+uintptr_t vmmc_create_shm(size_t sz);
+void *vmmc_open_shm(vmm_context_t *context, uintptr_t shm_id, unsigned flags);
+void vmmc_close_shm(vmm_context_t *context, uintptr_t shm_id, void *virt);
+size_t vmmc_get_shm_size(uintptr_t shm_id);
 
 #endif
