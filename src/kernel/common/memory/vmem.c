@@ -1,3 +1,4 @@
+#include <kassert.h>
 #include <kmalloc.h>
 #include <pmm.h>
 #include <vmem.h>
@@ -57,6 +58,39 @@ uintptr_t vmmc_create_shm(size_t sz)
 
     sg->size = sz;
     sg->users = 0;
+
+    return (uintptr_t)sg;
+}
+
+
+uintptr_t vmmc_make_shm(vmm_context_t *context, int count, void **vaddr_list, int *page_count_list)
+{
+    kassert(count > 0);
+
+    int pages = 0;
+
+    for (int i = 0; i < count; i++)
+        pages += page_count_list[i];
+
+    struct shm_sg *sg = kmalloc(sizeof(*sg) + pages * sizeof(uintptr_t));
+
+    sg->size = pages * PAGE_SIZE;
+    sg->users = 1;
+
+    int k = 0;
+
+    for (int i = 0; i < count; i++)
+    {
+        for (int j = 0; j < page_count_list[i]; j++, k++)
+        {
+            uintptr_t dst;
+            uintptr_t vaddr = ((uintptr_t)vaddr_list[i] & ~(PAGE_SIZE - 1)) + (uintptr_t)j * PAGE_SIZE;
+
+            kassert_exec(vmmc_address_mapped(context, (void *)vaddr, &dst) & (VMM_UR | VMM_UW));
+
+            sg->phys[k] = dst;
+        }
+    }
 
     return (uintptr_t)sg;
 }

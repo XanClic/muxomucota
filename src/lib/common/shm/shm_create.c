@@ -1,4 +1,5 @@
 #include <shm.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <syscall.h>
 
