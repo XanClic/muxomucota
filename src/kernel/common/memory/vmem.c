@@ -102,3 +102,55 @@ size_t vmmc_get_shm_size(uintptr_t shm_id)
 {
     return ((struct shm_sg *)shm_id)->size;
 }
+
+
+void *context_sbrk(vmm_context_t *context, intptr_t inc)
+{
+    if (!inc)
+        return context->heap_end;
+
+    if (inc & ~0xF)
+    {
+        if (inc >= 0)
+            inc = (inc + 0xF) & ~0xF;
+        else
+            inc = inc & ~0xF;
+    }
+
+    uintptr_t old_heap_end = (uintptr_t)context->heap_end;
+    uintptr_t new_heap_end = old_heap_end + inc;
+
+    context->heap_end = (void *)new_heap_end;
+
+    uintptr_t ret = old_heap_end;
+
+    if (inc >= 0)
+    {
+        old_heap_end &= ~(PAGE_SIZE - 1);
+        new_heap_end = (new_heap_end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+
+        for (uintptr_t page = old_heap_end; page < new_heap_end; page++)
+        {
+            uintptr_t dummy;
+            if (!vmmc_address_mapped(context, (void *)page, &dummy))
+                vmmc_map_user_page(context, (void *)page, pmm_alloc(1), VMM_UR | VMM_UW);
+        }
+    }
+    else
+    {
+        old_heap_end = (old_heap_end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+        new_heap_end = (new_heap_end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+
+        for (uintptr_t page = new_heap_end; page < old_heap_end; page++)
+        {
+            uintptr_t phys;
+            if (vmmc_address_mapped(context, (void *)page, &phys))
+            {
+                pmm_free(phys, 1);
+                vmmc_user_unmap(context, (void *)page, PAGE_SIZE);
+            }
+        }
+    }
+
+    return (void *)ret;
+}

@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <syscall.h>
+#include <vmem.h>
 
 
 uintptr_t syscall5(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, uintptr_t p3, uintptr_t p4)
@@ -144,6 +145,9 @@ uintptr_t syscall5(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, uin
                 return raw_waitpid(ret);
             return 0;
         }
+
+        case SYS_SBRK:
+            return (uintptr_t)context_sbrk(current_process->vmmc, (ptrdiff_t)p0);
     }
 
     *current_process->errno = ENOSYS;

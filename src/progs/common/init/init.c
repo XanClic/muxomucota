@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <ipc.h>
 #include <shm.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 
@@ -21,6 +22,15 @@ int main(void)
     ipc_shm_synced(console, 0, shm);
 
     shm_close(shm, msg);
+
+
+    void *alloced_garbage = malloc(87);
+
+    void *alloced_mem = aligned_alloc(4096, 4096);
+
+    __asm__ __volatile__ ("" :: "r"(alloced_garbage), "r"(alloced_mem) : "memory");
+
+    for (;;);
 
     return 0;
 }
