@@ -22,6 +22,8 @@ void free(void *mem);
 
 void *aligned_alloc(size_t alignment, size_t size);
 
+size_t _alloced_size(void *ptr);
+
 noreturn void exit(int status);
 noreturn void abort(void);
 
