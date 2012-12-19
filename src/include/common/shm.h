@@ -7,6 +7,7 @@
 
 
 uintptr_t shm_create(size_t size);
+uintptr_t shm_make(int count, void **vaddr_list, int *page_count_list);
 void *shm_open(uintptr_t shmid, unsigned flags);
 void shm_close(uintptr_t shmid, void *ptr);
 

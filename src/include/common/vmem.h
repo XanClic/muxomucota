@@ -66,6 +66,7 @@ bool vmmc_do_cow(vmm_context_t *context, void *address);
 bool vmmc_do_lazy_map(vmm_context_t *context, void *address);
 
 uintptr_t vmmc_create_shm(size_t sz);
+uintptr_t vmmc_make_shm(vmm_context_t *context, int count, void **vaddr_list, int *page_count_list);
 void *vmmc_open_shm(vmm_context_t *context, uintptr_t shm_id, unsigned flags);
 void vmmc_close_shm(vmm_context_t *context, uintptr_t shm_id, void *virt);
 size_t vmmc_get_shm_size(uintptr_t shm_id);

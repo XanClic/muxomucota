@@ -72,8 +72,8 @@ void *aligned_alloc(size_t align, size_t size)
     if (align < 0x10)
         align = 0x10;
 
-    if (size < align)
-        size = align;
+    if (size & 0xF)
+        size = (size + 0xF) & ~0xF;
 
     lock(&__heap_lock);
 

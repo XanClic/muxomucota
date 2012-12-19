@@ -14,23 +14,19 @@ int main(void)
         console = find_daemon_by_name("tty");
     while (console == -1);
 
-    uintptr_t shm = shm_create(24);
-    char *msg = shm_open(shm, VMM_UW);
+    void *msg = aligned_alloc(4096, 24);
 
     strcpy(msg, "Hallo, Microkernelwelt!");
+
+    int pc = 1;
+
+    uintptr_t shm = shm_make(1, &msg, &pc);
 
     ipc_shm_synced(console, 0, shm);
 
     shm_close(shm, msg);
 
-
-    void *alloced_garbage = malloc(87);
-
-    void *alloced_mem = aligned_alloc(4096, 4096);
-
-    __asm__ __volatile__ ("" :: "r"(alloced_garbage), "r"(alloced_mem) : "memory");
-
-    for (;;);
+    free(msg);
 
     return 0;
 }

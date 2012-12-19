@@ -8,6 +8,11 @@
 #include <vmem.h>
 
 
+// FIXME: Überprüfung, ob der Anfang der übergebenen Zeiger im Kernel liegt,
+// ist gut. Aber überprüfen, ob stattdessen das Ende drin liegt, wäre noch
+// besser.
+
+
 uintptr_t syscall5(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, uintptr_t p3, uintptr_t p4)
 {
     switch (syscall_nr)
@@ -89,6 +94,14 @@ uintptr_t syscall5(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, uin
 
         case SYS_SHM_CREATE:
             return vmmc_create_shm(p0);
+
+        case SYS_SHM_MAKE:
+            if (IS_KERNEL(p1) || IS_KERNEL(p2))
+            {
+                *current_process->errno = EFAULT;
+                return -1;
+            }
+            return vmmc_make_shm(current_process->vmmc, p0, (void **)p1, (int *)p2);
 
         case SYS_SHM_OPEN:
             if (!IS_KERNEL(p0))

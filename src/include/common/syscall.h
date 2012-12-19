@@ -20,6 +20,7 @@ enum syscall_number
     SYS_POPUP_GET_MESSAGE,
     SYS_FIND_DAEMON_BY_NAME,
     SYS_SHM_CREATE,
+    SYS_SHM_MAKE,
     SYS_SHM_OPEN,
     SYS_SHM_CLOSE,
     SYS_SHM_SIZE,
