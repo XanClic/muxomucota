@@ -20,6 +20,8 @@ void *calloc(size_t nmemb, size_t sz);
 void *realloc(void *ptr, size_t size);
 void free(void *mem);
 
+void *aligned_alloc(size_t alignment, size_t size);
+
 noreturn void exit(int status);
 noreturn void abort(void);
 

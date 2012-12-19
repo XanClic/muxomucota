@@ -487,3 +487,55 @@ void vmmc_user_unmap(vmm_context_t *context, void *virt, size_t length)
 
     unlock(&context->arch.lock);
 }
+
+
+unsigned vmmc_address_mapped(vmm_context_t *context, void *virt, uintptr_t *phys)
+{
+    unsigned pdi = (uintptr_t)virt >> 22;
+    unsigned pti = ((uintptr_t)virt >> 12) & 0x3FF;
+
+    kassert_exec(lock(&context->arch.lock));
+
+    if (!(context->arch.pd[pdi] & MAP_PR))
+    {
+        unlock(&context->arch.lock);
+        return 0;
+    }
+
+    uint32_t *pt = kernel_map(context->arch.pd[pdi] & ~0xFFF, 4096);
+
+    if (!(pt[pti] & MAP_PR))
+    {
+        kernel_unmap(pt, 4096);
+        unlock(&context->arch.lock);
+        return 0;
+    }
+
+    *phys = (pt[pti] & ~0xFFF) | ((uintptr_t)virt & 0xFFF);
+
+
+    unsigned flags = 0;
+
+    switch (pt[pti] & (MAP_RW | MAP_US))
+    {
+        case 0:
+            flags = VMM_PR | VMM_PX;
+            break;
+        case MAP_RW:
+            flags = VMM_PR | VMM_PW | VMM_PX;
+            break;
+        case MAP_US:
+            flags = VMM_PR | VMM_PX | VMM_UR | VMM_UX;
+            break;
+        case MAP_RW | MAP_US:
+            flags = VMM_PR | VMM_PW | VMM_PX | VMM_UR | VMM_UW | VMM_UX;
+            break;
+    }
+
+    unlock(&context->arch.lock);
+
+
+    kernel_unmap(pt, 4096);
+
+    return flags;
+}

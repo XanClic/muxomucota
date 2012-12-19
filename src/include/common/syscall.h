@@ -23,7 +23,8 @@ enum syscall_number
     SYS_SHM_OPEN,
     SYS_SHM_CLOSE,
     SYS_SHM_SIZE,
-    SYS_IPC_SHM
+    SYS_IPC_SHM,
+    SYS_SBRK
 };
 
 
