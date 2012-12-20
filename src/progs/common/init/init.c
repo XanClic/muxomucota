@@ -1,32 +1,37 @@
-#include <errno.h>
 #include <ipc.h>
-#include <shm.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <vfs.h>
+
+
+// TODO: Per argv übergeben.
+static const char *required_services[] = {
+    "tty"
+};
+
+
+static void wait_for(const char *name)
+{
+    while (find_daemon_by_name(name) < 0)
+        yield();
+}
 
 
 int main(void)
 {
-    pid_t console;
+    for (int i = 0; i < (int)ARR_LEN(required_services); i++)
+        wait_for(required_services[i]);
 
-    do
-        console = find_daemon_by_name("tty");
-    while (console == -1);
 
-    void *msg = aligned_alloc(4096, 24);
+    char msg[] = "Hallo Microkernelwelt!";
 
-    strcpy(msg, "Hallo, Microkernelwelt!");
 
-    int pc = 1;
+    int fd = create_pipe("(tty)/tty0", 0);
 
-    uintptr_t shm = shm_make(1, &msg, &pc);
+    stream_send(fd, msg, sizeof(msg), 0);
 
-    ipc_shm_synced(console, 0, shm);
-
-    shm_close(shm, msg);
-
-    free(msg);
+    destroy_pipe(fd, 0);
 
     return 0;
 }

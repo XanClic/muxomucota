@@ -132,6 +132,15 @@ void vmmc_close_shm(vmm_context_t *context, uintptr_t shm_id, void *virt)
 }
 
 
+void vmmc_unmake_shm(uintptr_t shm_id)
+{
+    struct shm_sg *sg = (struct shm_sg *)shm_id;
+
+    if (!--sg->users)
+        kfree(sg);
+}
+
+
 size_t vmmc_get_shm_size(uintptr_t shm_id)
 {
     return ((struct shm_sg *)shm_id)->size;
@@ -163,7 +172,7 @@ void *context_sbrk(vmm_context_t *context, intptr_t inc)
         old_heap_end &= ~(PAGE_SIZE - 1);
         new_heap_end = (new_heap_end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 
-        for (uintptr_t page = old_heap_end; page < new_heap_end; page++)
+        for (uintptr_t page = old_heap_end; page < new_heap_end; page += PAGE_SIZE)
         {
             uintptr_t dummy;
             if (!vmmc_address_mapped(context, (void *)page, &dummy))
@@ -175,7 +184,7 @@ void *context_sbrk(vmm_context_t *context, intptr_t inc)
         old_heap_end = (old_heap_end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
         new_heap_end = (new_heap_end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 
-        for (uintptr_t page = new_heap_end; page < old_heap_end; page++)
+        for (uintptr_t page = new_heap_end; page < old_heap_end; page += PAGE_SIZE)
         {
             uintptr_t phys;
             if (vmmc_address_mapped(context, (void *)page, &phys))

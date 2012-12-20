@@ -10,7 +10,7 @@ struct free_block
 };
 
 
-size_t _alloced_size(void *ptr)
+size_t _alloced_size(const void *ptr)
 {
-    return ((struct free_block *)((uintptr_t)ptr - 16))->size;
+    return ((const struct free_block *)((uintptr_t)ptr - 16))->size;
 }

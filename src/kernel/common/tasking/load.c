@@ -9,7 +9,7 @@
 #include <vmem.h>
 
 
-pid_t create_process_from_image(const char *name, const void *address, size_t size)
+pid_t create_process_from_image(const char *name, const void *address)
 {
     const Elf32_Ehdr *ehdr = address;
 

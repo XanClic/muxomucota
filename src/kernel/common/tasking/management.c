@@ -372,9 +372,7 @@ void daemonize_process(process_t *proc, const char *name)
 }
 
 
-static pid_t raw_popup(process_t *proc, int func_index, const void *buffer, size_t length, uintptr_t shmid, bool zombify);
-
-static pid_t raw_popup(process_t *proc, int func_index, const void *buffer, size_t length, uintptr_t shmid, bool zombify)
+pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer, size_t length, bool zombify)
 {
     if (proc->popup_stack_mask == NULL)
         return -EINVAL;
@@ -456,15 +454,4 @@ static pid_t raw_popup(process_t *proc, int func_index, const void *buffer, size
 
 
     return pop->pid;
-}
-
-
-pid_t popup(process_t *proc, int func_index, const void *buffer, size_t length, bool zombify)
-{
-    return raw_popup(proc, func_index, buffer, length, 0, zombify);
-}
-
-pid_t popup_shm(process_t *proc, int func_index, uintptr_t shmid, bool zombify)
-{
-    return raw_popup(proc, func_index, NULL, 0, shmid, zombify);
 }

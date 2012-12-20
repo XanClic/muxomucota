@@ -1,31 +1,51 @@
+#include <assert.h>
 #include <drivers.h>
 #include <drivers/memory.h>
 #include <ipc.h>
 #include <shm.h>
 #include <stdint.h>
 #include <string.h>
+#include <vfs.h>
 
 
 uint8_t *text_mem;
 
 
-static uintptr_t handler(uintptr_t shmid);
-
-static uintptr_t handler(uintptr_t shmid)
+static uintptr_t vfs_open(void)
 {
-    int incoming = shm_size(shmid);
+    return 1;
+}
 
-    char *msg = shm_open(shmid, VMM_UR);
 
-    for (int i = 0; msg[i] && (i < incoming); i++)
+static uintptr_t vfs_close(void)
+{
+    return 0;
+}
+
+
+static uintptr_t vfs_write(uintptr_t shmid)
+{
+    struct ipc_stream_send ipc_ss;
+
+    int recv = popup_get_message(&ipc_ss, sizeof(ipc_ss));
+
+    assert(recv == sizeof(ipc_ss));
+
+
+    char *shm_map = shm_open(shmid, VMM_UR);
+
+    char *msg = shm_map + ipc_ss.offset;
+
+    int i;
+    for (i = 0; msg[i] && (i < (int)ipc_ss.size); i++)
     {
         text_mem[2 * i    ] = msg[i];
         text_mem[2 * i + 1] = 7;
     }
 
-    shm_close(shmid, msg);
+    shm_close(shmid, shm_map);
 
-    return 0;
+    return i;
 }
 
 
@@ -35,7 +55,12 @@ int main(void)
 
     memset(text_mem, 0, 80 * 25 * 2);
 
-    popup_shm_handler(0, handler);
+
+    popup_message_handler(CREATE_PIPE,  vfs_open);
+    popup_message_handler(DESTROY_PIPE, vfs_close);
+
+    popup_shm_handler    (STREAM_SEND,  vfs_write);
+
 
     daemonize("tty");
 }
