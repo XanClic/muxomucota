@@ -23,6 +23,9 @@
 #define PAGE_SIZE (1 << PAGE_SHIFT)
 
 
+#define IS_ALIGNED(addr) (((uintptr_t)(addr) & (PAGE_SIZE - 1)) == 0)
+
+
 struct arch_vmm_context_info
 {
     uintptr_t cr3;

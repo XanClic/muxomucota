@@ -20,10 +20,17 @@ size_t popup_get_message(void *buffer, size_t buflen);
 
 void ipc_message(pid_t pid, int func_index, const void *buffer, size_t length);
 uintptr_t ipc_message_synced(pid_t pid, int func_index, const void *buffer, size_t length);
+
 void ipc_shm(pid_t pid, int func_index, uintptr_t shmid);
 uintptr_t ipc_shm_synced(pid_t pid, int func_index, uintptr_t shmid);
 
+void ipc_shm_message(pid_t pid, int func_index, uintptr_t shmid, const void *buffer, size_t length);
+uintptr_t ipc_shm_message_synced(pid_t pid, int func_index, uintptr_t shmid, const void *buffer, size_t length);
+
 
 pid_t find_daemon_by_name(const char *name);
+
+
+void yield(void);
 
 #endif

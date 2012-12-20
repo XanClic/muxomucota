@@ -1,5 +1,4 @@
 #include <ipc.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <syscall.h>
@@ -8,23 +7,35 @@
 
 void ipc_message(pid_t pid, int func_index, const void *buffer, size_t length)
 {
-    syscall5(SYS_IPC_MESSAGE, pid, func_index, (uintptr_t)buffer, length, false);
+    syscall5(SYS_IPC_POPUP, pid, func_index, 0, (uintptr_t)buffer, length);
 }
 
 
 uintptr_t ipc_message_synced(pid_t pid, int func_index, const void *buffer, size_t length)
 {
-    return syscall5(SYS_IPC_MESSAGE, pid, func_index, (uintptr_t)buffer, length, true);
+    return syscall5(SYS_IPC_POPUP_SYNC, pid, func_index, 0, (uintptr_t)buffer, length);
 }
 
 
 void ipc_shm(pid_t pid, int func_index, uintptr_t shmid)
 {
-    syscall4(SYS_IPC_SHM, pid, func_index, shmid, false);
+    syscall5(SYS_IPC_POPUP, pid, func_index, shmid, 0, 0);
 }
 
 
 uintptr_t ipc_shm_synced(pid_t pid, int func_index, uintptr_t shmid)
 {
-    return syscall4(SYS_IPC_SHM, pid, func_index, shmid, true);
+    return syscall5(SYS_IPC_POPUP_SYNC, pid, func_index, shmid, 0, 0);
+}
+
+
+void ipc_shm_message(pid_t pid, int func_index, uintptr_t shmid, const void *buffer, size_t length)
+{
+    syscall5(SYS_IPC_POPUP, pid, func_index, shmid, (uintptr_t)buffer, length);
+}
+
+
+uintptr_t ipc_shm_message_synced(pid_t pid, int func_index, uintptr_t shmid, const void *buffer, size_t length)
+{
+    return syscall5(SYS_IPC_POPUP_SYNC, pid, func_index, shmid, (uintptr_t)buffer, length);
 }

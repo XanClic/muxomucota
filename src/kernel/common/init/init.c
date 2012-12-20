@@ -40,7 +40,7 @@ void main(void *boot_info)
 
         // TODO: Kommandozeile parsen
 
-        create_process_from_image(name_arr, img_start, img_size);
+        create_process_from_image(name_arr, img_start);
     }
 
 

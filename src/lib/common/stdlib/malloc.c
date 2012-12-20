@@ -169,10 +169,12 @@ void *aligned_alloc(size_t align, size_t size)
         // Freier Platz am Ende
         if (align + 16 >= align_space)
         {
-            *fb = (struct free_block *)((uintptr_t)t + size);
+            *fb = (struct free_block *)((uintptr_t)t + size + 16);
             (*fb)->size = align + 16 - align_space;
             (*fb)->next = NULL;
         }
+        else
+            *fb = NULL;
 
         unlock(&__heap_lock);
 

@@ -5,7 +5,11 @@
 #include <stdint.h>
 #include <stdnoreturn.h>
 
+
 #define MB_CUR_MAX 4
+
+#define ARR_LEN(arr) (sizeof(arr) / sizeof(arr[0]))
+
 
 void *sbrk(intptr_t diff);
 
@@ -22,7 +26,7 @@ void free(void *mem);
 
 void *aligned_alloc(size_t alignment, size_t size);
 
-size_t _alloced_size(void *ptr);
+size_t _alloced_size(const void *ptr);
 
 noreturn void exit(int status);
 noreturn void abort(void);

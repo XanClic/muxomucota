@@ -91,11 +91,10 @@ process_t *find_process(pid_t pid);
 void yield(void);
 
 
-pid_t popup(process_t *proc, int func_index, const void *buffer, size_t length, bool zombify);
-pid_t popup_shm(process_t *proc, int func_index, uintptr_t shmid, bool zombify);
+pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer, size_t length, bool zombify);
 
 
-pid_t create_process_from_image(const char *name, const void *address, size_t size);
+pid_t create_process_from_image(const char *name, const void *address);
 
 
 void daemonize_process(process_t *proc, const char *name);
