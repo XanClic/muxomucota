@@ -108,7 +108,7 @@ uintptr_t syscall5(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, uin
                 *current_process->errno = EFAULT;
                 return -1;
             }
-            return vmmc_make_shm(current_process->vmmc, p0, (void **)p1, (int *)p2);
+            return vmmc_make_shm(current_process->vmmc, p0, (void **)p1, (int *)p2, p3);
 
         case SYS_SHM_OPEN:
             if (!IS_KERNEL(p0))

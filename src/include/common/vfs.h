@@ -40,7 +40,6 @@ struct ipc_stream_send
 {
     uintptr_t id;
     int flags;
-    off_t offset;
     big_size_t size;
 };
 

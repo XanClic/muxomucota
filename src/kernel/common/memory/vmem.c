@@ -46,6 +46,7 @@ struct shm_sg
 {
     size_t size;
     int users;
+    ptrdiff_t offset;
     uintptr_t phys[];
 };
 
@@ -58,14 +59,19 @@ uintptr_t vmmc_create_shm(size_t sz)
 
     sg->size = sz;
     sg->users = 0;
+    sg->offset = 0;
 
     return (uintptr_t)sg;
 }
 
 
-uintptr_t vmmc_make_shm(vmm_context_t *context, int count, void **vaddr_list, int *page_count_list)
+uintptr_t vmmc_make_shm(vmm_context_t *context, int count, void **vaddr_list, int *page_count_list, ptrdiff_t offset)
 {
     kassert(count > 0);
+
+    // Wie soll man damit sonst umgehen?
+    kassert((offset >= 0) && (offset < PAGE_SIZE));
+
 
     int pages = 0;
 
@@ -76,6 +82,7 @@ uintptr_t vmmc_make_shm(vmm_context_t *context, int count, void **vaddr_list, in
 
     sg->size = pages * PAGE_SIZE;
     sg->users = 1;
+    sg->offset = offset;
 
     int k = 0;
 
@@ -112,7 +119,7 @@ void *vmmc_open_shm(vmm_context_t *context, uintptr_t shm_id, unsigned flags)
     sg->users++;
 
     // FIXME: Ohne VMM_UW könnte ein Schreibzugriff zu COW führen
-    return vmmc_user_map_sg(context, sg->phys, pages, flags);
+    return (void *)((uintptr_t)vmmc_user_map_sg(context, sg->phys, pages, flags) + sg->offset);
 }
 
 
@@ -125,7 +132,7 @@ void vmmc_close_shm(vmm_context_t *context, uintptr_t shm_id, void *virt)
     for (int i = 0; i < pages; i++)
         pmm_free(sg->phys[i], 1);
 
-    vmmc_user_unmap(context, virt, sg->size);
+    vmmc_user_unmap(context, (void *)((uintptr_t)virt - sg->offset), sg->size);
 
     if (!--sg->users)
         kfree(sg);
