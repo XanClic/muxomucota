@@ -8,7 +8,7 @@
 #include <vfs.h>
 
 
-uint8_t *text_mem;
+uint16_t *text_mem;
 
 
 static uintptr_t vfs_open(void)
@@ -25,6 +25,9 @@ static uintptr_t vfs_close(void)
 
 static uintptr_t vfs_write(uintptr_t shmid)
 {
+    static int x, y;
+
+
     struct ipc_stream_send ipc_ss;
 
     int recv = popup_get_message(&ipc_ss, sizeof(ipc_ss));
@@ -34,11 +37,25 @@ static uintptr_t vfs_write(uintptr_t shmid)
 
     char *msg = shm_open(shmid, VMM_UR);
 
+    uint16_t *output = &text_mem[y * 80 + x];
+
     int i;
     for (i = 0; msg[i] && (i < (int)ipc_ss.size); i++)
     {
-        text_mem[2 * i    ] = msg[i];
-        text_mem[2 * i + 1] = 7;
+        switch (msg[i])
+        {
+            case '\n':
+                y += 1;
+                x = 0;
+                output = &text_mem[y * 80];
+                break;
+            case '\r':
+                x = 0;
+                output = &text_mem[y * 80];
+                break;
+            default:
+                *(output++) = msg[i] | 0x0700;
+        }
     }
 
     shm_close(shmid, msg);
