@@ -32,9 +32,7 @@ static uintptr_t vfs_write(uintptr_t shmid)
     assert(recv == sizeof(ipc_ss));
 
 
-    char *shm_map = shm_open(shmid, VMM_UR);
-
-    char *msg = shm_map + ipc_ss.offset;
+    char *msg = shm_open(shmid, VMM_UR);
 
     int i;
     for (i = 0; msg[i] && (i < (int)ipc_ss.size); i++)
@@ -43,7 +41,7 @@ static uintptr_t vfs_write(uintptr_t shmid)
         text_mem[2 * i + 1] = 7;
     }
 
-    shm_close(shmid, shm_map);
+    shm_close(shmid, msg);
 
     return i;
 }

@@ -25,7 +25,6 @@ big_size_t stream_send(int pipe, const void *data, big_size_t size, int flags)
     struct ipc_stream_send ipc_ss = {
         .id = _pipes[pipe].id,
         .flags = flags,
-        .offset = 0,
         .size = size
     };
 
@@ -39,8 +38,6 @@ big_size_t stream_send(int pipe, const void *data, big_size_t size, int flags)
 
         align_ofs = (uintptr_t)data % PAGE_SIZE;
 
-        ipc_ss.offset = align_ofs;
-
         // Passts in eine Page?
         if (size <= PAGE_SIZE - align_ofs)
         {
@@ -50,7 +47,7 @@ big_size_t stream_send(int pipe, const void *data, big_size_t size, int flags)
 
             int pc = 1; // page count
 
-            uintptr_t shm = shm_make(1, &start, &pc);
+            uintptr_t shm = shm_make(1, &start, &pc, align_ofs);
 
             assert(shm);
 
@@ -103,7 +100,7 @@ big_size_t stream_send(int pipe, const void *data, big_size_t size, int flags)
     pcl[2] = (end != NULL) ? 1 : 0;
 
 
-    uintptr_t shm = shm_make(3, val, pcl);
+    uintptr_t shm = shm_make(3, val, pcl, align_ofs);
 
     assert(shm);
 
