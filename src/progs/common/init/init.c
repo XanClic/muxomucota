@@ -1,7 +1,9 @@
+#include <assert.h>
 #include <ipc.h>
+#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/types.h>
+#include <unistd.h>
 #include <vfs.h>
 
 
@@ -24,14 +26,14 @@ int main(void)
         wait_for(required_services[i]);
 
 
-    char msg[] = "Hallo Microkernelwelt!";
+    assert(create_pipe("(tty)/tty0", O_RDONLY) == STDIN_FILENO);
+    assert(create_pipe("(tty)/tty0", O_WRONLY) == STDOUT_FILENO);
+    assert(create_pipe("(tty)/tty0", O_WRONLY) == STDERR_FILENO);
 
 
-    int fd = create_pipe("(tty)/tty0", 0);
+    puts("Hallo Microkernelwelt!");
 
-    stream_send(fd, msg, sizeof(msg), 0);
-
-    destroy_pipe(fd, 0);
+    puts("Hallo Newline!");
 
     return 0;
 }
