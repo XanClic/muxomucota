@@ -455,3 +455,29 @@ pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer
 
     return pop->pid;
 }
+
+
+pid_t fork_current(void *sys_stack)
+{
+    process_t *child = create_empty_process(current_process->name);
+
+    if (current_process->popup_entry != NULL)
+        set_process_popup_entry(child, current_process->popup_entry);
+
+    child->errno = current_process->errno;
+
+
+    vmmc_clone(child->vmmc, current_process->vmmc);
+
+
+    initialize_fork_cpu_state_from_syscall_stack(child->cpu_state, sys_stack);
+
+
+    register_process(child);
+
+
+    child->status = PROCESS_ACTIVE;
+
+
+    return child->pid;
+}

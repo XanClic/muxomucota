@@ -23,6 +23,9 @@ static uintptr_t vfs_close(void)
 }
 
 
+static lock_t output_lock = unlocked;
+
+
 static uintptr_t vfs_write(uintptr_t shmid)
 {
     static int x, y;
@@ -36,6 +39,8 @@ static uintptr_t vfs_write(uintptr_t shmid)
 
 
     char *msg = shm_open(shmid, VMM_UR);
+
+    lock(&output_lock);
 
     uint16_t *output = &text_mem[y * 80 + x];
 
@@ -57,6 +62,8 @@ static uintptr_t vfs_write(uintptr_t shmid)
                 *(output++) = msg[i] | 0x0700;
         }
     }
+
+    unlock(&output_lock);
 
     shm_close(shmid, msg);
 

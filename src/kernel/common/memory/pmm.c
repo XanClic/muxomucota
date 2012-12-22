@@ -11,6 +11,10 @@
 #include <arch-constants.h>
 
 
+#define BITMAP_COW_FLAG (1 << 7)
+#define BITMAP_USERS    (0xFF & ~BITMAP_COW_FLAG)
+
+
 static uintptr_t mem_base = (uintptr_t)-1;
 static int mem_entries;
 uint8_t *bitmap;
@@ -107,7 +111,7 @@ void init_pmm(void)
                 continue;
 
             for (int bi = start; bi < top; bi++)
-                bitmap[bi] = (1 << sizeof(*bitmap)) - 1;
+                bitmap[bi] = BITMAP_USERS;
         }
     }
 
@@ -125,7 +129,7 @@ void init_pmm(void)
 
         //Speicher für den Kernel reservieren
         for (int bi = s; bi < e; bi++)
-            bitmap[bi] = (1 << sizeof(*bitmap)) - 1;
+            bitmap[bi] = BITMAP_USERS;
     }
 
 
@@ -196,7 +200,7 @@ void pmm_free(uintptr_t start, int count)
 
     for (int i = 0; i < count; i++)
     {
-        kassert(bitmap[base + i]);
+        kassert(bitmap[base + i] & BITMAP_USERS);
         if (!--bitmap[base + i] && (look_from_here > base + i))
             look_from_here = base + i;
     }
@@ -217,9 +221,54 @@ void pmm_use(uintptr_t start, int count)
 
     for (int i = 0; i < count; i++)
     {
-        kassert(bitmap[base + i]); // Wenn das bisher unused ist, ist das doof.
+        kassert(bitmap[base + i] & BITMAP_USERS); // Wenn das bisher unused ist, ist das doof.
+        kassert((bitmap[base + i] & BITMAP_USERS) < BITMAP_USERS); // Sonst wird das Inkrementieren lustig.
         bitmap[base + i]++;
     }
 
     unlock(&bitmap_lock);
+}
+
+
+int pmm_user_count(uintptr_t paddr)
+{
+    kassert(!(paddr & (PAGE_SIZE - 1)));
+
+    return bitmap[(paddr - mem_base) >> PAGE_SHIFT] & BITMAP_USERS;
+}
+
+
+void pmm_mark_cow(uintptr_t start, int count, bool flag)
+{
+    kassert(!(start & (PAGE_SIZE - 1)));
+    kassert(count > 0);
+
+
+    kassert_exec(lock(&bitmap_lock));
+
+    int base = (start - mem_base) >> PAGE_SHIFT;
+
+    for (int i = 0; i < count; i++)
+    {
+        kassert(bitmap[base + i] & BITMAP_USERS);
+
+        if (flag)
+            bitmap[base + i] |=  BITMAP_COW_FLAG;
+        else
+            bitmap[base + i] &= ~BITMAP_COW_FLAG;
+    }
+
+    unlock(&bitmap_lock);
+}
+
+
+bool pmm_is_cow(uintptr_t paddr)
+{
+    kassert(!(paddr & (PAGE_SIZE - 1)));
+
+    int index = (paddr - mem_base) >> PAGE_SHIFT;
+
+    kassert(bitmap[index] & BITMAP_USERS);
+
+    return !!(bitmap[index] & BITMAP_COW_FLAG);
 }

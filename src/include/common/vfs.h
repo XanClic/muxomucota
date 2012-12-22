@@ -48,6 +48,9 @@ struct ipc_stream_send
 };
 
 
+extern struct pipe _pipes[__MFILE];
+
+
 int create_pipe(const char *path, int flags);
 void destroy_pipe(int pipe, int flags);
 

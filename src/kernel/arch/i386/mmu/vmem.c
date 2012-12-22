@@ -1,6 +1,7 @@
 #include <kassert.h>
 #include <lock.h>
 #include <pmm.h>
+#include <process.h>
 #include <stdbool.h>
 #include <string.h>
 #include <vmem.h>
@@ -378,11 +379,74 @@ void vmmc_lazy_map_area(vmm_context_t *context, void *virt, ptrdiff_t sz, unsign
 
 bool vmmc_do_cow(vmm_context_t *context, void *address)
 {
-    (void)context;
-    (void)address;
+    uintptr_t pdi = (uintptr_t)address >> 22;
+    uintptr_t pti = ((uintptr_t)address >> 12) & 0x3FF;
 
-    return false;
+    if (!(context->arch.pd[pdi] & MAP_PR))
+        return false;
+
+
+    uint32_t *pt = kernel_map(context->arch.pd[pdi] & ~0xFFF, 4096);
+
+    if (!(pt[pti] & MAP_PR) || (pt[pti] & MAP_RW))
+    {
+        kernel_unmap(pt, 4096);
+        return false;
+    }
+
+
+    if (!pmm_is_cow(pt[pti] & ~0xFFF))
+    {
+        kernel_unmap(pt, 4096);
+        return false;
+    }
+
+
+    switch (pmm_user_count(pt[pti] & ~0xFFF))
+    {
+        case 0:
+            kernel_unmap(pt, 4096);
+            return false;
+
+        case 1:
+            pt[pti] |= MAP_RW;
+            pmm_mark_cow(pt[pti] & ~0xFFF, 1, false);
+
+            kernel_unmap(pt, 1);
+
+            // Spurious Pagefaults sind doof
+            invlpg((uintptr_t)address);
+            return true;
+    }
+
+
+    uintptr_t npf = pmm_alloc(1);
+
+    void *np = kernel_map(npf, 4096);
+    void *op = kernel_map(pt[pti] & ~0xFFF, 4096);
+
+
+    memcpy(np, op, PAGE_SIZE);
+
+    kernel_unmap(np, 1);
+    kernel_unmap(op, 1);
+
+
+    pmm_free(pt[pti] & ~0xFFF, 1);
+
+    pt[pti] = npf | MAP_PR | MAP_RW | MAP_US | MAP_CC | MAP_LC;
+
+
+    kernel_unmap(pt, 4096);
+
+
+    // Spurious Pagefault vermeiden
+    invlpg((uintptr_t)address);
+
+
+    return true;
 }
+
 
 bool vmmc_do_lazy_map(vmm_context_t *context, void *address)
 {
@@ -453,6 +517,58 @@ void vmmc_clear_user(vmm_context_t *context)
     }
 
     unlock(&context->arch.lock);
+}
+
+
+void vmmc_clone(vmm_context_t *dest, vmm_context_t *source)
+{
+    bool current_affected = current_process->vmmc == source;
+
+
+    kassert_exec(lock(&source->arch.lock));
+    kassert_exec(lock(&dest->arch.lock));
+
+
+    for (unsigned pdi = 0; pdi < (PHYS_BASE >> 22); pdi++)
+    {
+        if (!(source->arch.pd[pdi] & MAP_PR))
+            continue;
+
+
+        uintptr_t nppt = pmm_alloc(1);
+
+        dest->arch.pd[pdi] = nppt | MAP_PR | MAP_RW | MAP_US | MAP_CC | MAP_LC | MAP_4K;
+
+
+        uint32_t *spt = kernel_map(source->arch.pd[pdi] & ~0xFFF, 4096);
+        uint32_t *npt = kernel_map(nppt, 4096);
+
+
+        for (unsigned pti = 0; pti < 1024; pti++)
+        {
+            if (spt[pti] & MAP_PR)
+            {
+                pmm_use(spt[pti] & ~0xFFF, 1);
+                pmm_mark_cow(spt[pti] & ~0xFFF, 1, true);
+
+                spt[pti] &= ~MAP_RW;
+
+                npt[pti] = (spt[pti] & ~0xFFF) | MAP_PR | MAP_RO | MAP_US | MAP_CC | MAP_LC;
+
+
+                if (current_affected)
+                    invlpg(((uintptr_t)pdi << 22) + ((uintptr_t)pti << 12));
+            }
+        }
+
+
+        kernel_unmap(spt, 4096);
+        kernel_unmap(npt, 4096);
+    }
+
+
+    unlock(&source->arch.lock);
+    unlock(&dest->arch.lock);
 }
 
 

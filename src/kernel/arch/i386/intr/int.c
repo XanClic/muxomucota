@@ -183,5 +183,6 @@ uintptr_t i386_syscall(uintptr_t eax, uintptr_t ebx, uintptr_t ecx, uintptr_t ed
 
 uintptr_t i386_syscall(uintptr_t eax, uintptr_t ebx, uintptr_t ecx, uintptr_t edx, uintptr_t esi, uintptr_t edi)
 {
-    return syscall5(eax, ebx, ecx, edx, esi, edi);
+    // FIXME: Aber irgendwie auch gut. Das mit dem &eax.
+    return syscall_krn(eax, ebx, ecx, edx, esi, edi, &eax);
 }
