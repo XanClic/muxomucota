@@ -6,8 +6,6 @@
 #include <vfs.h>
 
 
-extern struct pipe _pipes[__MFILE];
-
 extern lock_t _pipe_allocation_lock;
 
 

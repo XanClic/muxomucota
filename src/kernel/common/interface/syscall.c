@@ -13,7 +13,7 @@
 // besser.
 
 
-uintptr_t syscall5(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, uintptr_t p3, uintptr_t p4)
+uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, uintptr_t p3, uintptr_t p4, void *stack)
 {
     switch (syscall_nr)
     {
@@ -160,6 +160,9 @@ uintptr_t syscall5(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, uin
         case SYS_YIELD:
             yield();
             return 0;
+
+        case SYS_FORK:
+            return fork_current(stack);
     }
 
     *current_process->errno = ENOSYS;

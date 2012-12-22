@@ -62,6 +62,8 @@ void vmmc_user_unmap(vmm_context_t *context, void *virt, size_t length);
 
 unsigned vmmc_address_mapped(vmm_context_t *context, void *virt, uintptr_t *phys);
 
+void vmmc_clone(vmm_context_t *dest, vmm_context_t *source);
+
 bool vmmc_do_cow(vmm_context_t *context, void *address);
 bool vmmc_do_lazy_map(vmm_context_t *context, void *address);
 

@@ -8,9 +8,6 @@
 #include <vfs.h>
 
 
-extern struct pipe _pipes[__MFILE];
-
-
 big_size_t stream_send(int pipe, const void *data, big_size_t size, int flags)
 {
     assert((pipe >= 0) && (pipe < __MFILE));

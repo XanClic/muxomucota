@@ -35,5 +35,14 @@ int main(void)
 
     puts("Hallo Newline!");
 
+
+    pid_t child = fork();
+
+    if (child)
+        printf("Vater, Kind hat PID %i.\n", child);
+    else
+        printf("Kindprozess.\n");
+
+
     return 0;
 }

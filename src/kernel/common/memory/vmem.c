@@ -118,7 +118,6 @@ void *vmmc_open_shm(vmm_context_t *context, uintptr_t shm_id, unsigned flags)
 
     sg->users++;
 
-    // FIXME: Ohne VMM_UW könnte ein Schreibzugriff zu COW führen
     return (void *)((uintptr_t)vmmc_user_map_sg(context, sg->phys, pages, flags) + sg->offset);
 }
 

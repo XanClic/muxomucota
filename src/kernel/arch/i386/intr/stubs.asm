@@ -107,6 +107,7 @@ cld
 push  ds
 push  es
 
+push  ebp
 push  edi
 push  esi
 push  edx
@@ -120,7 +121,7 @@ mov   es,ax
 
 call  i386_syscall
 
-add   esp,24
+add   esp,28
 
 pop   es
 pop   ds

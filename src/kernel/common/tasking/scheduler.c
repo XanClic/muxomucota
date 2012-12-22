@@ -31,7 +31,7 @@ process_t *schedule(void)
     }
 
 
-    if (current_process == idle_process)
+    if ((current_process == idle_process) || (current_process->status != PROCESS_ACTIVE))
         current_process = runqueue;
 
 

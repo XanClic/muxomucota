@@ -79,6 +79,7 @@ void make_idle_process(void);
 void make_process_entry(process_t *proc, void (*address)(void), void *stack);
 void alloc_cpu_state(process_t *proc);
 void initialize_cpu_state(struct cpu_state *state, void (*entry)(void), void *stack, int parcount, ...);
+void initialize_fork_cpu_state_from_syscall_stack(struct cpu_state *state, void *stack);
 
 void register_process(process_t *proc);
 
@@ -89,6 +90,8 @@ process_t *find_process(pid_t pid);
 
 
 void yield(void);
+
+pid_t fork_current(void *sys_stack);
 
 
 pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer, size_t length, bool zombify);
