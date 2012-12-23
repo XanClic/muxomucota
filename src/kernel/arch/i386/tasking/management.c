@@ -1,4 +1,5 @@
 #include <cpu-state.h>
+#include <kassert.h>
 #include <kmalloc.h>
 #include <process.h>
 #include <stdarg.h>
@@ -44,6 +45,45 @@ void initialize_cpu_state(struct cpu_state *state, void (*entry)(void), void *st
     state->esp = (uintptr_t)stack;
 
     state->eflags = 0x202;
+}
+
+
+void *process_stack_alloc(struct cpu_state *state, size_t size)
+{
+    state->esp -= size;
+
+    return (void *)state->esp;
+}
+
+
+void process_set_initial_params(process_t *proc, int argc, const char *const *argv)
+{
+    uintptr_t initial = proc->cpu_state->esp;
+
+    // GCC möchte den Stack an 16 ausgerichtet haben.
+    proc->cpu_state->esp = (proc->cpu_state->esp - sizeof(argc) - sizeof(argv)) & ~0xF;
+
+
+    uintptr_t end = (initial + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+
+    for (uintptr_t stack_page = proc->cpu_state->esp & ~(PAGE_SIZE - 1); stack_page < end; stack_page += PAGE_SIZE)
+        vmmc_do_lazy_map(proc->vmmc, (void *)stack_page);
+
+
+    uintptr_t paddr;
+    kassert_exec(vmmc_address_mapped(proc->vmmc, (void *)proc->cpu_state->esp, &paddr));
+
+    // Das muss sich innerhalb einer Page befinden (insg. acht Byte, an 16
+    // ausgerichtet).
+    void *mapped_stack = kernel_map(paddr, sizeof(argc) + sizeof(argv));
+
+    *(int *)mapped_stack = argc;
+    *(const char *const **)((int *)mapped_stack + 1) = argv;
+
+    kernel_unmap(mapped_stack, sizeof(argc) + sizeof(argv));
+
+    // Ein Funktionsaufruf, ein simulierter. Was denn sonst?
+    proc->cpu_state->esp -= sizeof(void (*)(void));
 }
 
 

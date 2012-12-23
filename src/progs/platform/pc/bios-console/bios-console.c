@@ -23,6 +23,12 @@ static uintptr_t vfs_close(void)
 }
 
 
+static uintptr_t vfs_dup(void)
+{
+    return 1;
+}
+
+
 static lock_t output_lock = unlocked;
 
 
@@ -50,16 +56,18 @@ static uintptr_t vfs_write(uintptr_t shmid)
         switch (msg[i])
         {
             case '\n':
-                y += 1;
-                x = 0;
-                output = &text_mem[y * 80];
-                break;
+                y++;
             case '\r':
                 x = 0;
                 output = &text_mem[y * 80];
                 break;
             default:
                 *(output++) = msg[i] | 0x0700;
+                if (++x >= 80)
+                {
+                    x -= 80;
+                    y++;
+                }
         }
     }
 
@@ -78,10 +86,11 @@ int main(void)
     memset(text_mem, 0, 80 * 25 * 2);
 
 
-    popup_message_handler(CREATE_PIPE,  vfs_open);
-    popup_message_handler(DESTROY_PIPE, vfs_close);
+    popup_message_handler(CREATE_PIPE,    vfs_open);
+    popup_message_handler(DESTROY_PIPE,   vfs_close);
+    popup_message_handler(DUPLICATE_PIPE, vfs_dup);
 
-    popup_shm_handler    (STREAM_SEND,  vfs_write);
+    popup_shm_handler    (STREAM_SEND,    vfs_write);
 
 
     daemonize("tty");
