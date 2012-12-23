@@ -9,7 +9,7 @@
 #include <vmem.h>
 
 
-pid_t create_process_from_image(const char *name, const void *address)
+pid_t create_process_from_image(int argc, const char *const *argv, const void *address)
 {
     const Elf32_Ehdr *ehdr = address;
 
@@ -28,7 +28,7 @@ pid_t create_process_from_image(const char *name, const void *address)
     }
 
 
-    process_t *proc = create_empty_process(name);
+    process_t *proc = create_empty_process(argv[0]);
 
 
     const Elf32_Phdr *phdr = (const Elf32_Phdr *)((uintptr_t)ehdr + ehdr->e_phoff);
@@ -101,12 +101,16 @@ pid_t create_process_from_image(const char *name, const void *address)
     vmmc_set_heap_top(proc->vmmc, (void *)image_end);
 
 
-    vmmc_lazy_map_area(proc->vmmc, (void *)USER_STACK_BASE, USER_STACK_TOP - USER_STACK_BASE, VMM_UR | VMM_UW);
+    process_create_basic_mappings(proc);
+
 
     make_process_entry(proc, (void (*)(void))ehdr->e_entry, (void *)USER_STACK_TOP);
 
+    process_set_args(proc, argc, argv);
 
-    register_process(proc);
+
+    run_process(proc);
+
 
     return proc->pid;
 }

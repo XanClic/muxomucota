@@ -12,6 +12,8 @@
 static uint32_t mbhdr[] __attribute__((section(".multiboot"), used)) = { 0x1BADB002, 0x00000003, (uint32_t)-(0x1BADB002 + 0x00000003) };
 
 
+static struct multiboot_info *mboot;
+
 static struct memory_map *mmap;
 static int mmap_length;
 
@@ -28,7 +30,7 @@ bool get_boot_info(void *info)
         return false;
 
 
-    struct multiboot_info *mboot = (struct multiboot_info *)(((uint32_t *)info)[1] | PHYS_BASE);
+    mboot = (struct multiboot_info *)(((uint32_t *)info)[1] | PHYS_BASE);
 
 
     if (!(mboot->mi_flags & (1 << 6))) // Memory Map
@@ -139,7 +141,20 @@ void fetch_prime_process(int index, void **start, size_t *length, char *name_arr
     const char *src = (const char *)(modules[index].string | PHYS_BASE);
 
     int i;
-    for (i = 0; (i < (int)name_array_size - 1) && src[i] && (src[i] != ' '); i++)
+    for (i = 0; (i < (int)name_array_size - 1) && src[i]; i++)
         name_array[i] = src[i];
+
+    // Normalerweise ja FIXME, aber irgendwie ist das auch total lustig
+    for (int j = 0; (i < (int)name_array_size - 1) && " mbi="[j]; i++, j++)
+        name_array[i] = " mbi="[j];
+
+    uintptr_t mbi_paddr = (uintptr_t)mboot & ~PHYS_BASE;
+
+    for (int j = 0; (i < (int)name_array_size - 1) && (j < 8); i++, j++)
+    {
+        int digit = mbi_paddr >> ((7 - j) * 4) & 0xF;
+        name_array[i] = (digit >= 10) ? (digit - 10 + 'a') : (digit + '0');
+    }
+
     name_array[i] = 0;
 }

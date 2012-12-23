@@ -55,8 +55,104 @@ process_t *create_empty_process(const char *name)
 void make_process_entry(process_t *proc, void (*address)(void), void *stack)
 {
     initialize_cpu_state(proc->cpu_state, address, stack, 0);
+}
 
-    proc->status = PROCESS_ACTIVE;
+
+void process_create_basic_mappings(process_t *proc)
+{
+    vmmc_lazy_map_area(proc->vmmc, (void *)USER_STACK_BASE, USER_STACK_TOP - USER_STACK_BASE, VMM_UR | VMM_UW);
+
+    vmmc_lazy_map_area(proc->vmmc, (void *)USER_HERITAGE_BASE, USER_HERITAGE_TOP - USER_HERITAGE_BASE, VMM_UR | VMM_UW);
+}
+
+
+void process_set_args(process_t *proc, int argc, const char *const *argv)
+{
+    size_t sz = 0;
+
+    for (int i = 0; i < argc; i++)
+        sz += strlen(argv[i]) + 1;
+
+    sz += sizeof(char *) * (argc + 1); // Platz für NULL am Ende
+
+    // Schön alignen
+    sz = (sz + sizeof(char *) - 1) & ~(sizeof(char *) - 1);
+
+
+    // FIXME: Dies nimmt einen Descending Stack an.
+    void *initial = process_stack_alloc(proc->cpu_state, 0);
+
+    void *stack = process_stack_alloc(proc->cpu_state, sz);
+
+
+    uintptr_t end = ((uintptr_t)initial + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+
+    for (uintptr_t stack_page = (uintptr_t)stack & ~(PAGE_SIZE - 1); stack_page < end; stack_page += PAGE_SIZE)
+        vmmc_do_lazy_map(proc->vmmc, (void *)stack_page);
+
+
+    char *d = (char *)&((char **)stack)[argc + 1];
+
+
+    uintptr_t paddr;
+
+    kassert_exec(vmmc_address_mapped(proc->vmmc, stack, &paddr));
+
+    void *argv_map = kernel_map(paddr & ~(PAGE_SIZE - 1), PAGE_SIZE);
+
+    for (int i = 0; i <= argc; i++)
+    {
+        uintptr_t argv_i = (uintptr_t)&((char **)stack)[i];
+
+        if (!(argv_i % PAGE_SIZE))
+        {
+            // Klar kann es passieren, dass das vor dem for gemappt und jetzt
+            // gleich wieder geunmappt wird. Aber das ist 1/1024 und ist auch
+            // nicht schlimm.
+            kernel_unmap(argv_map, PAGE_SIZE);
+
+            kassert_exec(vmmc_address_mapped(proc->vmmc, (void *)argv_i, &paddr));
+
+            argv_map = kernel_map(paddr, PAGE_SIZE);
+        }
+
+        ((char **)argv_map)[(argv_i % PAGE_SIZE) / sizeof(char **)] = (i < argc) ? d : NULL;
+
+        if (i == argc)
+            break;
+
+
+        size_t len = strlen(argv[i]) + 1;
+        size_t copied = 0;
+
+        uintptr_t start_p = (uintptr_t)d & ~(PAGE_SIZE - 1);
+        uintptr_t end_p   = ((uintptr_t)d + len + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+
+        ptrdiff_t out_off = (uintptr_t)d % PAGE_SIZE;
+
+        // Schön pageweise reinkopieren
+        for (uintptr_t page = start_p; page < end_p; page += PAGE_SIZE)
+        {
+            kassert_exec(vmmc_address_mapped(proc->vmmc, (void *)page, &paddr));
+
+            char *f_d = kernel_map(paddr, PAGE_SIZE);
+
+            memcpy(f_d + out_off, argv[i] + copied, (page == end_p - 1) ? (len - copied) : (size_t)(PAGE_SIZE - out_off));
+
+            copied += PAGE_SIZE - out_off;
+            out_off = 0;
+
+            kernel_unmap(f_d, PAGE_SIZE);
+        }
+
+
+        d += len;
+    }
+
+    kernel_unmap(argv_map, PAGE_SIZE);
+
+
+    process_set_initial_params(proc, argc, stack);
 }
 
 
@@ -81,6 +177,14 @@ void make_idle_process(void)
 
     idle_process->vmmc = &kernel_context;
     use_vmm_context(idle_process->vmmc);
+}
+
+
+void run_process(process_t *proc)
+{
+    proc->status = PROCESS_ACTIVE;
+
+    register_process(proc);
 }
 
 

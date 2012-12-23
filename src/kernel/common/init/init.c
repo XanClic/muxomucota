@@ -5,6 +5,7 @@
 #include <pmm.h>
 #include <prime-procs.h>
 #include <process.h>
+#include <string.h>
 #include <system-timer.h>
 #include <vmem.h>
 
@@ -34,13 +35,19 @@ void main(void *boot_info)
     {
         void *img_start;
         size_t img_size;
-        char name_arr[32];
+        char name_arr[256];
 
         fetch_prime_process(i, &img_start, &img_size, name_arr, sizeof(name_arr));
 
-        // TODO: Kommandozeile parsen
+        // FIXME
 
-        create_process_from_image(name_arr, img_start);
+        int argc = 0;
+        const char *argv[10];
+
+        for (char *tok = strtok(name_arr, " "); (tok != NULL) && (argc < 10); argc++, tok = strtok(NULL, " "))
+            argv[argc] = tok;
+
+        create_process_from_image(argc, argv, img_start);
     }
 
 

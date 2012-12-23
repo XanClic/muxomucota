@@ -20,7 +20,7 @@ static void wait_for(const char *name)
 }
 
 
-int main(void)
+int main(int argc, char *argv[])
 {
     for (int i = 0; i < (int)ARR_LEN(required_services); i++)
         wait_for(required_services[i]);
@@ -34,6 +34,12 @@ int main(void)
     puts("Hallo Microkernelwelt!");
 
     puts("Hallo Newline!");
+
+
+    printf("%i Argument(e):\n", argc);
+
+    for (int i = 0; i < argc; i++)
+        printf(" - %s\n", argv[i]);
 
 
     pid_t child = fork();
