@@ -262,7 +262,7 @@ pid_t find_daemon_by_name(const char *name)
 
     unlock(&daemons_lock);
 
-    return (p != NULL) ? p->pid : -1;
+    return (p != daemons) ? p->pid : -1;
 }
 
 

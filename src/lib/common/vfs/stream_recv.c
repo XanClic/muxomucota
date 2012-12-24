@@ -8,7 +8,7 @@
 #include <vfs.h>
 
 
-big_size_t stream_send(int pipe, const void *data, big_size_t size, int flags)
+big_size_t stream_recv(int pipe, void *data, big_size_t size, int flags)
 {
     assert((pipe >= 0) && (pipe < __MFILE));
 
@@ -19,7 +19,7 @@ big_size_t stream_send(int pipe, const void *data, big_size_t size, int flags)
     }
 
 
-    struct ipc_stream_send ipc_ss = {
+    struct ipc_stream_recv ipc_sr = {
         .id = _pipes[pipe].id,
         .flags = flags,
         .size = size
@@ -41,6 +41,8 @@ big_size_t stream_send(int pipe, const void *data, big_size_t size, int flags)
 
 
     void *alloced[2];
+    void *alloced_dst[2];
+    size_t alloced_size[2];
     int ai = 0; // alloced index
 
 
@@ -55,21 +57,22 @@ big_size_t stream_send(int pipe, const void *data, big_size_t size, int flags)
         // bytes to copy now
         ptrdiff_t bcn = PAGE_SIZE - ofs - eae;
 
-        uintptr_t src = start + (ptrdiff_t)i * PAGE_SIZE;
+        uintptr_t dst = start + (ptrdiff_t)i * PAGE_SIZE;
 
 
         if (ofs || eae)
         {
             alloced[ai] = aligned_alloc(PAGE_SIZE, PAGE_SIZE);
 
-            memset(alloced[ai], 0, ofs);
-            memcpy((uint8_t *)alloced[ai] + ofs, (uint8_t *)src + ofs, bcn);
-            memset((uint8_t *)alloced[ai] + ofs + bcn, 0, eae);
+            memset(alloced[ai], 0, PAGE_SIZE);
+
+            alloced_dst[ai] = (void *)(dst + ofs);
+            alloced_size[ai] = bcn;
 
             val[i] = alloced[ai++];
         }
         else
-            val[i] = (void *)src;
+            val[i] = (void *)dst;
 
 
         ofs = 0;
@@ -80,16 +83,18 @@ big_size_t stream_send(int pipe, const void *data, big_size_t size, int flags)
 
     assert(shm);
 
-    // FIXME: synced? Bah. Zumindest Option für non-synced anbieten. Und das
-    // irgendwie bauen.
     // FIXME: uintptr_t < big_size_t
-    uintptr_t retval = ipc_shm_message_synced(_pipes[pipe].pid, STREAM_SEND, shm, &ipc_ss, sizeof(ipc_ss));
+    uintptr_t retval = ipc_shm_message_synced(_pipes[pipe].pid, STREAM_RECV, shm, &ipc_sr, sizeof(ipc_sr));
 
     shm_unmake(shm);
 
 
     for (int i = 0; i < ai; i++)
+    {
+        memcpy(alloced_dst[i], (uint8_t *)alloced[i] + ((uintptr_t)alloced_dst[i] % PAGE_SIZE), alloced_size[i]);
+
         free(alloced[i]);
+    }
 
 
     return retval;

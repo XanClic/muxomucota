@@ -1,32 +1,13 @@
 default 0
 timeout 8
-setkey parenleft asterisk
-setkey semicolon less
-setkey percent caret
-setkey slash ampersand
-setkey Y Z
-setkey y z
-setkey Z Y
-setkey less numbersign
-setkey underscore question
-setkey equal parenright
-setkey ampersand percent
-setkey minus slash
-setkey parenright parenleft
-setkey colon greater
-setkey plus bracketright
-setkey question underscore
-setkey numbersign backslash
-setkey greater bar
-setkey asterisk braceright
-setkey doublequote at
-setkey z y
 
 title Myxomycota
   root (fd0)
-  kernel /kernel
-  module /init
+  kernel /kernel prime=/init,/bios-console,/mboot-modules
+  module /init prime=tty,mboot tty=(tty)/tty0
   module /bios-console
+  module /mboot-modules
+  module /test.txt
 
 title Erste Festplatte
   rootnoverify (hd0)

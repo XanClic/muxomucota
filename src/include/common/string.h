@@ -43,4 +43,7 @@ char *strstr(const char *s1, const char *s2);
 char *strtok(char *str, const char *delim);
 char *strerror(int errnum);
 
+int strtok_count(char *str, const char *delim);
+void strtok_array(char **array, char *str, const char *delim);
+
 #endif

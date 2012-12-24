@@ -5,6 +5,7 @@
 #include <pmm.h>
 #include <prime-procs.h>
 #include <process.h>
+#include <stdbool.h>
 #include <string.h>
 #include <system-timer.h>
 #include <vmem.h>
@@ -29,6 +30,22 @@ void main(void *boot_info)
     init_system_timer();
 
 
+    char *cmdline = strdup(get_kernel_command_line());
+
+    char *prime = NULL;
+
+    for (char *tok = strtok(cmdline, " "); tok != NULL; tok = strtok(NULL, " "))
+        if (!strncmp(tok, "prime=", 6))
+            prime = tok + 6;
+
+
+    int prime_proc_load_count = (prime == NULL) ? 0 :strtok_count(prime, ",");
+    char *prime_proc_names[prime_proc_load_count];
+
+    if (prime != NULL)
+        strtok_array(prime_proc_names, prime, ",");
+
+
     int prime_procs = prime_process_count();
 
     for (int i = 0; i < prime_procs; i++)
@@ -39,15 +56,27 @@ void main(void *boot_info)
 
         fetch_prime_process(i, &img_start, &img_size, name_arr, sizeof(name_arr));
 
-        // FIXME
 
-        int argc = 0;
-        const char *argv[10];
+        int argc = strtok_count(name_arr, " ");
+        const char *argv[argc];
 
-        for (char *tok = strtok(name_arr, " "); (tok != NULL) && (argc < 10); argc++, tok = strtok(NULL, " "))
-            argv[argc] = tok;
+        strtok_array((char **)argv, name_arr, " ");
 
-        create_process_from_image(argc, argv, img_start);
+
+        if (prime == NULL)
+            create_process_from_image(argc, argv, img_start);
+        else
+        {
+            bool found = false;
+
+            for (int j = 0; j < prime_proc_load_count; j++)
+                if (!strcmp(argv[0], prime_proc_names[j]))
+                    found = true;
+
+
+            if (found)
+                create_process_from_image(argc, argv, img_start);
+        }
     }
 
 

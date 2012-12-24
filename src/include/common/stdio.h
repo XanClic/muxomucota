@@ -19,6 +19,8 @@ typedef struct FILE
 } FILE;
 
 
+int putchar(int c);
+
 int puts(const char *s);
 
 int printf(const char *s, ...);

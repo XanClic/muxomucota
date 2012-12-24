@@ -58,6 +58,12 @@ bool get_boot_info(void *info)
 }
 
 
+const char *get_kernel_command_line(void)
+{
+    return (const char *)(mboot->cmdline | PHYS_BASE);
+}
+
+
 int memmap_length(void)
 {
     return mmap_length;
@@ -102,8 +108,8 @@ void get_kernel_dim(uintptr_t *start, uintptr_t *end)
     uintptr_t e = (uintptr_t)&__kernel_elf_end;
 
     for (int i = 0; i < module_count; i++)
-        if (modules[i].mod_end + 1 + PHYS_BASE > e)
-            e = modules[i].mod_end + 1 + PHYS_BASE;
+        if (modules[i].mod_end + PHYS_BASE > e)
+            e = modules[i].mod_end + PHYS_BASE;
 
     if ((uintptr_t)(mmap + mmap_length) > e)
         e = (uintptr_t)(mmap + mmap_length);
@@ -132,7 +138,7 @@ void fetch_prime_process(int index, void **start, size_t *length, char *name_arr
 
 
     *start  = (void *)(modules[index].mod_start | PHYS_BASE);
-    *length = modules[index].mod_start + 1 - modules[index].mod_end;
+    *length = modules[index].mod_end - modules[index].mod_start;
 
     if (!name_array_size)
         return;

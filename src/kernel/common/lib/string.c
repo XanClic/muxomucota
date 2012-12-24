@@ -1,3 +1,4 @@
+#include <kmalloc.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -141,4 +142,56 @@ char *strstr(const char *restrict s1, const char *restrict s2)
     }
 
     return NULL;
+}
+
+
+char *strdup(const char *s)
+{
+    char *os = kmalloc(strlen(s) + 1);
+    strcpy(os, s);
+    return os;
+}
+
+
+char *strchr(const char *s, int c)
+{
+    while ((*s != c) && *s)
+        s++;
+
+    if (!*s)
+        return NULL;
+    return (char *)s;
+}
+
+
+int strtok_count(char *str, const char *delim)
+{
+    int count = 0;
+
+    for (int i = 0; str[i]; i++)
+        if (strchr(delim, str[i]) != NULL)
+            count++;
+
+    return count + 1;
+}
+
+
+void strtok_array(char **array, char *str, const char *delim)
+{
+    int i = 0;
+
+    for (char *tok = strtok(str, delim); tok != NULL; tok = strtok(NULL, delim))
+        array[i++] = tok;
+}
+
+
+int strcmp(const char *s1, const char *s2)
+{
+    int ret;
+
+    while (!(ret = (unsigned char)*(s2++) - (unsigned char)*s1))
+        if (!*(s1++))
+            return 0;
+
+    return ret;
 }

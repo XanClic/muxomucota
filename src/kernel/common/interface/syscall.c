@@ -35,6 +35,15 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
             // TODO: Checks, natürlich
             return (uintptr_t)vmmc_user_map(current_process->vmmc, p0, p1, p2);
 
+        case SYS_UNMAP_MEMORY:
+            if (IS_KERNEL(p0))
+            {
+                *current_process->errno = EFAULT;
+                return 0;
+            }
+            vmmc_user_unmap(current_process->vmmc, (void *)p0, p1);
+            return 0;
+
         case SYS_DAEMONIZE:
             if (IS_KERNEL(p0))
                 p0 = 0;

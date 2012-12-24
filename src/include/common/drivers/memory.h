@@ -7,5 +7,6 @@
 
 
 void *map_memory(uintptr_t physical, size_t length, unsigned flags);
+void unmap_memory(const void *ptr, size_t length);
 
 #endif
