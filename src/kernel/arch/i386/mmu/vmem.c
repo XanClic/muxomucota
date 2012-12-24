@@ -250,9 +250,9 @@ void *vmmc_user_map(vmm_context_t *context, uintptr_t phys, size_t length, unsig
     uintptr_t phys_sg[pages];
 
     for (int i = 0; i < pages; i++)
-        phys_sg[i] = phys + (uintptr_t)i * 4096;
+        phys_sg[i] = (phys & ~0xFFF) + (uintptr_t)i * 4096;
 
-    return vmmc_user_map_sg(context, phys_sg, pages, flags);
+    return (void *)((uintptr_t)vmmc_user_map_sg(context, phys_sg, pages, flags) + (phys & 0xFFF));
 }
 
 
@@ -505,13 +505,18 @@ void vmmc_clear_user(vmm_context_t *context)
         if (!(context->arch.pd[pdi] & MAP_PR))
             continue;
 
-        uint32_t *pt = kernel_map(context->arch.pd[pdi] & ~0xFFF, 4096);
+        if ((pdi < (USER_MAP_BASE >> 22)) || (pdi >= (USER_MAP_TOP >> 22)))
+        {
+            // Mappings selber wurden physisch nicht vom Prozess reserviert und
+            // dürfen damit hier auch nicht freigegeben werden.
+            uint32_t *pt = kernel_map(context->arch.pd[pdi] & ~0xFFF, 4096);
 
-        for (unsigned pti = 0; pti < 1024; pti++)
-            if (pt[pti] & MAP_PR)
-                pmm_free(pt[pti] & ~0xFFF, 1);
+            for (unsigned pti = 0; pti < 1024; pti++)
+                if (pt[pti] & MAP_PR)
+                    pmm_free(pt[pti] & ~0xFFF, 1);
 
-        kernel_unmap(pt, 4096);
+            kernel_unmap(pt, 4096);
+        }
 
         pmm_free(context->arch.pd[pdi] & ~0xFFF, 1);
     }
@@ -585,12 +590,15 @@ void vmmc_user_unmap(vmm_context_t *context, void *virt, size_t length)
             continue;
 
         unsigned pti_start = (pdi > pdi_start) ? 0 : ((uintptr_t)virt >> 12) & 0x3FF;
-        unsigned pti_end = (pdi < pdi_end - 1) ? 1024 : (((uintptr_t)virt + length + 1023) >> 12) & 0x3FF;
+        unsigned pti_end = (pdi < pdi_end - 1) ? 1024 : (((uintptr_t)virt + length + 4095) >> 12) & 0x3FF;
 
         uint32_t *pt = kernel_map(context->arch.pd[pdi] & ~0xFFF, 4096);
 
         for (unsigned pti = pti_start; pti < pti_end; pti++)
+        {
             pt[pti] = MAP_NP;
+            invlpg(((uintptr_t)pdi << 22) + ((uintptr_t)pti << 12));
+        }
 
         kernel_unmap(pt, 4096);
 

@@ -17,6 +17,7 @@ static bool extract_path(const char *fullpath, char *service, char *relpath)
 
     while (*fullpath && (*fullpath != ')'))
         *(service++) = *(fullpath++);
+    *service = 0;
 
     if (!*(fullpath++))
         return false;
@@ -26,6 +27,7 @@ static bool extract_path(const char *fullpath, char *service, char *relpath)
 
     while (*fullpath)
         *(relpath++) = *(fullpath++);
+    *relpath = 0;
 
     return true;
 }
@@ -67,8 +69,11 @@ int create_pipe(const char *path, int flags)
 
             _pipes[i].pid = find_daemon_by_name(procname);
 
-            if (_pipes[i].pid == -1)
+            if (_pipes[i].pid < 0)
+            {
+                errno = ESRCH;
                 goto error_after_allocation;
+            }
 
 
             _pipes[i].id = ipc_message_synced(_pipes[i].pid, CREATE_PIPE, ipc_cp, sizeof(int) + strlen(ipc_cp->relpath) + 1);

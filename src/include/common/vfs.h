@@ -19,7 +19,8 @@ typedef enum
     CREATE_PIPE,
     DESTROY_PIPE,
     DUPLICATE_PIPE,
-    STREAM_SEND
+    STREAM_SEND,
+    STREAM_RECV
 } vfs_function_t;
 
 
@@ -54,6 +55,13 @@ struct ipc_stream_send
     big_size_t size;
 };
 
+struct ipc_stream_recv
+{
+    uintptr_t id;
+    int flags;
+    big_size_t size;
+};
+
 
 #define _pipes ((struct pipe *)_IMAGE_PIPE_ARRAY)
 
@@ -65,5 +73,6 @@ int duplicate_pipe(int pipe, int dest);
 void duplicate_all_pipes(void);
 
 big_size_t stream_send(int pipe, const void *data, big_size_t size, int flags);
+big_size_t stream_recv(int pipe, void *data, big_size_t size, int flags);
 
 #endif

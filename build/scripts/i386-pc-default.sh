@@ -20,6 +20,8 @@ cp ../src/kernel/kernel root
 echo 'CP      progs -> root/'
 cp ../src/progs/progs/* root
 
+echo 'Test test 123 テスト' > root/test.txt
+
 echo "STRIP'n'ZIP"
 for f in $(ls root); do
     if ! [ -f $f ]; then
