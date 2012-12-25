@@ -1,7 +1,10 @@
+#include <arch-constants.h>
 #include <compiler.h>
+#include <cpu.h>
 #include <cpu-state.h>
 #include <isr.h>
 #include <port-io.h>
+#include <process.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <syscall.h>
@@ -132,6 +135,40 @@ void init_interrupts(void)
 }
 
 
+// FIXME. Das ist plattform-, und nicht architekturabhängig.
+
+static uint16_t *sod_out_text = (uint16_t *)(0xB8000 | PHYS_BASE);
+
+
+static void sod_print(const char *s)
+{
+    do
+    {
+        if (*s == '\n')
+            do
+                *(sod_out_text++) = 0x4420;
+            while ((sod_out_text - (uint16_t *)(0xB8000 | PHYS_BASE)) % 80);
+        else
+            *(sod_out_text++) = *s | 0x4F00;
+    }
+    while (*++s);
+}
+
+
+static void sod_print_ptr(uintptr_t ptr)
+{
+    char tmem[11] = "0x";
+
+    for (int i = 0; i < 8; i++)
+    {
+        int digit = (ptr >> ((7 - i) * 4)) & 0xF;
+        tmem[i + 2] = (digit >= 10) ? (digit - 10 + 'A') : (digit + '0');
+    }
+
+    sod_print(tmem);
+}
+
+
 struct cpu_state *i386_common_isr(struct cpu_state *state);
 
 struct cpu_state *i386_common_isr(struct cpu_state *state)
@@ -141,8 +178,73 @@ struct cpu_state *i386_common_isr(struct cpu_state *state)
         if ((state->int_vector == 0x0E) && handle_pagefault(state))
             return state;
 
-        // TODO: OSOD
-        for (;;);
+        sod_print("Unhandled exception\n\n");
+
+        sod_print("current process: ");
+
+        if (current_process == NULL)
+            sod_print("(none)\n\n");
+        else
+        {
+            if (current_process->pgid != current_process->pid)
+                sod_print("(belongs to) ");
+
+            sod_print("\"");
+            sod_print(current_process->name);
+            sod_print("\"\n\n");
+        }
+
+        sod_print("exc: ");
+        sod_print_ptr(state->int_vector);
+        sod_print(" err: ");
+        sod_print_ptr(state->err_code);
+        sod_print(" efl: ");
+        sod_print_ptr(state->eflags);
+
+        sod_print("\n cs: ");
+        sod_print_ptr(state->cs);
+        sod_print(" eip: ");
+        sod_print_ptr(state->eip);
+
+        sod_print("  ss: ");
+        sod_print_ptr(state->ss);
+        sod_print(" esp: ");
+        sod_print_ptr(state->esp);
+
+        sod_print("\n ds: ");
+        sod_print_ptr(state->ds);
+        sod_print("  es: ");
+        sod_print_ptr(state->es);
+
+        sod_print("\neax: ");
+        sod_print_ptr(state->eax);
+        sod_print(" ebx: ");
+        sod_print_ptr(state->ebx);
+        sod_print(" ecx: ");
+        sod_print_ptr(state->ecx);
+        sod_print(" edx: ");
+        sod_print_ptr(state->edx);
+
+        sod_print("\nesi: ");
+        sod_print_ptr(state->esi);
+        sod_print(" edi: ");
+        sod_print_ptr(state->edi);
+        sod_print(" ebp: ");
+        sod_print_ptr(state->ebp);
+        sod_print(" ksp: ");
+        sod_print_ptr((uintptr_t)(state + 1));
+
+        sod_print("\n");
+
+        if ((current_process != NULL) && (current_process->errno != NULL))
+        {
+            sod_print("\nerrno: ");
+            sod_print_ptr(*current_process->errno);
+            sod_print("\n");
+        }
+
+        for (;;)
+            cpu_halt();
     }
     else if ((state->int_vector & 0xF0) == 0x20)
     {

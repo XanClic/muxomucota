@@ -10,6 +10,8 @@ extern int main(int argc, char *argv[], char *envp[]);
 
 extern void _popup_ll_trampoline(int func_index, uintptr_t shmid);
 
+extern void _vfs_init(void);
+
 noreturn void _start(int argc, char *argv[]);
 
 noreturn void _start(int argc, char *argv[])
@@ -17,6 +19,8 @@ noreturn void _start(int argc, char *argv[])
     set_errno(&errno);
 
     popup_entry(&_popup_ll_trampoline);
+
+    _vfs_init();
 
     exit(main(argc, argv, NULL));
 
