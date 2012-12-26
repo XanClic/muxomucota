@@ -9,9 +9,24 @@
 
 #define __MFILE 32
 
-#define O_RDONLY (1 << 0)
-#define O_WRONLY (1 << 1)
-#define O_RDWR   (O_RDONLY | O_WRONLY)
+#define O_RDONLY      (1 << 0)
+#define O_WRONLY      (1 << 1)
+#define O_RDWR        (O_RDONLY | O_WRONLY)
+#define O_CREAT       (1 << 2)
+#define O_JUST_STAT   (1 << 3)
+#define O_TRUNC       (1 << 4)
+#define O_APPEND      (1 << 5)
+
+// pipe_(g/s)et_flag()-Standardflags
+enum
+{
+    O_PRESSURE,
+    O_READABLE,
+    O_WRITABLE,
+    O_FLUSH,
+
+#include <vfs/flags/files.h>
+};
 
 
 typedef enum
@@ -19,8 +34,12 @@ typedef enum
     CREATE_PIPE,
     DESTROY_PIPE,
     DUPLICATE_PIPE,
+
     STREAM_SEND,
-    STREAM_RECV
+    STREAM_RECV,
+
+    PIPE_GET_FLAG,
+    PIPE_SET_FLAG
 } vfs_function_t;
 
 
@@ -62,6 +81,19 @@ struct ipc_stream_recv
     big_size_t size;
 };
 
+struct ipc_pipe_get_flag
+{
+    uintptr_t id;
+    int flag;
+};
+
+struct ipc_pipe_set_flag
+{
+    uintptr_t id;
+    int flag;
+    uintmax_t value;
+};
+
 
 #define _pipes ((struct pipe *)_IMAGE_PIPE_ARRAY)
 
@@ -74,5 +106,8 @@ void duplicate_all_pipes(void);
 
 big_size_t stream_send(int pipe, const void *data, big_size_t size, int flags);
 big_size_t stream_recv(int pipe, void *data, big_size_t size, int flags);
+
+uintmax_t pipe_get_flag(int pipe, int flag);
+int pipe_set_flag(int pipe, int flag, uintmax_t value);
 
 #endif

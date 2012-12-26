@@ -2,9 +2,11 @@
 #include <ctype.h>
 #include <drivers.h>
 #include <drivers/memory.h>
+#include <errno.h>
 #include <ipc.h>
 #include <multiboot.h>
 #include <shm.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <vfs.h>
@@ -86,7 +88,65 @@ static uintmax_t vfs_read(uintptr_t shmid)
     mod->file_off += copy_sz;
 
 
+    shm_close(shmid, dst);
+
+
     return copy_sz;
+}
+
+
+static uintmax_t vfs_get_flag(void)
+{
+    struct ipc_pipe_get_flag ipc_pgf;
+
+    int recv = popup_get_message(&ipc_pgf, sizeof(ipc_pgf));
+    assert(recv == sizeof(ipc_pgf));
+
+
+    struct module *mod = (struct module *)ipc_pgf.id;
+
+
+    switch (ipc_pgf.flag)
+    {
+        case O_PRESSURE:
+            return mod->size - mod->file_off;
+        case O_POSITION:
+            return mod->file_off;
+        case O_FILESIZE:
+            return mod->size;
+        case O_READABLE:
+            return (mod->size - mod->file_off) > 0;
+        case O_WRITABLE:
+            return false;
+        case O_FLUSH:
+            return 0;
+    }
+
+
+    return 0; // FIXME
+}
+
+
+static uintmax_t vfs_set_flag(void)
+{
+    struct ipc_pipe_set_flag ipc_psf;
+
+    int recv = popup_get_message(&ipc_psf, sizeof(ipc_psf));
+    assert(recv == sizeof(ipc_psf));
+
+
+    struct module *mod = (struct module *)ipc_psf.id;
+
+
+    switch (ipc_psf.flag)
+    {
+        case O_POSITION:
+            mod->file_off = (ipc_psf.value > mod->size) ? mod->size : ipc_psf.value;
+            return 0;
+    }
+
+
+    return (uintmax_t)-EINVAL;
 }
 
 
@@ -166,6 +226,9 @@ int main(int argc, char *argv[])
     popup_message_handler(DUPLICATE_PIPE, vfs_dup);
 
     popup_shm_handler    (STREAM_RECV,    vfs_read);
+
+    popup_message_handler(PIPE_GET_FLAG,  vfs_get_flag);
+    popup_message_handler(PIPE_SET_FLAG,  vfs_set_flag);
 
 
     daemonize("mboot");
