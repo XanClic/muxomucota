@@ -3,7 +3,7 @@
 #include <stddef.h>
 
 
-uintptr_t (*popup_entries[MAX_POPUP_HANDLERS])(uintptr_t);
+uintmax_t (*popup_entries[MAX_POPUP_HANDLERS])(uintptr_t);
 
 
 // FIXME: Kann man das Symbol nicht weak auf die gleiche Adresse wie
@@ -12,7 +12,7 @@ void _popup_ll_trampoline(uintptr_t func_index, uintptr_t shmid) __attribute__((
 
 void _popup_ll_trampoline(uintptr_t func_index, uintptr_t shmid)
 {
-    uintptr_t retval = 0;
+    uintmax_t retval = 0;
 
     if (popup_entries[func_index] != NULL)
         retval = popup_entries[func_index](shmid);
@@ -25,7 +25,7 @@ void _popup_trampoline(int func_index, uintptr_t shmid);
 
 void _popup_trampoline(int func_index, uintptr_t shmid)
 {
-    uintptr_t retval = 0;
+    uintmax_t retval = 0;
 
     if (popup_entries[func_index] != NULL)
         retval = popup_entries[func_index](shmid);

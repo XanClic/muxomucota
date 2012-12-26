@@ -3,9 +3,9 @@
 #include <syscall.h>
 
 
-noreturn void popup_exit(uintptr_t exit_info)
+noreturn void popup_exit(uintmax_t exit_info)
 {
-    syscall1(SYS_POPUP_EXIT, exit_info);
+    syscall1(SYS_POPUP_EXIT, (uintptr_t)&exit_info);
 
     for (;;);
 }
