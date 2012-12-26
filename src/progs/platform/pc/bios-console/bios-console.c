@@ -14,19 +14,19 @@ uint16_t *text_mem;
 extern uint8_t get_c437_from_unicode(unsigned unicode);
 
 
-static uintptr_t vfs_open(void)
+static uintmax_t vfs_open(void)
 {
     return 1;
 }
 
 
-static uintptr_t vfs_close(void)
+static uintmax_t vfs_close(void)
 {
     return 0;
 }
 
 
-static uintptr_t vfs_dup(void)
+static uintmax_t vfs_dup(void)
 {
     return 1;
 }
@@ -50,7 +50,7 @@ static void scroll_down(void)
 }
 
 
-static uintptr_t vfs_write(uintptr_t shmid)
+static uintmax_t vfs_write(uintptr_t shmid)
 {
     static int x, y;
     static char saved[4];

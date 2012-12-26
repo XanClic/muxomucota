@@ -58,7 +58,7 @@ typedef struct process
     bool popup_zombify;
 
 
-    uintptr_t exit_info;
+    uintmax_t exit_info;
 } process_t;
 
 
@@ -124,7 +124,7 @@ void destroy_process(process_t *proc);
 void destroy_this_popup_thread(void);
 
 
-uintptr_t raw_waitpid(pid_t pid);
+uintmax_t raw_waitpid(pid_t pid);
 
 
 void sweep_dead_processes(void);

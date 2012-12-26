@@ -27,6 +27,10 @@ typedef  int64_t  int_fast64_t;
 typedef uint64_t uint_fast64_t;
 
 
+typedef  int64_t  intmax_t;
+typedef uint64_t uintmax_t;
+
+
 #define  INT8_C(x)  x
 #define UINT8_C(x)  x ## U
 #define  INT16_C(x) x

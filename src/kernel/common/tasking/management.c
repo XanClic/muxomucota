@@ -398,7 +398,7 @@ void destroy_this_popup_thread(void)
 }
 
 
-uintptr_t raw_waitpid(pid_t pid)
+uintmax_t raw_waitpid(pid_t pid)
 {
     volatile process_t *proc = (volatile process_t *)find_process(pid);
 
@@ -422,7 +422,7 @@ uintptr_t raw_waitpid(pid_t pid)
     q_unregister_process(&zombies, (process_t *)proc);
     unlock(&zombies_lock);
 
-    uintptr_t exit_val = proc->exit_info;
+    uintmax_t exit_val = proc->exit_info;
 
     destroy_process_struct((process_t *)proc);
 

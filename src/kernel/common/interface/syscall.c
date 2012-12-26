@@ -60,36 +60,55 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
             return 0;
 
         case SYS_POPUP_EXIT:
-            current_process->exit_info = p0;
+            if (IS_KERNEL(p0))
+            {
+                *current_process->errno = EFAULT;
+                return 0;
+            }
+            current_process->exit_info = *(uintmax_t *)p0;
             destroy_this_popup_thread();
             *current_process->errno = EINVAL;
             return 0;
 
         case SYS_IPC_POPUP:
-        case SYS_IPC_POPUP_SYNC:
         {
-            if (p2 && !IS_KERNEL(p2))
-            {
-                *current_process->errno = EINVAL;
-                return 0;
-            }
-            if (p3 && IS_KERNEL(p3))
+            if (!p0 || IS_KERNEL(p0))
             {
                 *current_process->errno = EFAULT;
                 return 0;
             }
-            process_t *proc = find_process(p0);
+
+            struct ipc_syscall_params *ipc_sp = (struct ipc_syscall_params *)p0;
+
+            if (ipc_sp->shmid && !IS_KERNEL(ipc_sp->shmid))
+            {
+                *current_process->errno = EINVAL;
+                return 0;
+            }
+            if ((ipc_sp->short_message != NULL) && IS_KERNEL(ipc_sp->short_message))
+            {
+                *current_process->errno = EFAULT;
+                return 0;
+            }
+            if ((ipc_sp->synced_result != NULL) && IS_KERNEL(ipc_sp->synced_result))
+            {
+                *current_process->errno = EFAULT;
+                return 0;
+            }
+
+            process_t *proc = find_process(ipc_sp->target_pid);
             if (proc == NULL)
             {
                 *current_process->errno = ESRCH;
                 return 0;
             }
-            // FIXME: p2 (shm_id) noch besser testen
-            pid_t ret = popup(proc, p1, p2, (const void *)p3, p4, (syscall_nr == SYS_IPC_POPUP_SYNC));
+
+            // FIXME: shmid noch besser testen
+            pid_t ret = popup(proc, ipc_sp->func_index, ipc_sp->shmid, ipc_sp->short_message, ipc_sp->short_message_length, ipc_sp->synced_result != NULL);
             if (ret < 0)
                 *current_process->errno = -ret;
-            else if (syscall_nr == SYS_IPC_POPUP_SYNC)
-                return raw_waitpid(ret);
+            else if (ipc_sp->synced_result != NULL)
+                *ipc_sp->synced_result = raw_waitpid(ret);
             return 0;
         }
 

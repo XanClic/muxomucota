@@ -27,7 +27,7 @@ static int module_count;
 static struct module *first_module;
 
 
-static uintptr_t vfs_open(void)
+static uintmax_t vfs_open(void)
 {
     size_t total_length = popup_get_message(NULL, 0);
 
@@ -49,13 +49,13 @@ static uintptr_t vfs_open(void)
 }
 
 
-static uintptr_t vfs_close(void)
+static uintmax_t vfs_close(void)
 {
     return 0;
 }
 
 
-static uintptr_t vfs_dup(void)
+static uintmax_t vfs_dup(void)
 {
     struct ipc_duplicate_pipe ipc_dp;
 
@@ -66,7 +66,7 @@ static uintptr_t vfs_dup(void)
 }
 
 
-static uintptr_t vfs_read(uintptr_t shmid)
+static uintmax_t vfs_read(uintptr_t shmid)
 {
     struct ipc_stream_recv ipc_sr;
 
