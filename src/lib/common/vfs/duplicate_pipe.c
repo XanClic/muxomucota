@@ -9,7 +9,7 @@ extern lock_t _pipe_allocation_lock;
 
 int duplicate_pipe(int pipe, int dest)
 {
-    if (!_pipes[pipe].pid)
+    if ((pipe < 0) || (pipe >= __MFILE) || !_pipes[pipe].pid)
     {
         errno = EBADF;
         return -1;

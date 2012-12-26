@@ -49,16 +49,18 @@ int main(int argc, char *argv[])
 
     int fd = create_pipe("(mboot)/test.txt", O_RDONLY);
 
-    char dst[64];
-    size_t recvd = stream_recv(fd, dst, 64, 0);
+    size_t fsz = pipe_get_flag(fd, O_PRESSURE);
+    char dst[fsz];
+
+    stream_recv(fd, dst, fsz, 0);
 
     destroy_pipe(fd, 0);
 
 
-    dst[recvd - 1] = 0; // Newline überschreiben (und nullterminieren sowieso)
+    dst[fsz - 1] = 0; // Newline überschreiben (und nullterminieren sowieso)
 
 
-    printf("Größe: %i B\n", recvd);
+    printf("Größe: %i B\n", (int)fsz);
 
     printf("Inhalt: \"%s\"\n", dst);
 

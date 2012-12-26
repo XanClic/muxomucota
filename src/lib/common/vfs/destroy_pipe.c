@@ -1,4 +1,4 @@
-#include <assert.h>
+#include <errno.h>
 #include <ipc.h>
 #include <lock.h>
 #include <stdint.h>
@@ -11,7 +11,11 @@ extern lock_t _pipe_allocation_lock;
 
 void destroy_pipe(int pipe, int flags)
 {
-    assert((pipe >= 0) && (pipe < __MFILE));
+    if ((pipe < 0) || (pipe >= __MFILE))
+    {
+        errno = EBADF;
+        return;
+    }
 
 
     lock(&_pipe_allocation_lock);
