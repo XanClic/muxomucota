@@ -2,6 +2,7 @@
 #define _VFS_H
 
 #include <proc-img-struct.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/types.h>
@@ -17,6 +18,12 @@
 #define O_TRUNC       (1 << 4)
 #define O_APPEND      (1 << 5)
 
+enum
+{
+#include <vfs/interfaces/file.h>
+#include <vfs/interfaces/tty.h>
+};
+
 // pipe_(g/s)et_flag()-Standardflags
 enum
 {
@@ -25,7 +32,8 @@ enum
     O_WRITABLE,
     O_FLUSH,
 
-#include <vfs/flags/files.h>
+#include <vfs/flags/file.h>
+#include <vfs/flags/tty.h>
 };
 
 
@@ -39,7 +47,9 @@ typedef enum
     STREAM_RECV,
 
     PIPE_GET_FLAG,
-    PIPE_SET_FLAG
+    PIPE_SET_FLAG,
+
+    PIPE_IMPLEMENTS
 } vfs_function_t;
 
 
@@ -94,6 +104,12 @@ struct ipc_pipe_set_flag
     uintmax_t value;
 };
 
+struct ipc_pipe_implements
+{
+    uintptr_t id;
+    int interface;
+};
+
 
 #define _pipes ((struct pipe *)_IMAGE_PIPE_ARRAY)
 
@@ -109,5 +125,20 @@ big_size_t stream_recv(int pipe, void *data, big_size_t size, int flags);
 
 uintmax_t pipe_get_flag(int pipe, int flag);
 int pipe_set_flag(int pipe, int flag, uintmax_t value);
+
+bool pipe_implements(int pipe, int interface);
+
+
+uintptr_t service_create_pipe(const char *relpath, int flags);
+void service_destroy_pipe(uintptr_t id, int flags);
+uintptr_t service_duplicate_pipe(uintptr_t id);
+
+big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, int flags);
+big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int flags);
+
+uintmax_t service_pipe_get_flag(uintptr_t id, int flag);
+int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value);
+
+bool service_pipe_implements(uintptr_t id, int interface);
 
 #endif

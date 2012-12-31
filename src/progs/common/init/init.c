@@ -14,6 +14,36 @@ static void wait_for(const char *name)
 }
 
 
+static void test_vfs(const char *filename)
+{
+    printf("Öffne %s.\n", filename);
+
+
+    int fd = create_pipe(filename, O_RDONLY);
+
+    if (fd < 0)
+    {
+        perror("Datei konnte nicht geöffnet werden");
+        return;
+    }
+
+
+    size_t fsz = pipe_get_flag(fd, O_PRESSURE);
+    char dst[fsz];
+
+    stream_recv(fd, dst, fsz, 0);
+
+    destroy_pipe(fd, 0);
+
+
+    printf("Größe: %i B\n", (int)fsz);
+
+    dst[fsz - 1] = 0; // Newline überschreiben (und nullterminieren sowieso)
+
+    printf("Inhalt: \"%s\"\n", dst);
+}
+
+
 int main(int argc, char *argv[])
 {
     const char *tty = NULL;
@@ -41,28 +71,10 @@ int main(int argc, char *argv[])
 
 
     printf("Primordiale Services gestartet.\n");
-    printf("stdin/stdout/stderr über %s.\n", tty);
+    printf("stdin/stdout/stderr über %s.\n\n", tty);
 
 
-    printf("\nÖffne (mboot)/text.txt.\n");
-
-
-    int fd = create_pipe("(mboot)/test.txt", O_RDONLY);
-
-    size_t fsz = pipe_get_flag(fd, O_PRESSURE);
-    char dst[fsz];
-
-    stream_recv(fd, dst, fsz, 0);
-
-    destroy_pipe(fd, 0);
-
-
-    dst[fsz - 1] = 0; // Newline überschreiben (und nullterminieren sowieso)
-
-
-    printf("Größe: %i B\n", (int)fsz);
-
-    printf("Inhalt: \"%s\"\n", dst);
+    test_vfs("(mboot)/test.txt");
 
 
     return 0;

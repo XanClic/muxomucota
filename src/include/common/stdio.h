@@ -19,6 +19,9 @@ typedef struct FILE
 } FILE;
 
 
+extern FILE *stdin, *stdout, *stderr;
+
+
 int putchar(int c);
 
 int puts(const char *s);
@@ -31,6 +34,8 @@ int vfprintf(FILE *fp, const char *format, va_list args);
 int vprintf(const char *format, va_list args);
 int vsprintf(char *str, const char *format, va_list args);
 int vsnprintf(char *buffer, size_t n, const char *format, va_list argptr);
+
+void perror(const char *s);
 
 
 static inline int filepipe(FILE *fp) { return fp->fd; }

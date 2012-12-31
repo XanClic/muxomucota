@@ -1,9 +1,7 @@
-#include <assert.h>
 #include <drivers.h>
 #include <drivers/memory.h>
-#include <ipc.h>
-#include <shm.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <vfs.h>
 
@@ -14,21 +12,25 @@ uint16_t *text_mem;
 extern uint8_t get_c437_from_unicode(unsigned unicode);
 
 
-static uintmax_t vfs_open(void)
+uintptr_t service_create_pipe(const char *relpath, int flags)
 {
+    (void)relpath;
+    (void)flags;
+
     return 1;
 }
 
 
-static uintmax_t vfs_close(void)
+void service_destroy_pipe(uintptr_t id, int flags)
 {
-    return 0;
+    (void)id;
+    (void)flags;
 }
 
 
-static uintmax_t vfs_dup(void)
+uintptr_t service_duplicate_pipe(uintptr_t id)
 {
-    return 1;
+    return id;
 }
 
 
@@ -50,40 +52,35 @@ static void scroll_down(void)
 }
 
 
-static uintmax_t vfs_write(uintptr_t shmid)
+big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, int flags)
 {
+    (void)id;
+    (void)flags;
+
+
     static int x, y;
     static char saved[4];
     static int saved_len = 0, expected_len = 0;
 
-
-    struct ipc_stream_send ipc_ss;
-
-    int recv = popup_get_message(&ipc_ss, sizeof(ipc_ss));
-
-    assert(recv == sizeof(ipc_ss));
-
-
-    const char *msg = shm_open(shmid, VMM_UR);
 
     lock(&output_lock);
 
     uint16_t *output = &text_mem[y * 80 + x];
 
 
-    const char *s = msg;
+    const char *s = data;
 
-    size_t msz = ipc_ss.size, omsz = msz;
+    size_t omsz = size;
 
-    while (*s && msz)
+    while (*s && size)
     {
         unsigned uni = 0;
         const char *d = s;
 
         if (saved_len)
         {
-            size_t rem = msz;
-            msz += saved_len;
+            size_t rem = size;
+            size += saved_len;
             while (*s && rem-- && (saved_len < expected_len))
                 saved[saved_len++] = *(s++);
 
@@ -94,54 +91,54 @@ static uintmax_t vfs_write(uintptr_t shmid)
         }
         if ((*d & 0xF8) == 0xF0)
         {
-            if (msz < 4)
+            if (size < 4)
             {
-                memcpy(saved, s, msz);
-                saved_len = msz;
+                memcpy(saved, s, size);
+                saved_len = size;
                 expected_len = 4;
                 break;
             }
             uni = ((d[0] & 0x07) << 18) | ((d[1] & 0x3F) << 12) | ((d[2] & 0x3F) << 6) | (d[3] & 0x3F);
             d += 4;
-            msz -= 4;
+            size -= 4;
         }
         else if ((*d & 0xF0) == 0xE0)
         {
-            if (msz < 3)
+            if (size < 3)
             {
-                memcpy(saved, s, msz);
-                saved_len = msz;
+                memcpy(saved, s, size);
+                saved_len = size;
                 expected_len = 3;
                 break;
             }
             uni = ((d[0] & 0x0F) << 12) | ((d[1] & 0x3F) << 6) | (d[2] & 0x3F);
             d += 3;
-            msz -= 3;
+            size -= 3;
         }
         else if ((*d & 0xE0) == 0xC0)
         {
-            if (msz < 2)
+            if (size < 2)
             {
-                memcpy(saved, s, msz);
-                saved_len = msz;
+                memcpy(saved, s, size);
+                saved_len = size;
                 expected_len = 2;
                 break;
             }
             uni = ((d[0] & 0x1F) << 6) | (d[1] & 0x3F);
             d += 2;
-            msz -= 2;
+            size -= 2;
         }
         else if (!(*d & 0x80))
         {
             uni = d[0];
             d++;
-            msz--;
+            size--;
         }
         else
         {
             uni = 0xFFFD;
             d++;
-            msz--;
+            size--;
         }
 
         if (!saved_len)
@@ -193,10 +190,16 @@ static uintmax_t vfs_write(uintptr_t shmid)
 
     unlock(&output_lock);
 
-    shm_close(shmid, msg);
+
+    return omsz - size;
+}
 
 
-    return omsz - msz;
+bool service_pipe_implements(uintptr_t id, int interface)
+{
+    (void)id;
+
+    return ARRAY_CONTAINS((int[]){ I_TTY }, interface);
 }
 
 
@@ -205,13 +208,6 @@ int main(void)
     text_mem = map_memory(0xB8000, 80 * 25 * 2, VMM_UW);
 
     memset(text_mem, 0, 80 * 25 * 2);
-
-
-    popup_message_handler(CREATE_PIPE,    vfs_open);
-    popup_message_handler(DESTROY_PIPE,   vfs_close);
-    popup_message_handler(DUPLICATE_PIPE, vfs_dup);
-
-    popup_shm_handler    (STREAM_SEND,    vfs_write);
 
 
     daemonize("tty");
