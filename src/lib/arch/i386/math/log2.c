@@ -4,7 +4,7 @@
     type name(type x) \
     { \
         type r; \
-        if (x == 0.) \
+        if (!x) \
             return __pole_error(1); \
         __asm__ __volatile__ ("fld1; fyl2x" : "=t"(r) : "0"(x)); \
         return r; \

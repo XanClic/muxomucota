@@ -1,11 +1,8 @@
-#include <assert.h>
 #include <ctype.h>
 #include <drivers.h>
 #include <drivers/memory.h>
 #include <errno.h>
-#include <ipc.h>
 #include <multiboot.h>
-#include <shm.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,84 +26,56 @@ static int module_count;
 static struct module *first_module;
 
 
-static uintmax_t vfs_open(void)
+uintptr_t service_create_pipe(const char *relpath, int flags)
 {
-    size_t total_length = popup_get_message(NULL, 0);
-
-    assert(total_length > sizeof(int));
-
-    char in_data[total_length];
-
-    popup_get_message(in_data, total_length);
-
-    struct ipc_create_pipe *ipc_cp = (struct ipc_create_pipe *)in_data;
-
+    (void)flags;
 
     struct module *mod;
 
-    for (mod = first_module; (mod != NULL) && strcmp(mod->name, ipc_cp->relpath); mod = mod->next);
-
+    for (mod = first_module; (mod != NULL) && strcmp(mod->name, relpath); mod = mod->next);
 
     return (uintptr_t)mod;
 }
 
 
-static uintmax_t vfs_close(void)
+void service_destroy_pipe(uintptr_t id, int flags)
 {
-    return 0;
+    (void)id;
+    (void)flags;
 }
 
 
-static uintmax_t vfs_dup(void)
+uintptr_t service_duplicate_pipe(uintptr_t id)
 {
-    struct ipc_duplicate_pipe ipc_dp;
-
-    int recv = popup_get_message(&ipc_dp, sizeof(ipc_dp));
-    assert(recv == sizeof(ipc_dp));
-
-    return ipc_dp.id;
+    return id;
 }
 
 
-static uintmax_t vfs_read(uintptr_t shmid)
+big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int flags)
 {
-    struct ipc_stream_recv ipc_sr;
-
-    int recv = popup_get_message(&ipc_sr, sizeof(ipc_sr));
-    assert(recv == sizeof(ipc_sr));
-
-    void *dst = shm_open(shmid, VMM_UW);
+    (void)flags;
 
 
-    struct module *mod = (struct module *)ipc_sr.id;
+    struct module *mod = (struct module *)id;
 
 
-    size_t copy_sz = ((int)ipc_sr.size <= mod->size - mod->file_off) ? ipc_sr.size : (size_t)(mod->size - mod->file_off);
+    size_t copy_sz = ((int)size <= mod->size - mod->file_off) ? size : (size_t)(mod->size - mod->file_off);
 
-    memcpy(dst, (uint8_t *)mod->ptr + (ptrdiff_t)mod->file_off, copy_sz);
+    memcpy(data, (uint8_t *)mod->ptr + (ptrdiff_t)mod->file_off, copy_sz);
 
     mod->file_off += copy_sz;
-
-
-    shm_close(shmid, dst);
 
 
     return copy_sz;
 }
 
 
-static uintmax_t vfs_get_flag(void)
+uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
 {
-    struct ipc_pipe_get_flag ipc_pgf;
-
-    int recv = popup_get_message(&ipc_pgf, sizeof(ipc_pgf));
-    assert(recv == sizeof(ipc_pgf));
+    struct module *mod = (struct module *)id;
 
 
-    struct module *mod = (struct module *)ipc_pgf.id;
-
-
-    switch (ipc_pgf.flag)
+    switch (flag)
     {
         case O_PRESSURE:
             return mod->size - mod->file_off;
@@ -123,30 +92,32 @@ static uintmax_t vfs_get_flag(void)
     }
 
 
-    return 0; // FIXME
+    return 0;
 }
 
 
-static uintmax_t vfs_set_flag(void)
+int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
 {
-    struct ipc_pipe_set_flag ipc_psf;
-
-    int recv = popup_get_message(&ipc_psf, sizeof(ipc_psf));
-    assert(recv == sizeof(ipc_psf));
+    struct module *mod = (struct module *)id;
 
 
-    struct module *mod = (struct module *)ipc_psf.id;
-
-
-    switch (ipc_psf.flag)
+    switch (flag)
     {
         case O_POSITION:
-            mod->file_off = (ipc_psf.value > mod->size) ? mod->size : ipc_psf.value;
+            mod->file_off = (value > mod->size) ? mod->size : value;
             return 0;
     }
 
 
-    return (uintmax_t)-EINVAL;
+    return -EINVAL;
+}
+
+
+bool service_pipe_implements(uintptr_t id, int interface)
+{
+    (void)id;
+
+    return ARRAY_CONTAINS((int[]){ I_FILE }, interface);
 }
 
 
@@ -219,16 +190,6 @@ int main(int argc, char *argv[])
 
 
     *nxtptr = NULL;
-
-
-    popup_message_handler(CREATE_PIPE,    vfs_open);
-    popup_message_handler(DESTROY_PIPE,   vfs_close);
-    popup_message_handler(DUPLICATE_PIPE, vfs_dup);
-
-    popup_shm_handler    (STREAM_RECV,    vfs_read);
-
-    popup_message_handler(PIPE_GET_FLAG,  vfs_get_flag);
-    popup_message_handler(PIPE_SET_FLAG,  vfs_set_flag);
 
 
     daemonize("mboot");

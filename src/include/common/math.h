@@ -32,8 +32,11 @@ extern int __fp_exceptions;
 
 #define isnan(x) ((x) != (x))
 
-// Man könnte hier auch evtl. irgendwie das Signbit auslesen
-#define __sign(x) (((x) <= -0.) ? -1. : 1.)
+// TODO: _Generic. Wenn gcc das endlich mal kann.
+
+#define __sign(x)  (((x) <= -0. ) ? -1.  : 1. )
+#define __signf(x) (((x) <= -0.f) ? -1.f : 1.f)
+#define __signl(x) (((x) <= -0.l) ? -1.l : 1.l)
 
 #define __def1(fname) \
     double fname(double x); \

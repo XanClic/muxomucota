@@ -6,7 +6,7 @@
         type r; \
         if (isinf(x)) \
             return __domain_error_noerrno(); \
-        if (y == 0.) \
+        if (!y) \
             return __domain_error(); \
         __asm__ __volatile__ ("fprem" : "=t"(r) : "0"(x)); \
         return r; \

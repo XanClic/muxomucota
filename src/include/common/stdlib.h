@@ -11,6 +11,23 @@
 #define ARR_LEN(arr) (sizeof(arr) / sizeof(arr[0]))
 
 
+#ifdef __GNUC__
+#define ARRAY_CONTAINS(arr, val) \
+    ({ \
+        bool found = false; \
+        for (int _ = 0; _ < (int)ARR_LEN(arr); _++) \
+        { \
+            if ((arr)[_] == val) \
+            { \
+                found = true; \
+                break; \
+            } \
+        } \
+        found; \
+     })
+#endif
+
+
 void *sbrk(intptr_t diff);
 
 int clearenv(void);
