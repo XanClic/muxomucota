@@ -17,6 +17,12 @@ struct module
 
     void *ptr;
     size_t size;
+};
+
+
+struct module_handle
+{
+    struct module *mod;
 
     off_t file_off;
 };
@@ -34,20 +40,31 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
 
     for (mod = first_module; (mod != NULL) && strcmp(mod->name, relpath); mod = mod->next);
 
-    return (uintptr_t)mod;
+    if (mod == NULL)
+        return 0;
+
+    struct module_handle *hmod = malloc(sizeof(*hmod));
+    hmod->mod = mod;
+    hmod->file_off = 0;
+
+    return (uintptr_t)hmod;
 }
 
 
 void service_destroy_pipe(uintptr_t id, int flags)
 {
-    (void)id;
     (void)flags;
+
+    free((void *)id);
 }
 
 
 uintptr_t service_duplicate_pipe(uintptr_t id)
 {
-    return id;
+    struct module_handle *hmod = (struct module_handle *)id;
+    struct module_handle *new_hmod = malloc(sizeof(*new_hmod));
+
+    return (uintptr_t)memcpy(new_hmod, hmod, sizeof(*hmod));
 }
 
 
@@ -56,14 +73,14 @@ big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int fl
     (void)flags;
 
 
-    struct module *mod = (struct module *)id;
+    struct module_handle *hmod = (struct module_handle *)id;
 
 
-    size_t copy_sz = ((int)size <= mod->size - mod->file_off) ? size : (size_t)(mod->size - mod->file_off);
+    size_t copy_sz = ((int)size <= hmod->mod->size - hmod->file_off) ? size : (size_t)(hmod->mod->size - hmod->file_off);
 
-    memcpy(data, (uint8_t *)mod->ptr + (ptrdiff_t)mod->file_off, copy_sz);
+    memcpy(data, (uint8_t *)hmod->mod->ptr + (ptrdiff_t)hmod->file_off, copy_sz);
 
-    mod->file_off += copy_sz;
+    hmod->file_off += copy_sz;
 
 
     return copy_sz;
@@ -72,22 +89,22 @@ big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int fl
 
 uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
 {
-    struct module *mod = (struct module *)id;
+    struct module_handle *hmod = (struct module_handle *)id;
 
 
     switch (flag)
     {
-        case O_PRESSURE:
-            return mod->size - mod->file_off;
-        case O_POSITION:
-            return mod->file_off;
-        case O_FILESIZE:
-            return mod->size;
-        case O_READABLE:
-            return (mod->size - mod->file_off) > 0;
-        case O_WRITABLE:
+        case F_PRESSURE:
+            return hmod->mod->size - hmod->file_off;
+        case F_POSITION:
+            return hmod->file_off;
+        case F_FILESIZE:
+            return hmod->mod->size;
+        case F_READABLE:
+            return (hmod->mod->size - hmod->file_off) > 0;
+        case F_WRITABLE:
             return false;
-        case O_FLUSH:
+        case F_FLUSH:
             return 0;
     }
 
@@ -98,13 +115,13 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
 
 int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
 {
-    struct module *mod = (struct module *)id;
+    struct module_handle *hmod = (struct module_handle *)id;
 
 
     switch (flag)
     {
-        case O_POSITION:
-            mod->file_off = (value > mod->size) ? mod->size : value;
+        case F_POSITION:
+            hmod->file_off = (value > hmod->mod->size) ? hmod->mod->size : value;
             return 0;
     }
 
@@ -180,9 +197,6 @@ int main(int argc, char *argv[])
         const void *data = map_memory(modules[i].mod_start, (*nxtptr)->size, VMM_UR);
         memcpy((*nxtptr)->ptr, data, (*nxtptr)->size);
         unmap_memory(data, (*nxtptr)->size);
-
-
-        (*nxtptr)->file_off = 0;
 
 
         nxtptr = &(*nxtptr)->next;

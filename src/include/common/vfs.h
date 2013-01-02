@@ -27,10 +27,10 @@ enum
 // pipe_(g/s)et_flag()-Standardflags
 enum
 {
-    O_PRESSURE,
-    O_READABLE,
-    O_WRITABLE,
-    O_FLUSH,
+    F_PRESSURE,
+    F_READABLE,
+    F_WRITABLE,
+    F_FLUSH,
 
 #include <vfs/flags/file.h>
 #include <vfs/flags/tty.h>
