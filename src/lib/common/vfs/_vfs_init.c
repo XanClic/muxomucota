@@ -14,3 +14,12 @@ void _vfs_init(void);
 void _vfs_init(void)
 {
 }
+
+
+void _vfs_deinit(void);
+
+void _vfs_deinit(void)
+{
+    for (int i = 0; i < __MFILE; i++)
+        destroy_pipe(i, 0);
+}
