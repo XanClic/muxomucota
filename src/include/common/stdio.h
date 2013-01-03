@@ -37,6 +37,8 @@ int vsnprintf(char *buffer, size_t n, const char *format, va_list argptr);
 
 void perror(const char *s);
 
+int fflush(FILE *fp);
+
 
 static inline int filepipe(FILE *fp) { return fp->fd; }
 

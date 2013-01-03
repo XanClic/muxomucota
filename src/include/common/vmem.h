@@ -43,6 +43,7 @@ void destroy_vmm_context(vmm_context_t *context);
 
 void use_vmm_context(vmm_context_t *context);
 void unuse_vmm_context(vmm_context_t *context);
+void vmmc_clear_user(vmm_context_t *context, bool preserve_heritage);
 
 void vmmc_set_heap_top(vmm_context_t *context, void *address);
 
