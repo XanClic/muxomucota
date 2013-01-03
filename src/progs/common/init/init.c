@@ -113,19 +113,23 @@ int main(int argc, char *argv[])
 
 
         if (daemon)
-            printf("[BKGN]\n");
+            printf("\033[1m[\033[0mBKGN");
         else
         {
             int status;
             waitpid(child, &status, 0);
 
+            printf("\033[1m[");
+
             if (!WIFEXITED(status))
-                printf("[CRSH]\n");
+                printf("\033[31mCRSH");
             else if (WEXITSTATUS(status))
-                printf("[E%03i]\n", WEXITSTATUS(status));
+                printf("\033[31mE%03i", WEXITSTATUS(status));
             else
-                printf("[DONE]\n");
+                printf("\033[32mDONE");
         }
+
+        printf("\033[0;1m]\033[0m\n");
     }
 
 

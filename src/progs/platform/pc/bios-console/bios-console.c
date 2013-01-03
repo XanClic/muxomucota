@@ -9,6 +9,16 @@
 uint16_t *text_mem;
 
 
+struct term_pipe
+{
+    char saved[4];
+    int saved_len;
+    int expected_len;
+    int sx, sy;
+    int fg, bg;
+};
+
+
 extern uint8_t get_c437_from_unicode(unsigned unicode);
 
 
@@ -17,20 +27,29 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
     (void)relpath;
     (void)flags;
 
-    return 1;
+    struct term_pipe *ntp = calloc(1, sizeof(struct term_pipe));
+
+    ntp->fg = 7;
+    ntp->bg = 0;
+
+    return (uintptr_t)ntp;
 }
 
 
 void service_destroy_pipe(uintptr_t id, int flags)
 {
-    (void)id;
     (void)flags;
+
+    free((void *)id);
 }
 
 
 uintptr_t service_duplicate_pipe(uintptr_t id)
 {
-    return id;
+    struct term_pipe *ntp = malloc(sizeof(*ntp));
+    memcpy(ntp, (struct term_pipe *)id, sizeof(*ntp));
+
+    return (uintptr_t)ntp;
 }
 
 
@@ -51,16 +70,37 @@ static void scroll_down(void)
         *(dst++) = 0x07200720;
 }
 
+static void clrscr(int fg, int bg)
+{
+    uint32_t *dst = (uint32_t *)text_mem;
+
+    uint32_t mask = 0x20 | (bg << 12) | (fg << 8);
+    mask = mask | (mask << 16);
+
+    for (int i = 0; i < 1000; i++)
+        *(dst++) = mask;
+}
+
+
+typedef enum
+{
+    ANSI_UNKNOWN,
+    ANSI_COLOR,
+    ANSI_POSITION
+} ansi_type;
 
 big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, int flags)
 {
-    (void)id;
     (void)flags;
 
 
     static int x, y;
-    static char saved[4];
-    static int saved_len = 0, expected_len = 0;
+    ansi_type type;
+    int subformat;
+    const char *saved_pos;
+
+
+    struct term_pipe *tp = (struct term_pipe *)id;
 
 
     lock(&output_lock);
@@ -77,25 +117,25 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
         unsigned uni = 0;
         const char *d = s;
 
-        if (saved_len)
+        if (tp->saved_len)
         {
             size_t rem = size;
-            size += saved_len;
-            while (*s && rem-- && (saved_len < expected_len))
-                saved[saved_len++] = *(s++);
+            size += tp->saved_len;
+            while (*s && rem-- && (tp->saved_len < tp->expected_len))
+                tp->saved[tp->saved_len++] = *(s++);
 
-            if (saved_len < expected_len)
+            if (tp->saved_len < tp->expected_len)
                 break;
 
-            d = saved;
+            d = tp->saved;
         }
         if ((*d & 0xF8) == 0xF0)
         {
             if (size < 4)
             {
-                memcpy(saved, s, size);
-                saved_len = size;
-                expected_len = 4;
+                memcpy(tp->saved, s, size);
+                tp->saved_len = size;
+                tp->expected_len = 4;
                 break;
             }
             uni = ((d[0] & 0x07) << 18) | ((d[1] & 0x3F) << 12) | ((d[2] & 0x3F) << 6) | (d[3] & 0x3F);
@@ -106,9 +146,9 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
         {
             if (size < 3)
             {
-                memcpy(saved, s, size);
-                saved_len = size;
-                expected_len = 3;
+                memcpy(tp->saved, s, size);
+                tp->saved_len = size;
+                tp->expected_len = 3;
                 break;
             }
             uni = ((d[0] & 0x0F) << 12) | ((d[1] & 0x3F) << 6) | (d[2] & 0x3F);
@@ -119,9 +159,9 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
         {
             if (size < 2)
             {
-                memcpy(saved, s, size);
-                saved_len = size;
-                expected_len = 2;
+                memcpy(tp->saved, s, size);
+                tp->saved_len = size;
+                tp->expected_len = 2;
                 break;
             }
             uni = ((d[0] & 0x1F) << 6) | (d[1] & 0x3F);
@@ -141,14 +181,198 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
             size--;
         }
 
-        if (!saved_len)
+        if (!tp->saved_len)
             s = d;
         else
-            saved_len = 0;
+            tp->saved_len = 0;
 
 
         switch (uni)
         {
+            case 27:
+                if (*s != '[')
+                    break;
+                s++;
+                if (!size--)
+                    return omsz;
+                saved_pos = s;
+                for (;;)
+                {
+                    if (((*s >= 64) && (*s <= 126)) || !*s)
+                        break;
+                    s++;
+                    if (!size--)
+                        return omsz;
+                }
+                switch (*s)
+                {
+                    case 'm':
+                        type = ANSI_COLOR;
+                        break;
+                    case 'J':
+                        type = ANSI_UNKNOWN;
+                        if (*saved_pos == '2')
+                            clrscr(tp->fg, tp->bg);
+                        s++;
+                        break;
+                    case 'f':
+                    case 'H':
+                        type = ANSI_POSITION;
+                        s++;
+                        break;
+                    case 's':
+                        type = ANSI_UNKNOWN;
+                        tp->sx = x;
+                        tp->sy = y;
+                        s++;
+                        break;
+                    case 'u':
+                        type = ANSI_UNKNOWN;
+                        x = tp->sx;
+                        y = tp->sy;
+                        s++;
+                        break;
+                    default:
+                        type = ANSI_UNKNOWN;
+                        s = saved_pos - 1;
+                        break;
+                }
+                if (type == ANSI_UNKNOWN)
+                    break;
+                switch ((int)type)
+                {
+                    case ANSI_POSITION:
+                        {
+                            int nx, ny;
+                            const char *np = saved_pos;
+                            ny = strtol(np, (char **)&np, 10) - 1;
+                            if ((*np != ';') || (ny < 0) || (ny >= 25))
+                                continue;
+                            nx = strtol(np + 1, (char **)&np, 10) - 1;
+                            if ((*np != 'f') || (nx < 0) || (nx >= 80))
+                                continue;
+                            x = nx;
+                            y = ny;
+                            break;
+                        }
+                    case ANSI_COLOR:
+                        s = saved_pos;
+                        subformat = -1;
+                        for (;;)
+                        {
+                            if ((*s >= '0') && (*s <= '9'))
+                            {
+                                if (subformat == -1)
+                                {
+                                    switch (*s)
+                                    {
+                                        case '0':
+                                            tp->fg = 7;
+                                            tp->bg = 0;
+                                            s++;
+                                            subformat = -2;
+                                            continue;
+                                        case '1':
+                                            tp->fg |= 8;
+                                            s++;
+                                            subformat = -2;
+                                            continue;
+                                    }
+                                }
+                                if (subformat == -1)
+                                {
+                                    subformat = *s;
+                                    s++;
+                                    continue;
+                                }
+                                if (subformat == -2)
+                                {
+                                    s++;
+                                    continue;
+                                }
+                                switch (subformat)
+                                {
+                                    case '2':
+                                        subformat = -2;
+                                        switch (*(s++))
+                                        {
+                                            case '2':
+                                                tp->fg &= 7;
+                                                continue;
+                                        }
+                                        continue;
+                                    case '3':
+                                        tp->fg &= 8;
+                                        subformat = -2;
+                                        switch (*(s++))
+                                        {
+                                            case '0':
+                                                continue;
+                                            case '1':
+                                                tp->fg |= 4;
+                                                continue;
+                                            case '2':
+                                                tp->fg |= 2;
+                                                continue;
+                                            case '3':
+                                                tp->fg |= 6;
+                                                continue;
+                                            case '4':
+                                                tp->fg |= 1;
+                                                continue;
+                                            case '5':
+                                                tp->fg |= 5;
+                                                continue;
+                                            case '6':
+                                                tp->fg |= 3;
+                                                continue;
+                                            case '7':
+                                                tp->fg |= 7;
+                                                continue;
+                                        }
+                                        continue;
+                                    case '4':
+                                        tp->bg &= 8;
+                                        subformat = -2;
+                                        switch (*(s++))
+                                        {
+                                            case '0':
+                                                continue;
+                                            case '1':
+                                                tp->bg |= 4;
+                                                continue;
+                                            case '2':
+                                                tp->bg |= 2;
+                                                continue;
+                                            case '3':
+                                                tp->bg |= 6;
+                                                continue;
+                                            case '4':
+                                                tp->bg |= 1;
+                                                continue;
+                                            case '5':
+                                                tp->bg |= 5;
+                                                continue;
+                                            case '6':
+                                                tp->bg |= 3;
+                                                continue;
+                                            case '7':
+                                                tp->bg |= 7;
+                                                continue;
+                                        }
+                                        continue;
+                                }
+                            }
+                            if (*s == 'm')
+                                break;
+                            if (*s == ';')
+                                subformat = -1;
+                            s++;
+                        }
+                        s++;
+                        break;
+                }
+                break;
             case '\n':
                 if (++y >= 25)
                 {
@@ -175,7 +399,7 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
             case '\t':
                 uni = ' '; // FIXME
             default:
-                *(output++) = get_c437_from_unicode(uni) | 0x0700;
+                *(output++) = get_c437_from_unicode(uni) | (tp->fg << 8) | (tp->bg << 12);
                 if (++x >= 80)
                 {
                     x -= 80;
