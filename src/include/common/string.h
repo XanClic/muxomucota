@@ -1,8 +1,14 @@
 #ifndef _STRING_H
 #define _STRING_H
 
+#include <macro-helpers.h>
 #include <stddef.h>
 #include <stdint.h>
+
+
+#define STRTOK_FOREACH(string, delim, target) \
+    for (char *__lu(saveptr), *target = strtok_r(string, delim, &__lu(saveptr)); target != NULL; target = strtok_r(NULL, delim, &__lu(saveptr)))
+
 
 #if __STDC_VERSION__ >= 199901L
 void *memcpy(void *restrict d, const void *restrict s, size_t n);
@@ -41,6 +47,7 @@ char *strrchr(const char *s, int c);
 int strspn(const char *s1, const char *s2);
 char *strstr(const char *s1, const char *s2);
 char *strtok(char *str, const char *delim);
+char *strtok_r(char *str, const char *delim, char **saveptr);
 char *strerror(int errnum);
 
 int strtok_count(char *str, const char *delim);

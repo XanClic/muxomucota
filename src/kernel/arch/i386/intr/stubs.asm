@@ -104,26 +104,31 @@ public int_stub_0xA2
 int_stub_0xA2:
 cld
 
+sub   esp,8
+
 push  ds
 push  es
 
-push  ebp
-push  edi
-push  esi
-push  edx
-push  ecx
-push  ebx
 push  eax
+push  ebx
+push  ecx
+push  edx
+push  esi
+push  edi
+push  ebp
 
 mov   ax,0x10
 mov   ds,ax
 mov   es,ax
 
+push  esp
 call  i386_syscall
 
-add   esp,28
+add   esp,32
 
 pop   es
 pop   ds
+
+add   esp,8
 
 iret

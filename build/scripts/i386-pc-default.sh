@@ -20,7 +20,11 @@ cp ../src/kernel/kernel root
 echo 'CP      progs -> root/'
 cp ../src/progs/progs/* root
 
-echo 'Test test 123 テスト' > root/test.txt
+echo 'CREATE  root/init.conf'
+cat > root/init.conf << EOF
+daemon (mboot)/root-mapper
+(mboot)/wait4server root
+EOF
 
 echo "STRIP'n'ZIP"
 for f in $(ls root); do

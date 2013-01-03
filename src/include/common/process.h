@@ -46,6 +46,9 @@ typedef struct process
     int *errno;
 
 
+    pid_t ppid;
+
+
     // TODO: Ein paar Unions
     void (*popup_entry)(void);
     uint_fast32_t *popup_stack_mask;
@@ -84,7 +87,7 @@ void process_set_args(process_t *proc, int argc, const char *const *argv);
 
 void alloc_cpu_state(process_t *proc);
 void initialize_cpu_state(struct cpu_state *state, void (*entry)(void), void *stack, int parcount, ...);
-void initialize_fork_cpu_state_from_syscall_stack(struct cpu_state *state, void *stack);
+void initialize_forked_cpu_state(struct cpu_state *dest, const struct cpu_state *src);
 
 void process_set_initial_params(process_t *proc, int argc, const char *const *argv);
 
@@ -104,13 +107,17 @@ process_t *find_process(pid_t pid);
 
 void yield(void);
 
-pid_t fork_current(void *sys_stack);
+
+int exec(const void *file, size_t file_length, char *const *argv);
 
 
 pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer, size_t length, bool zombify);
 
 
+bool check_process_file_image(const void *address);
+
 pid_t create_process_from_image(int argc, const char *const *argv, const void *address);
+bool load_image_to_process(process_t *proc, const void *address, void **heap_start, void (**entry)(void));
 
 
 void daemonize_process(process_t *proc, const char *name);
@@ -119,12 +126,12 @@ void daemonize_process(process_t *proc, const char *name);
 void destroy_process_struct(process_t *proc);
 void destroy_process_arch_struct(process_t *proc);
 
-void destroy_process(process_t *proc);
+void destroy_process(process_t *proc, uintmax_t exit_info);
 
-void destroy_this_popup_thread(void);
+void destroy_this_popup_thread(uintmax_t exit_info);
 
 
-uintmax_t raw_waitpid(pid_t pid);
+pid_t raw_waitpid(pid_t pid, uintmax_t *status, int options);
 
 
 void sweep_dead_processes(void);

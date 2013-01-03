@@ -4,6 +4,7 @@
 #include <process.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <string.h>
 #include <x86-segments.h>
 
 
@@ -45,6 +46,14 @@ void initialize_cpu_state(struct cpu_state *state, void (*entry)(void), void *st
     state->esp = (uintptr_t)stack;
 
     state->eflags = 0x202;
+}
+
+
+void initialize_forked_cpu_state(struct cpu_state *dest, const struct cpu_state *src)
+{
+    memcpy(dest, src, sizeof(*src));
+
+    dest->eax = 0;
 }
 
 
@@ -90,30 +99,4 @@ void process_set_initial_params(process_t *proc, int argc, const char *const *ar
 void destroy_process_arch_struct(process_t *proc)
 {
     kfree((void *)(proc->arch.kernel_stack_top - KERNEL_STACK_SIZE));
-}
-
-
-void initialize_fork_cpu_state_from_syscall_stack(struct cpu_state *state, void *stack)
-{
-    uint32_t *ss = stack;
-
-    state->eax = 0;
-    state->ebx = ss[1];
-    state->ecx = ss[2];
-    state->edx = ss[3];
-    state->esi = ss[4];
-    state->edi = ss[5];
-    state->ebp = ss[6];
-
-
-    state->cs  = SEG_USR_CS;
-    state->eip = ss[9];
-
-    state->ds  = SEG_USR_DS;
-    state->es  = SEG_USR_DS;
-
-    state->ss  = SEG_USR_DS;
-    state->esp = ss[12];
-
-    state->eflags = ss[11];
 }

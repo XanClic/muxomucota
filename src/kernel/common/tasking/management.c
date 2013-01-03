@@ -9,8 +9,10 @@
 #include <process.h>
 #include <stdint.h>
 #include <string.h>
+#include <unistd.h>
 #include <vmem.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 
 
 // FIXME: Die Ringlisten sind doof.
@@ -31,6 +33,7 @@ process_t *create_empty_process(const char *name)
     p->status = PROCESS_COMA;
 
     p->pgid = p->pid = pid_counter++; // FIXME: Atomic
+    p->ppid = (current_process == NULL) ? 0 : current_process->pid;
 
     strncpy(p->name, name, sizeof(p->name) - 1);
     p->name[sizeof(p->name) - 1] = 0;
@@ -163,6 +166,7 @@ void make_idle_process(void)
     idle_process->status = PROCESS_ACTIVE;
 
     idle_process->pgid = idle_process->pid = pid_counter++; // FIXME: Atomic
+    idle_process->ppid = 0;
 
     strcpy(idle_process->name, "[idle]");
 
@@ -272,6 +276,9 @@ static process_t *find_process_in(process_t **list, pid_t pid)
 {
     process_t *p = *list;
 
+    if (p == NULL)
+        return NULL;
+
     if (p->pid == pid)
         return p;
 
@@ -330,7 +337,7 @@ void destroy_process_struct(process_t *proc)
 }
 
 
-void destroy_process(process_t *proc)
+void destroy_process(process_t *proc, uintmax_t exit_info)
 {
     kassert_exec(lock(&runqueue_lock));
 
@@ -343,6 +350,7 @@ void destroy_process(process_t *proc)
 
     unlock(&zombies_lock);
 
+    proc->exit_info = exit_info;
     proc->status = PROCESS_ZOMBIE;
 
     unlock(&runqueue_lock);
@@ -354,7 +362,7 @@ void destroy_process(process_t *proc)
 }
 
 
-void destroy_this_popup_thread(void)
+void destroy_this_popup_thread(uintmax_t exit_info)
 {
     int psi = current_process->popup_stack_index;
 
@@ -374,7 +382,7 @@ void destroy_this_popup_thread(void)
 
 
     if (current_process->popup_zombify)
-        destroy_process(current_process);
+        destroy_process(current_process, exit_info);
 
 
     kassert_exec(lock(&runqueue_lock));
@@ -398,8 +406,57 @@ void destroy_this_popup_thread(void)
 }
 
 
-uintmax_t raw_waitpid(pid_t pid)
+static process_t *find_child_in(process_t **list, pid_t pid);
+
+static process_t *find_child_in(process_t **list, pid_t pid)
 {
+    process_t *p = *list;
+
+    if (p == NULL)
+        return NULL;
+
+    if (p->ppid == pid)
+        return p;
+
+    do
+        p = p->next;
+    while ((p->ppid != pid) && (p != *list));
+
+    if (p->ppid == pid)
+        return p;
+
+    return NULL;
+}
+
+
+static pid_t wait_for_any_child(uintmax_t *status, int options);
+
+static pid_t wait_for_any_child(uintmax_t *status, int options)
+{
+    process_t *p;
+
+    do
+    {
+        kassert_exec(lock(&zombies_lock));
+        p = find_child_in(&zombies, current_process->pid);
+        unlock(&zombies_lock);
+    }
+    while ((p == NULL) && !(options & WNOHANG));
+
+
+    if (p == NULL)
+        return 0;
+
+    // Ich fauler Sack
+    return raw_waitpid(p->pid, status, options);
+}
+
+pid_t raw_waitpid(pid_t pid, uintmax_t *status, int options)
+{
+    if (pid == -1)
+        return wait_for_any_child(status, options);
+
+
     volatile process_t *proc = (volatile process_t *)find_process(pid);
 
     if (proc == NULL)
@@ -408,10 +465,16 @@ uintmax_t raw_waitpid(pid_t pid)
         proc = (volatile process_t *)find_process_in(&zombies, pid);
         unlock(&zombies_lock);
 
-        // FIXME: Fehlermitteilung
         if (proc == NULL)
-            return 0;
+        {
+            *current_process->errno = ECHILD;
+            return -1;
+        }
     }
+
+
+    if ((proc->status != PROCESS_ZOMBIE) && (options & WNOHANG))
+        return 0;
 
 
     // FIXME: Das ist alles ziemlich fehleranfällig
@@ -422,11 +485,14 @@ uintmax_t raw_waitpid(pid_t pid)
     q_unregister_process(&zombies, (process_t *)proc);
     unlock(&zombies_lock);
 
-    uintmax_t exit_val = proc->exit_info;
+    if (status != NULL)
+        *status = proc->exit_info;
+
+    pid = proc->pid;
 
     destroy_process_struct((process_t *)proc);
 
-    return exit_val;
+    return pid;
 }
 
 
@@ -561,7 +627,7 @@ pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer
 }
 
 
-pid_t fork_current(void *sys_stack)
+pid_t fork(void)
 {
     process_t *child = create_empty_process(current_process->name);
 
@@ -574,7 +640,7 @@ pid_t fork_current(void *sys_stack)
     vmmc_clone(child->vmmc, current_process->vmmc);
 
 
-    initialize_fork_cpu_state_from_syscall_stack(child->cpu_state, sys_stack);
+    initialize_forked_cpu_state(child->cpu_state, current_process->cpu_state);
 
 
     register_process(child);
@@ -584,4 +650,54 @@ pid_t fork_current(void *sys_stack)
 
 
     return child->pid;
+}
+
+
+int exec(const void *file, size_t file_length, char *const *argv)
+{
+    if (!check_process_file_image(file))
+    {
+        *current_process->errno = ENOEXEC;
+        return -1;
+    }
+
+
+    void *mem = kmalloc(file_length);
+    memcpy(mem, file, file_length);
+
+    int argc;
+    for (argc = 0; argv[argc] != NULL; argc++);
+
+    char *kargv[argc];
+
+    for (int i = 0; argv[i] != NULL; i++)
+        kargv[i] = strdup(argv[i]);
+
+
+    strncpy(current_process->name, kargv[0], sizeof(current_process->name) - 1);
+    current_process->name[sizeof(current_process->name) - 1] = 0;
+
+
+    vmmc_clear_user(current_process->vmmc, true);
+
+    vmmc_lazy_map_area(current_process->vmmc, (void *)USER_STACK_BASE, USER_STACK_TOP - USER_STACK_BASE, VMM_UR | VMM_UW);
+
+
+    void *heap_start, (*entry)(void);
+    kassert_exec(load_image_to_process(current_process, mem, &heap_start, &entry));
+
+
+    vmmc_set_heap_top(current_process->vmmc, heap_start);
+
+    make_process_entry(current_process, entry, (void *)USER_STACK_TOP);
+
+    process_set_args(current_process, argc, (const char **)kargv);
+
+
+    kfree(mem);
+    for (int i = 0; i < argc; i++)
+        kfree(kargv[i]);
+
+
+    return 0;
 }

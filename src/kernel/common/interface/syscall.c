@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <syscall.h>
+#include <unistd.h>
 #include <vmem.h>
 
 
@@ -13,12 +14,12 @@
 // besser.
 
 
-uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, uintptr_t p3, uintptr_t p4, void *stack)
+uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, uintptr_t p3, uintptr_t p4)
 {
     switch (syscall_nr)
     {
         case SYS_EXIT:
-            destroy_process(current_process);
+            destroy_process(current_process, p0);
             return 0;
 
         case SYS_SET_ERRNO:
@@ -65,8 +66,7 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
                 *current_process->errno = EFAULT;
                 return 0;
             }
-            current_process->exit_info = *(uintmax_t *)p0;
-            destroy_this_popup_thread();
+            destroy_this_popup_thread(*(uintmax_t *)p0);
             *current_process->errno = EINVAL;
             return 0;
 
@@ -108,7 +108,7 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
             if (ret < 0)
                 *current_process->errno = -ret;
             else if (ipc_sp->synced_result != NULL)
-                *ipc_sp->synced_result = raw_waitpid(ret);
+                raw_waitpid(ret, ipc_sp->synced_result, 0);
             return 0;
         }
 
@@ -190,7 +190,13 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
             return 0;
 
         case SYS_FORK:
-            return fork_current(stack);
+            return fork();
+
+        case SYS_EXEC:
+            return exec((const void *)p0, p1, (char *const *)p2);
+
+        case SYS_WAIT:
+            return raw_waitpid(p0, (uintmax_t *)p1, p2);
     }
 
     *current_process->errno = ENOSYS;

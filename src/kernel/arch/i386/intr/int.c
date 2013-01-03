@@ -200,6 +200,10 @@ struct cpu_state *i386_common_isr(struct cpu_state *state)
         sod_print_ptr(state->err_code);
         sod_print(" efl: ");
         sod_print_ptr(state->eflags);
+        sod_print(" cr2: ");
+        uintptr_t cr2;
+        __asm__ __volatile__ ("mov %0,cr2" : "=r"(cr2));
+        sod_print_ptr(cr2);
 
         sod_print("\n cs: ");
         sod_print_ptr(state->cs);
@@ -281,10 +285,11 @@ struct cpu_state *i386_common_isr(struct cpu_state *state)
 }
 
 
-uintptr_t i386_syscall(uintptr_t eax, uintptr_t ebx, uintptr_t ecx, uintptr_t edx, uintptr_t esi, uintptr_t edi);
+uintptr_t i386_syscall(struct cpu_state *state);
 
-uintptr_t i386_syscall(uintptr_t eax, uintptr_t ebx, uintptr_t ecx, uintptr_t edx, uintptr_t esi, uintptr_t edi)
+uintptr_t i386_syscall(struct cpu_state *state)
 {
-    // FIXME: Aber irgendwie auch gut. Das mit dem &eax.
-    return syscall_krn(eax, ebx, ecx, edx, esi, edi, &eax);
+    current_process->cpu_state = state;
+
+    return syscall_krn(state->eax, state->ebx, state->ecx, state->edx, state->esi, state->edi);
 }

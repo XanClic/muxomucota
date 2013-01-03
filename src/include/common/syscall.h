@@ -28,10 +28,12 @@ enum syscall_number
     SYS_SHM_SIZE,
     SYS_SBRK,
     SYS_YIELD,
-    SYS_FORK
+    SYS_FORK,
+    SYS_EXEC,
+    SYS_WAIT
 };
 
 
-uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, uintptr_t p3, uintptr_t p4, void *stack);
+uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, uintptr_t p3, uintptr_t p4);
 
 #endif

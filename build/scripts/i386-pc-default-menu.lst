@@ -4,10 +4,12 @@ timeout 8
 title Myxomycota
   root (fd0)
   kernel /kernel prime=/init,/bios-console,/mboot-modules
-  module /init prime=tty,mboot tty=(tty)/tty0
+  module /init prime=tty,mboot tty=(tty)/tty0 script=(mboot)/init.conf
   module /bios-console
   module /mboot-modules
-  module /test.txt
+  module /init.conf
+  module /wait4server
+  module /root-mapper
 
 title Erste Festplatte
   rootnoverify (hd0)

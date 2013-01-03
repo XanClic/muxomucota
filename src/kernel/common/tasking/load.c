@@ -3,13 +3,14 @@
 #include <elf32.h>
 #include <pmm.h>
 #include <process.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 #include <vmem.h>
 
 
-pid_t create_process_from_image(int argc, const char *const *argv, const void *address)
+bool check_process_file_image(const void *address)
 {
     const Elf32_Ehdr *ehdr = address;
 
@@ -23,13 +24,55 @@ pid_t create_process_from_image(int argc, const char *const *argv, const void *a
         (ehdr->e_type    != ET_EXEC) ||
         (ehdr->e_machine != EM_THIS))
     {
-        // Nicht unterstützter (Datei-)Typ
-        return -1;
+        return false;
     }
+
+    return true;
+}
+
+
+pid_t create_process_from_image(int argc, const char *const *argv, const void *address)
+{
+    if (!check_process_file_image(address))
+        return -1;
 
 
     process_t *proc = create_empty_process(argv[0]);
 
+    process_create_basic_mappings(proc);
+
+
+    void *heap_start, (*entry)(void);
+
+    if (!load_image_to_process(proc, address, &heap_start, &entry))
+    {
+        destroy_process_struct(proc);
+        return -1;
+    }
+
+
+    vmmc_set_heap_top(proc->vmmc, heap_start);
+
+    make_process_entry(proc, entry, (void *)USER_STACK_TOP);
+
+    process_set_args(proc, argc, argv);
+
+    run_process(proc);
+
+
+    return proc->pid;
+}
+
+
+bool load_image_to_process(process_t *proc, const void *address, void **heap_start, void (**entry)(void))
+{
+    // Kostet ja nix, kann man also machen, auch wenn der Aufrufer das sicher
+    // schon erledigt hat
+    if (!check_process_file_image(address))
+        return false;
+
+
+    const Elf32_Ehdr *ehdr = address;
 
     const Elf32_Phdr *phdr = (const Elf32_Phdr *)((uintptr_t)ehdr + ehdr->e_phoff);
 
@@ -98,19 +141,9 @@ pid_t create_process_from_image(int argc, const char *const *argv, const void *a
     }
 
 
-    vmmc_set_heap_top(proc->vmmc, (void *)image_end);
+    *heap_start = (void *)image_end;
+    *entry      = (void (*)(void))ehdr->e_entry;
 
 
-    process_create_basic_mappings(proc);
-
-
-    make_process_entry(proc, (void (*)(void))ehdr->e_entry, (void *)USER_STACK_TOP);
-
-    process_set_args(proc, argc, argv);
-
-
-    run_process(proc);
-
-
-    return proc->pid;
+    return true;
 }

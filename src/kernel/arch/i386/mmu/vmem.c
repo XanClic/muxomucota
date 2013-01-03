@@ -16,17 +16,19 @@ static uint32_t *kpd, *kpt;
 static lock_t kpt_lock = unlocked;
 
 
-void vmmc_clear_user(vmm_context_t *context);
-
-
 void change_vmm_context(const vmm_context_t *ctx)
 {
-    __asm__ __volatile__ ("mov cr3,%0;" :: "r"(ctx->arch.cr3));
+    __asm__ __volatile__ ("mov cr3,%0;" :: "r"(ctx->arch.cr3) : "memory");
 }
 
 static void invlpg(uintptr_t address)
 {
-    __asm__ __volatile__ ("invlpg [%0];" :: "r"(address));
+    __asm__ __volatile__ ("invlpg [%0];" :: "r"(address) : "memory");
+}
+
+static void full_tlb_invalidation(void)
+{
+    __asm__ __volatile__ ("mov eax,cr3; mov cr3,eax;" ::: "eax", "memory");
 }
 
 
@@ -269,7 +271,7 @@ void create_vmm_context_arch(vmm_context_t *context)
 
 void destroy_vmm_context(vmm_context_t *context)
 {
-    vmmc_clear_user(context);
+    vmmc_clear_user(context, false);
 
     kassert_exec(lock(&context->arch.lock));
 
@@ -486,24 +488,43 @@ bool vmmc_do_lazy_map(vmm_context_t *context, void *address)
         return false;
     }
 
-    pt[pti] = (pt[pti] & MAP_RW) | MAP_US | MAP_PR | MAP_CC | MAP_LC | pmm_alloc(1);
+    uintptr_t phys = pmm_alloc(1);
+    pt[pti] = (pt[pti] & MAP_RW) | MAP_US | MAP_PR | MAP_CC | MAP_LC | phys;
 
     unlock(&context->arch.lock);
 
     kernel_unmap(pt, 4096);
 
+
+    if (((uintptr_t)address >= USER_HERITAGE_BASE) && ((uintptr_t)address < USER_HERITAGE_TOP))
+    {
+        // Das wird zwischen Prozessen geteilt, also sollte der erste, der es
+        // benutzt, irgendwas initialisiertes bekommen.
+        void *virt = kernel_map(phys, 4096);
+        memset(virt, 0, 4096);
+        kernel_unmap(virt, 4096);
+    }
+
+
     return true;
 }
 
 
-void vmmc_clear_user(vmm_context_t *context)
+void vmmc_clear_user(vmm_context_t *context, bool preserve_heritage)
 {
     kassert_exec(lock(&context->arch.lock));
 
     for (unsigned pdi = 0; pdi < (PHYS_BASE >> 22); pdi++)
     {
-        if (!(context->arch.pd[pdi] & MAP_PR))
+        if (preserve_heritage && (pdi >= (USER_HERITAGE_BASE >> 22)) && (pdi < (USER_HERITAGE_TOP >> 22)))
             continue;
+
+        if (!(context->arch.pd[pdi] & MAP_PR))
+        {
+            context->arch.pd[pdi] = MAP_NP;
+            continue;
+        }
+
 
         if ((pdi < (USER_MAP_BASE >> 22)) || (pdi >= (USER_MAP_TOP >> 22)))
         {
@@ -518,16 +539,23 @@ void vmmc_clear_user(vmm_context_t *context)
             kernel_unmap(pt, 4096);
         }
 
+
         pmm_free(context->arch.pd[pdi] & ~0xFFF, 1);
+
+        context->arch.pd[pdi] = MAP_NP;
     }
 
     unlock(&context->arch.lock);
+
+
+    if (context == current_process->vmmc)
+        full_tlb_invalidation();
 }
 
 
 void vmmc_clone(vmm_context_t *dest, vmm_context_t *source)
 {
-    bool current_affected = current_process->vmmc == source;
+    bool current_affected = (current_process->vmmc == source) || (current_process->vmmc == dest);
 
 
     kassert_exec(lock(&source->arch.lock));
@@ -570,6 +598,9 @@ void vmmc_clone(vmm_context_t *dest, vmm_context_t *source)
         kernel_unmap(spt, 4096);
         kernel_unmap(npt, 4096);
     }
+
+
+    dest->heap_end = source->heap_end;
 
 
     unlock(&source->arch.lock);

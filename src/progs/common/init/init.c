@@ -1,8 +1,11 @@
 #include <assert.h>
+#include <errno.h>
 #include <ipc.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <vfs.h>
 
@@ -14,67 +17,119 @@ static void wait_for(const char *name)
 }
 
 
-static void test_vfs(const char *filename)
-{
-    printf("Öffne %s.\n", filename);
-
-
-    int fd = create_pipe(filename, O_RDONLY);
-
-    if (fd < 0)
-    {
-        perror("Datei konnte nicht geöffnet werden");
-        return;
-    }
-
-
-    size_t fsz = pipe_get_flag(fd, O_PRESSURE);
-    char dst[fsz];
-
-    stream_recv(fd, dst, fsz, 0);
-
-    destroy_pipe(fd, 0);
-
-
-    printf("Größe: %i B\n", (int)fsz);
-
-    dst[fsz - 1] = 0; // Newline überschreiben (und nullterminieren sowieso)
-
-    printf("Inhalt: \"%s\"\n", dst);
-}
-
-
 int main(int argc, char *argv[])
 {
-    const char *tty = NULL;
+    const char *tty = NULL, *script = NULL;
 
     for (int i = 0; i < argc; i++)
     {
         if (!strncmp(argv[i], "prime=", 6))
-        {
             for (const char *tok = strtok(argv[i] + 6, ","); tok != NULL; tok = strtok(NULL, ","))
                 wait_for(tok);
-        }
         else if (!strncmp(argv[i], "tty=", 4))
             tty = argv[i] + 4;
+        else if (!strncmp(argv[i], "script=", 7))
+            script = argv[i] + 7;
     }
+
 
     if (tty == NULL)
         tty = "(tty)/tty0";
 
-    assert(create_pipe(tty, O_RDONLY) == STDIN_FILENO);
-    assert(create_pipe(tty, O_WRONLY) == STDOUT_FILENO);
-    assert(create_pipe(tty, O_WRONLY) == STDERR_FILENO);
+    int infd, outfd, errfd;
+
+    infd  = create_pipe(tty, O_RDONLY);
+    outfd = create_pipe(tty, O_WRONLY);
+    errfd = create_pipe(tty, O_WRONLY);
+
+    assert(infd  == STDIN_FILENO);
+    assert(outfd == STDOUT_FILENO);
+    assert(errfd == STDERR_FILENO);
 
 
-    printf("init läuft.\n\n");
+    printf("init running.\n\n");
 
 
-    printf("Primordiale Services gestartet.\n");
-    printf("stdin/stdout/stderr über %s.\n\n", tty);
+    printf("Primordial servers running.\n");
+    printf("stdin/stdout/stderr via %s.\n\n", tty);
 
 
-    test_vfs("(mboot)/test.txt");
+    if (script == NULL)
+    {
+        fprintf(stderr, "No init script given.\n");
+        return 1;
+    }
+
+
+    printf("Executing %s.\n\n", script);
+
+
+    int fd = create_pipe(script, O_RDONLY);
+
+    if (fd < 0)
+    {
+        perror("Could not open init script");
+        return 1;
+    }
+
+
+    size_t len = pipe_get_flag(fd, F_PRESSURE);
+
+    char *commands = malloc(len + 1);
+
+    stream_recv(fd, commands, len, 0);
+    commands[len] = 0;
+
+    destroy_pipe(fd, 0);
+
+
+    STRTOK_FOREACH(commands, "\n", line)
+    {
+        printf("$ %-70s", line);
+        fflush(stdout);
+
+        int c_argc;
+        const char *l = line;
+        for (c_argc = 1; *l; l++)
+            if (*l == ' ')
+                c_argc++;
+
+        char *c_argv[c_argc + 1];
+
+        int i = 0;
+        STRTOK_FOREACH(line, " ", arg)
+            c_argv[i++] = arg;
+        c_argv[i] = NULL;
+
+
+        bool daemon = !strcmp(c_argv[0], "daemon");
+
+        pid_t child = fork();
+        if (!child)
+        {
+            execvp(c_argv[daemon ? 1 : 0], &c_argv[daemon ? 1 : 0]);
+            exit(errno);
+        }
+
+
+        if (daemon)
+            printf("[BKGN]\n");
+        else
+        {
+            int status;
+            waitpid(child, &status, 0);
+
+            if (!WIFEXITED(status))
+                printf("[CRSH]\n");
+            else if (WEXITSTATUS(status))
+                printf("[E%03i]\n", WEXITSTATUS(status));
+            else
+                printf("[DONE]\n");
+        }
+    }
+
+
+    free(commands);
 
 
     return 0;
