@@ -15,6 +15,13 @@
 #define BITMAP_USERS    (0xFF & ~BITMAP_COW_FLAG)
 
 
+#define RANDOMIZE_AT_BOOT
+
+
+// FIXME FIXME FIXME
+#define lock(x) true
+
+
 static uintptr_t mem_base = (uintptr_t)-1;
 static int mem_entries;
 uint8_t *bitmap;
@@ -134,6 +141,19 @@ void init_pmm(void)
 
 
     look_from_here = 0;
+
+
+#ifdef RANDOMIZE_AT_BOOT
+    for (uintptr_t start = mem_base; start < memsize; start += PAGE_SIZE)
+    {
+        if (!bitmap[(start - mem_base) >> PAGE_SHIFT])
+        {
+            void *va = kernel_map(start, PAGE_SIZE);
+            memset(va, 42, PAGE_SIZE); // Chosen by reading a good book
+            kernel_unmap(va, PAGE_SIZE);
+        }
+    }
+#endif
 }
 
 
