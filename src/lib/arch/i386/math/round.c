@@ -28,6 +28,7 @@
 
 #include <fenv.h>
 #include <math.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 #define ROUND_NEAR  0x000
