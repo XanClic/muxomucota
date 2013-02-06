@@ -21,7 +21,7 @@ void init_gdt(void)
     gdt[2] = UINT64_C(0x00CF92000000FFFF); // Kerneldatensegment
     gdt[3] = UINT64_C(0x00CEFA000000FFFF); // Usercodesegment
     gdt[4] = UINT64_C(0x00CEF2000000FFFF); // Userdatensegment
-    gdt[5] = UINT64_C(0xF040E90000000000) | (sizeof(x86_tss) - 1); // TSS
+    gdt[5] = UINT64_C(0x0040E90000000000) | (sizeof(x86_tss) - 1); // TSS
 
     uint64_t tss_base = (uintptr_t)&x86_tss;
     gdt[5] |= (tss_base & 0x00FFFFFF) << 16;
