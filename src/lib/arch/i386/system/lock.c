@@ -3,11 +3,9 @@
 #include <stdint.h>
 
 
-bool lock(volatile lock_t *v)
+void lock(volatile lock_t *v)
 {
     while (__sync_lock_test_and_set(v, locked) == locked);
-
-    return true;
 }
 
 

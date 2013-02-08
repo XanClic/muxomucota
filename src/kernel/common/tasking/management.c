@@ -23,7 +23,12 @@ lock_t runqueue_lock = unlocked, daemons_lock = unlocked, zombies_lock = unlocke
 
 process_t *current_process, *idle_process, *runqueue, *daemons, *zombies, *dead;
 
-static pid_t pid_counter = 0;
+static inline pid_t get_new_pid(void)
+{
+    static pid_t pid_counter = 0;
+
+    return __sync_fetch_and_add(&pid_counter, 1);
+}
 
 
 process_t *create_empty_process(const char *name)
@@ -32,7 +37,7 @@ process_t *create_empty_process(const char *name)
 
     p->status = PROCESS_COMA;
 
-    p->pgid = p->pid = pid_counter++; // FIXME: Atomic
+    p->pgid = p->pid = get_new_pid();
     p->ppid = (current_process == NULL) ? 0 : current_process->pid;
 
     strncpy(p->name, name, sizeof(p->name) - 1);
@@ -165,7 +170,7 @@ void make_idle_process(void)
 
     idle_process->status = PROCESS_ACTIVE;
 
-    idle_process->pgid = idle_process->pid = pid_counter++; // FIXME: Atomic
+    idle_process->pgid = idle_process->pid = get_new_pid();
     idle_process->ppid = 0;
 
     strcpy(idle_process->name, "[idle]");
@@ -212,7 +217,7 @@ void q_register_process(process_t **list, process_t *proc)
 
 void register_process(process_t *proc)
 {
-    kassert_exec(lock(&runqueue_lock));
+    lock(&runqueue_lock);
 
     q_register_process(&runqueue, proc);
 
@@ -250,7 +255,7 @@ void q_unregister_process(process_t **list, process_t *proc)
 
 pid_t find_daemon_by_name(const char *name)
 {
-    kassert_exec(lock(&daemons_lock));
+    lock(&daemons_lock);
 
     process_t *p = daemons;
 
@@ -297,14 +302,14 @@ process_t *find_process(pid_t pid)
 {
     process_t *p;
 
-    kassert_exec(lock(&runqueue_lock));
+    lock(&runqueue_lock);
     p = find_process_in(&runqueue, pid);
     unlock(&runqueue_lock);
 
     if (p != NULL)
         return p;
 
-    kassert_exec(lock(&daemons_lock));
+    lock(&daemons_lock);
     p = find_process_in(&daemons,  pid);
     unlock(&daemons_lock);
 
@@ -339,12 +344,12 @@ void destroy_process_struct(process_t *proc)
 
 void destroy_process(process_t *proc, uintmax_t exit_info)
 {
-    kassert_exec(lock(&runqueue_lock));
+    lock(&runqueue_lock);
 
     q_unregister_process(&runqueue, proc);
 
     // yay potentieller dead lock (FIXME, btw)
-    kassert_exec(lock(&zombies_lock));
+    lock(&zombies_lock);
 
     q_register_process(&zombies, proc);
 
@@ -385,12 +390,12 @@ void destroy_this_popup_thread(uintmax_t exit_info)
         destroy_process(current_process, exit_info);
 
 
-    kassert_exec(lock(&runqueue_lock));
+    lock(&runqueue_lock);
 
     q_unregister_process(&runqueue, current_process);
 
     // yay potentieller dead lock (FIXME, btw)
-    kassert_exec(lock(&dead_lock));
+    lock(&dead_lock);
 
     q_register_process(&dead, current_process);
 
@@ -437,7 +442,7 @@ static pid_t wait_for_any_child(uintmax_t *status, int options)
 
     do
     {
-        kassert_exec(lock(&zombies_lock));
+        lock(&zombies_lock);
         p = find_child_in(&zombies, current_process->pid);
         unlock(&zombies_lock);
     }
@@ -461,7 +466,7 @@ pid_t raw_waitpid(pid_t pid, uintmax_t *status, int options)
 
     if (proc == NULL)
     {
-        kassert_exec(lock(&zombies_lock));
+        lock(&zombies_lock);
         proc = (volatile process_t *)find_process_in(&zombies, pid);
         unlock(&zombies_lock);
 
@@ -481,7 +486,7 @@ pid_t raw_waitpid(pid_t pid, uintmax_t *status, int options)
     while (proc->status != PROCESS_ZOMBIE)
         yield();
 
-    kassert_exec(lock(&zombies_lock));
+    lock(&zombies_lock);
     q_unregister_process(&zombies, (process_t *)proc);
     unlock(&zombies_lock);
 
@@ -521,12 +526,12 @@ void daemonize_process(process_t *proc, const char *name)
 {
     strncpy(proc->name, name, sizeof(proc->name));
 
-    kassert_exec(lock(&runqueue_lock));
+    lock(&runqueue_lock);
 
     q_unregister_process(&runqueue, proc);
 
     // yay potentieller dead lock (FIXME, btw)
-    kassert_exec(lock(&daemons_lock));
+    lock(&daemons_lock);
 
     q_register_process(&daemons, proc);
 
@@ -581,7 +586,7 @@ pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer
 
     pop->status = PROCESS_COMA;
 
-    pop->pid = pid_counter++; // FIXME: Atomic
+    pop->pid = get_new_pid();
     pop->pgid = proc->pid;
 
     pop->errno = proc->errno;

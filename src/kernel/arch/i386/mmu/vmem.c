@@ -86,7 +86,7 @@ void *kernel_map(uintptr_t phys, size_t length)
     {
         if (kpt[i] == MAP_NP)
         {
-            kassert_exec(lock(&kpt_lock));
+            lock(&kpt_lock);
 
             int j;
             for (j = 0; j < pages; j++)
@@ -120,7 +120,7 @@ void *kernel_map_nc(uintptr_t *pageframe_list, int frames)
     {
         if (kpt[i] == MAP_NP)
         {
-            kassert_exec(lock(&kpt_lock));
+            lock(&kpt_lock);
 
             int j;
             for (j = 0; j < frames; j++)
@@ -161,7 +161,7 @@ uintptr_t kernel_unmap(void *virt, size_t length)
     uintptr_t phys = (kpt[bi] & ~0xFFF) | ((uintptr_t)virt & 0xFFF);
 
 
-    kassert_exec(lock(&kpt_lock));
+    lock(&kpt_lock);
 
     for (int i = 0; i < pages; i++)
     {
@@ -181,7 +181,7 @@ void *vmmc_user_map_sg(vmm_context_t *context, uintptr_t *phys, int pages, unsig
     int current_block_size = 0;
 
 
-    kassert_exec(lock(&context->arch.lock));
+    lock(&context->arch.lock);
 
 
     int pdi, pti = 0;
@@ -273,7 +273,7 @@ void destroy_vmm_context(vmm_context_t *context)
 {
     vmmc_clear_user(context, false);
 
-    kassert_exec(lock(&context->arch.lock));
+    lock(&context->arch.lock);
 
     kernel_unmap(context->arch.pd, 4096);
     pmm_free(context->arch.cr3, 1);
@@ -310,7 +310,7 @@ void vmmc_map_user_page_unlocked(const vmm_context_t *context, void *virt, uintp
 
 void vmmc_map_user_page(vmm_context_t *context, void *virt, uintptr_t phys, unsigned flags)
 {
-    kassert_exec(lock(&context->arch.lock));
+    lock(&context->arch.lock);
 
     vmmc_map_user_page_unlocked(context, virt, phys, flags);
 
@@ -328,7 +328,7 @@ void vmmc_lazy_map_area(vmm_context_t *context, void *virt, ptrdiff_t sz, unsign
     else
         sz >>= PAGE_SHIFT;
 
-    kassert_exec(lock(&context->arch.lock));
+    lock(&context->arch.lock);
 
     while (sz > 0)
     {
@@ -455,7 +455,7 @@ bool vmmc_do_lazy_map(vmm_context_t *context, void *address)
     unsigned pdi = (uintptr_t)address >> 22;
     unsigned pti = ((uintptr_t)address >> 12) & 0x3FF;
 
-    kassert_exec(lock(&context->arch.lock));
+    lock(&context->arch.lock);
 
     uint32_t pde = context->arch.pd[pdi];
 
@@ -512,7 +512,7 @@ bool vmmc_do_lazy_map(vmm_context_t *context, void *address)
 
 void vmmc_clear_user(vmm_context_t *context, bool preserve_heritage)
 {
-    kassert_exec(lock(&context->arch.lock));
+    lock(&context->arch.lock);
 
     for (unsigned pdi = 0; pdi < (PHYS_BASE >> 22); pdi++)
     {
@@ -558,8 +558,8 @@ void vmmc_clone(vmm_context_t *dest, vmm_context_t *source)
     bool current_affected = (current_process->vmmc == source) || (current_process->vmmc == dest);
 
 
-    kassert_exec(lock(&source->arch.lock));
-    kassert_exec(lock(&dest->arch.lock));
+    lock(&source->arch.lock);
+    lock(&dest->arch.lock);
 
 
     for (unsigned pdi = 0; pdi < (PHYS_BASE >> 22); pdi++)
@@ -613,7 +613,7 @@ void vmmc_user_unmap(vmm_context_t *context, void *virt, size_t length)
     unsigned pdi_start = (uintptr_t)virt >> 22;
     unsigned pdi_end = ((uintptr_t)virt + length + (1 << 22) - 1) >> 22;
 
-    kassert_exec(lock(&context->arch.lock));
+    lock(&context->arch.lock);
 
     for (unsigned pdi = pdi_start; pdi < pdi_end; pdi++)
     {
@@ -649,7 +649,7 @@ unsigned vmmc_address_mapped(vmm_context_t *context, void *virt, uintptr_t *phys
     unsigned pdi = (uintptr_t)virt >> 22;
     unsigned pti = ((uintptr_t)virt >> 12) & 0x3FF;
 
-    kassert_exec(lock(&context->arch.lock));
+    lock(&context->arch.lock);
 
     if (!(context->arch.pd[pdi] & MAP_PR))
     {

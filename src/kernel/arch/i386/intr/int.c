@@ -56,6 +56,7 @@ extern const void int_stub_0xA2;
 
 
 #define IDT_SYS_INTR_ENTRY(num) idt[num] = ((uint64_t)((uintptr_t)&int_stub_##num >> 16) << 48) | ((uintptr_t)&int_stub_##num & 0xFFFF) | (SEG_SYS_CS << 16) | (UINT64_C(0x8E) << 40);
+#define IDT_SYS_TRAP_ENTRY(num) idt[num] = ((uint64_t)((uintptr_t)&int_stub_##num >> 16) << 48) | ((uintptr_t)&int_stub_##num & 0xFFFF) | (SEG_SYS_CS << 16) | (UINT64_C(0x8F) << 40);
 #define IDT_USR_TRAP_ENTRY(num) idt[num] = ((uint64_t)((uintptr_t)&int_stub_##num >> 16) << 48) | ((uintptr_t)&int_stub_##num & 0xFFFF) | (SEG_SYS_CS << 16) | (UINT64_C(0xEF) << 40);
 
 
@@ -99,22 +100,22 @@ void init_interrupts(void)
     IDT_SYS_INTR_ENTRY(0x13);
 
     // IRQs
-    IDT_SYS_INTR_ENTRY(0x20);
-    IDT_SYS_INTR_ENTRY(0x21);
-    IDT_SYS_INTR_ENTRY(0x22);
-    IDT_SYS_INTR_ENTRY(0x23);
-    IDT_SYS_INTR_ENTRY(0x24);
-    IDT_SYS_INTR_ENTRY(0x25);
-    IDT_SYS_INTR_ENTRY(0x26);
-    IDT_SYS_INTR_ENTRY(0x27);
-    IDT_SYS_INTR_ENTRY(0x28);
-    IDT_SYS_INTR_ENTRY(0x29);
-    IDT_SYS_INTR_ENTRY(0x2A);
-    IDT_SYS_INTR_ENTRY(0x2B);
-    IDT_SYS_INTR_ENTRY(0x2C);
-    IDT_SYS_INTR_ENTRY(0x2D);
-    IDT_SYS_INTR_ENTRY(0x2E);
-    IDT_SYS_INTR_ENTRY(0x2F);
+    IDT_SYS_TRAP_ENTRY(0x20);
+    IDT_SYS_TRAP_ENTRY(0x21);
+    IDT_SYS_TRAP_ENTRY(0x22);
+    IDT_SYS_TRAP_ENTRY(0x23);
+    IDT_SYS_TRAP_ENTRY(0x24);
+    IDT_SYS_TRAP_ENTRY(0x25);
+    IDT_SYS_TRAP_ENTRY(0x26);
+    IDT_SYS_TRAP_ENTRY(0x27);
+    IDT_SYS_TRAP_ENTRY(0x28);
+    IDT_SYS_TRAP_ENTRY(0x29);
+    IDT_SYS_TRAP_ENTRY(0x2A);
+    IDT_SYS_TRAP_ENTRY(0x2B);
+    IDT_SYS_TRAP_ENTRY(0x2C);
+    IDT_SYS_TRAP_ENTRY(0x2D);
+    IDT_SYS_TRAP_ENTRY(0x2E);
+    IDT_SYS_TRAP_ENTRY(0x2F);
 
     // Syscall
     IDT_USR_TRAP_ENTRY(0xA2);
