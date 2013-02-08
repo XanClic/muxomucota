@@ -237,7 +237,10 @@ struct cpu_state *i386_common_isr(struct cpu_state *state)
         sod_print(" ebp: ");
         sod_print_ptr(state->ebp);
         sod_print(" ksp: ");
-        sod_print_ptr((uintptr_t)(state + 1));
+        if (state->cs & 3)
+            sod_print_ptr((uintptr_t)(state + 1));
+        else
+            sod_print_ptr((uintptr_t)(state + 1) - 8); // kein SS:ESP auf dem Stack
 
         sod_print("\n");
 
