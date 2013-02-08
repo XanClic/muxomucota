@@ -18,10 +18,6 @@
 #define RANDOMIZE_AT_BOOT
 
 
-// FIXME FIXME FIXME
-#define lock(x) true
-
-
 static uintptr_t mem_base = (uintptr_t)-1;
 static int mem_entries;
 uint8_t *bitmap;
@@ -169,7 +165,7 @@ uintptr_t pmm_alloc(int count)
     {
         if (!bitmap[i])
         {
-            kassert_exec(lock(&bitmap_lock));
+            lock(&bitmap_lock);
 
             int j;
             for (j = 0; j < count; j++)
@@ -214,7 +210,7 @@ void pmm_free(uintptr_t start, int count)
     kassert(count > 0);
 
 
-    kassert_exec(lock(&bitmap_lock));
+    lock(&bitmap_lock);
 
     int base = (start - mem_base) >> PAGE_SHIFT;
 
@@ -235,7 +231,7 @@ void pmm_use(uintptr_t start, int count)
     kassert(count > 0);
 
 
-    kassert_exec(lock(&bitmap_lock));
+    lock(&bitmap_lock);
 
     int base = (start - mem_base) >> PAGE_SHIFT;
 
@@ -264,7 +260,7 @@ void pmm_mark_cow(uintptr_t start, int count, bool flag)
     kassert(count > 0);
 
 
-    kassert_exec(lock(&bitmap_lock));
+    lock(&bitmap_lock);
 
     int base = (start - mem_base) >> PAGE_SHIFT;
 

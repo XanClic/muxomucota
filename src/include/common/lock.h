@@ -6,7 +6,7 @@
 #include <arch-lock.h>
 
 
-bool lock(volatile lock_t *v);
+void lock(volatile lock_t *v);
 void unlock(volatile lock_t *v);
 
 #endif
