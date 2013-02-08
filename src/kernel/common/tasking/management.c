@@ -189,6 +189,36 @@ void make_idle_process(void)
 }
 
 
+process_t *create_kernel_thread(const char *name, void (*function)(void), void *stack, size_t stacksz)
+{
+    process_t *p = kmalloc(sizeof(*p));
+
+    p->status = PROCESS_COMA;
+
+    p->pgid = p->pid = get_new_pid();
+    p->ppid = 0;
+
+    strncpy(p->name, name, sizeof(p->name) - 1);
+    p->name[sizeof(p->name) - 1] = 0;
+
+    p->popup_stack_mask = NULL;
+    p->popup_stack_index = -1;
+
+
+    alloc_cpu_state_on_stack(p, stack, stacksz);
+
+
+    p->vmmc = &kernel_context;
+    use_vmm_context(p->vmmc);
+
+
+    initialize_kernel_thread_cpu_state(p->cpu_state, function);
+
+
+    return p;
+}
+
+
 void run_process(process_t *proc)
 {
     proc->status = PROCESS_ACTIVE;

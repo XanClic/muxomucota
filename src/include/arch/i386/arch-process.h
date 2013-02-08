@@ -6,7 +6,7 @@
 
 struct process_arch_info
 {
-    uintptr_t kernel_stack_top;
+    uintptr_t kernel_stack, kernel_stack_top;
 };
 
 #endif

@@ -75,6 +75,7 @@ process_t *schedule(void);
 
 
 process_t *create_empty_process(const char *name);
+process_t *create_kernel_thread(const char *name, void (*function)(void), void *stack, size_t stacksz);
 
 void make_idle_process(void);
 
@@ -86,7 +87,9 @@ void process_create_basic_mappings(process_t *proc);
 void process_set_args(process_t *proc, int argc, const char *const *argv);
 
 void alloc_cpu_state(process_t *proc);
+void alloc_cpu_state_on_stack(process_t *proc, void *stack, size_t stacksz);
 void initialize_cpu_state(struct cpu_state *state, void (*entry)(void), void *stack, int parcount, ...);
+void initialize_kernel_thread_cpu_state(struct cpu_state *state, void (*entry)(void));
 void initialize_forked_cpu_state(struct cpu_state *dest, const struct cpu_state *src);
 
 void process_set_initial_params(process_t *proc, int argc, const char *const *argv);
