@@ -1,5 +1,4 @@
 #include <boot.h>
-#include <cpu.h>
 #include <isr.h>
 #include <platform.h>
 #include <pmm.h>
@@ -80,9 +79,5 @@ void main(void *boot_info)
     }
 
 
-    make_idle_process();
-
-
-    for (;;)
-        cpu_halt();
+    enter_idle_process();
 }

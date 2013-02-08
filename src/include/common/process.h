@@ -79,6 +79,8 @@ process_t *create_kernel_thread(const char *name, void (*function)(void), void *
 
 void make_idle_process(void);
 
+void enter_idle_process(void);
+
 
 void make_process_entry(process_t *proc, void (*address)(void), void *stack);
 

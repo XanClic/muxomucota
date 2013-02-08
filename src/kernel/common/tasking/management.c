@@ -536,6 +536,9 @@ void sweep_dead_processes(void)
     if (dead == NULL)
         return;
 
+
+    lock(&dead_lock);
+
     process_t *p = dead;
 
     do
@@ -549,6 +552,8 @@ void sweep_dead_processes(void)
     while (p != dead);
 
     dead = NULL;
+
+    unlock(&dead_lock);
 }
 
 

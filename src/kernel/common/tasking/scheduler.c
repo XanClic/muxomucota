@@ -15,13 +15,6 @@ process_t *schedule(void)
         return current_process;
 
 
-    // Wenn nicht gerade der Leerlaufprozess dran war, kann es sein, dass man
-    // sich hier auf dem Stack eines toten Prozesses (bspw. Popupthread)
-    // befindet. Den dann zu löschen, wäre ziemlich unklug.
-    if ((dead != NULL) && (dead_lock == unlocked) && (current_process == idle_process))
-        sweep_dead_processes();
-
-
     if (unlikely(current_process == NULL))
     {
         if (idle_process != NULL)
