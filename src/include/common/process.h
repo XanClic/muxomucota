@@ -78,6 +78,8 @@ process_t *create_empty_process(const char *name);
 
 void make_idle_process(void);
 
+void enter_idle_process(void);
+
 
 void make_process_entry(process_t *proc, void (*address)(void), void *stack);
 
