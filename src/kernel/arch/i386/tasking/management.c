@@ -11,11 +11,18 @@
 #define KERNEL_STACK_SIZE 8192
 
 
-void alloc_cpu_state(process_t *proc)
+void alloc_cpu_state_on_stack(process_t *proc, void *stack, size_t stacksz)
 {
-    proc->arch.kernel_stack_top = (uintptr_t)kmalloc(KERNEL_STACK_SIZE) + KERNEL_STACK_SIZE;
+    proc->arch.kernel_stack     = (uintptr_t)stack;
+    proc->arch.kernel_stack_top = proc->arch.kernel_stack + stacksz;
 
     proc->cpu_state = (struct cpu_state *)proc->arch.kernel_stack_top - 1;
+}
+
+
+void alloc_cpu_state(process_t *proc)
+{
+    alloc_cpu_state_on_stack(proc, kmalloc(KERNEL_STACK_SIZE), KERNEL_STACK_SIZE);
 }
 
 
@@ -44,6 +51,20 @@ void initialize_cpu_state(struct cpu_state *state, void (*entry)(void), void *st
 
     state->ss  = SEG_USR_DS;
     state->esp = (uintptr_t)stack;
+
+    state->eflags = 0x202;
+}
+
+
+void initialize_kernel_thread_cpu_state(struct cpu_state *state, void (*entry)(void))
+{
+    state->eax = state->ebx = state->ecx = state->edx = state->esi = state->edi = state->ebp = 0;
+
+    state->cs  = SEG_SYS_CS;
+    state->eip = (uintptr_t)entry;
+
+    state->ds  = SEG_SYS_DS;
+    state->es  = SEG_SYS_DS;
 
     state->eflags = 0x202;
 }
@@ -98,5 +119,5 @@ void process_set_initial_params(process_t *proc, int argc, const char *const *ar
 
 void destroy_process_arch_struct(process_t *proc)
 {
-    kfree((void *)(proc->arch.kernel_stack_top - KERNEL_STACK_SIZE));
+    kfree((void *)proc->arch.kernel_stack);
 }
