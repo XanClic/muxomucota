@@ -1,5 +1,4 @@
 #include <kassert.h>
-#include <lock.h>
 #include <memmap.h>
 #include <pmm.h>
 #include <stdbool.h>
@@ -15,7 +14,7 @@
 #define BITMAP_USERS    (0xFF & ~BITMAP_COW_FLAG)
 
 
-#define RANDOMIZE_AT_BOOT
+// #define RANDOMIZE_AT_BOOT
 
 
 static uintptr_t mem_base = (uintptr_t)-1;
@@ -23,8 +22,6 @@ static int mem_entries;
 uint8_t *bitmap;
 
 static int look_from_here;
-
-static lock_t bitmap_lock = unlocked;
 
 
 void init_pmm(void)
@@ -56,18 +53,18 @@ void init_pmm(void)
 
     mem_entries = (memsize - mem_base) >> PAGE_SHIFT;
 
-    uintptr_t kernel_start, kernel_end;
-    get_kernel_dim(&kernel_start, &kernel_end);
+    uintptr_t kernel_paddr, kernel_end;
+    get_kernel_dim(&kernel_paddr, &kernel_end);
 
-    kernel_start -= PHYS_BASE;
-    kernel_start = kernel_start >> PAGE_SHIFT;
+    kernel_paddr -= PHYS_BASE;
+    kernel_paddr = kernel_paddr >> PAGE_SHIFT;
 
     kernel_end -= PHYS_BASE;
     kernel_end = (kernel_end + PAGE_SIZE - 1) >> PAGE_SHIFT;
 
 
     // Liegt der Kernel am Beginn des benutzbaren Bereichs, so kann die Bitmap auch entsprechend verschoben werden
-    if (((kernel_start << PAGE_SHIFT) <= mem_base) && ((kernel_end << PAGE_SHIFT) > mem_base))
+    if (((kernel_paddr << PAGE_SHIFT) <= mem_base) && ((kernel_end << PAGE_SHIFT) > mem_base))
         mem_base = kernel_end << PAGE_SHIFT;
 
 
@@ -100,29 +97,29 @@ void init_pmm(void)
             else
                 top = (base + length + PAGE_SIZE - 1 - mem_base) >> PAGE_SHIFT;
 
-            int start = (base - mem_base) >> PAGE_SHIFT;
+            int paddr = (base - mem_base) >> PAGE_SHIFT;
             if (top > mem_entries)
                 top = mem_entries;
 
-            if (start > mem_entries) // Whyever
+            if (paddr > mem_entries) // Whyever
                 continue;
 
-            if (start < 0)
-                start = 0;
+            if (paddr < 0)
+                paddr = 0;
 
             if (top < 0)
                 continue;
 
-            for (int bi = start; bi < top; bi++)
+            for (int bi = paddr; bi < top; bi++)
                 bitmap[bi] = BITMAP_USERS;
         }
     }
 
 
     // Wenn der Kernel im von der Bitmap abgedeckten Bereich liegt
-    if ((kernel_end > (mem_base >> PAGE_SHIFT)) && (kernel_start < (unsigned)(mem_entries + (mem_base >> PAGE_SHIFT))))
+    if ((kernel_end > (mem_base >> PAGE_SHIFT)) && (kernel_paddr < (unsigned)(mem_entries + (mem_base >> PAGE_SHIFT))))
     {
-        int s = kernel_start - (mem_base >> PAGE_SHIFT);
+        int s = kernel_paddr - (mem_base >> PAGE_SHIFT);
         int e = kernel_end - (mem_base >> PAGE_SHIFT);
 
         if (e > mem_entries)
@@ -140,11 +137,11 @@ void init_pmm(void)
 
 
 #ifdef RANDOMIZE_AT_BOOT
-    for (uintptr_t start = mem_base; start < memsize; start += PAGE_SIZE)
+    for (uintptr_t paddr = mem_base; paddr < memsize; paddr += PAGE_SIZE)
     {
-        if (!bitmap[(start - mem_base) >> PAGE_SHIFT])
+        if (!bitmap[(paddr - mem_base) >> PAGE_SHIFT])
         {
-            void *va = kernel_map(start, PAGE_SIZE);
+            void *va = kernel_map(paddr, PAGE_SIZE);
             memset(va, 42, PAGE_SIZE); // Chosen by reading a good book
             kernel_unmap(va, PAGE_SIZE);
         }
@@ -153,46 +150,26 @@ void init_pmm(void)
 }
 
 
-uintptr_t pmm_alloc(int count)
+uintptr_t pmm_alloc(void)
 {
     bool first_occurance = true;
-
-
-    kassert(count > 0);
 
 
     for (int i = look_from_here; i < mem_entries; i++)
     {
         if (!bitmap[i])
         {
-            lock(&bitmap_lock);
-
-            int j;
-            for (j = 0; j < count; j++)
-                if (bitmap[i + j])
-                    break;
-
-            if (bitmap[i + j])
+            if (__sync_fetch_and_add(&bitmap[i], 1))
+                bitmap[i]--;
+            else
             {
-                unlock(&bitmap_lock);
+                if (first_occurance)
+                    look_from_here = i;
 
-                i += j;
-                first_occurance = false;
-
-                continue;
+                return mem_base + ((uintptr_t)i << PAGE_SHIFT);
             }
 
-
-            for (j = 0; j < count; j++)
-                bitmap[i + j] = 1;
-
-            if (first_occurance)
-                look_from_here = i + j;
-
-            unlock(&bitmap_lock);
-
-
-            return mem_base + ((uintptr_t)i << PAGE_SHIFT);
+            first_occurance = false;
         }
     }
 
@@ -204,45 +181,30 @@ uintptr_t pmm_alloc(int count)
 }
 
 
-void pmm_free(uintptr_t start, int count)
+void pmm_free(uintptr_t paddr)
 {
-    kassert(!(start & (PAGE_SIZE - 1)));
-    kassert(count > 0);
+    kassert(!(paddr & (PAGE_SIZE - 1)));
 
 
-    lock(&bitmap_lock);
+    int base = (paddr - mem_base) >> PAGE_SHIFT;
 
-    int base = (start - mem_base) >> PAGE_SHIFT;
-
-    for (int i = 0; i < count; i++)
-    {
-        kassert(bitmap[base + i] & BITMAP_USERS);
-        if (!--bitmap[base + i] && (look_from_here > base + i))
-            look_from_here = base + i;
-    }
-
-    unlock(&bitmap_lock);
+    kassert(bitmap[base] & BITMAP_USERS);
+    if (!--bitmap[base] && (look_from_here > base))
+        look_from_here = base;
 }
 
 
-void pmm_use(uintptr_t start, int count)
+void pmm_use(uintptr_t paddr)
 {
-    kassert(!(start & (PAGE_SIZE - 1)));
-    kassert(count > 0);
+    kassert(!(paddr & (PAGE_SIZE - 1)));
 
 
-    lock(&bitmap_lock);
+    int base = (paddr - mem_base) >> PAGE_SHIFT;
 
-    int base = (start - mem_base) >> PAGE_SHIFT;
+    kassert(bitmap[base] & BITMAP_USERS); // Wenn das bisher unused ist, ist das doof.
+    kassert((bitmap[base] & BITMAP_USERS) < BITMAP_USERS); // Sonst wird das Inkrementieren lustig.
 
-    for (int i = 0; i < count; i++)
-    {
-        kassert(bitmap[base + i] & BITMAP_USERS); // Wenn das bisher unused ist, ist das doof.
-        kassert((bitmap[base + i] & BITMAP_USERS) < BITMAP_USERS); // Sonst wird das Inkrementieren lustig.
-        bitmap[base + i]++;
-    }
-
-    unlock(&bitmap_lock);
+    bitmap[base]++;
 }
 
 
@@ -254,27 +216,20 @@ int pmm_user_count(uintptr_t paddr)
 }
 
 
-void pmm_mark_cow(uintptr_t start, int count, bool flag)
+void pmm_mark_cow(uintptr_t paddr, bool flag)
 {
-    kassert(!(start & (PAGE_SIZE - 1)));
-    kassert(count > 0);
+    kassert(!(paddr & (PAGE_SIZE - 1)));
 
 
-    lock(&bitmap_lock);
+    int base = (paddr - mem_base) >> PAGE_SHIFT;
 
-    int base = (start - mem_base) >> PAGE_SHIFT;
+    kassert(bitmap[base] & BITMAP_USERS);
 
-    for (int i = 0; i < count; i++)
-    {
-        kassert(bitmap[base + i] & BITMAP_USERS);
 
-        if (flag)
-            bitmap[base + i] |=  BITMAP_COW_FLAG;
-        else
-            bitmap[base + i] &= ~BITMAP_COW_FLAG;
-    }
-
-    unlock(&bitmap_lock);
+    if (flag)
+        bitmap[base] |=  BITMAP_COW_FLAG;
+    else
+        bitmap[base] &= ~BITMAP_COW_FLAG;
 }
 
 

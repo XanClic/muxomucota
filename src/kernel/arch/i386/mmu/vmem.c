@@ -260,7 +260,7 @@ void *vmmc_user_map(vmm_context_t *context, uintptr_t phys, size_t length, unsig
 
 void create_vmm_context_arch(vmm_context_t *context)
 {
-    context->arch.cr3 = pmm_alloc(1);
+    context->arch.cr3 = pmm_alloc();
     context->arch.pd = kernel_map(context->arch.cr3, 4096);
 
     memcpy(context->arch.pd, kpd, 4096);
@@ -276,7 +276,7 @@ void destroy_vmm_context(vmm_context_t *context)
     lock(&context->arch.lock);
 
     kernel_unmap(context->arch.pd, 4096);
-    pmm_free(context->arch.cr3, 1);
+    pmm_free(context->arch.cr3);
 }
 
 
@@ -298,7 +298,7 @@ void vmmc_map_user_page_unlocked(const vmm_context_t *context, void *virt, uintp
         if (context->arch.pd[pdi] & MAP_US)
             lazy_flags = (context->arch.pd[pdi] & MAP_RW) | MAP_US;
 
-        context->arch.pd[pdi] = pmm_alloc(1) | MAP_PR | (lazy_flags ? lazy_flags : MAP_RW | MAP_US) | MAP_CC | MAP_LC | MAP_4K;
+        context->arch.pd[pdi] = pmm_alloc() | MAP_PR | (lazy_flags ? lazy_flags : MAP_RW | MAP_US) | MAP_CC | MAP_LC | MAP_4K;
         pt = kernel_map(context->arch.pd[pdi] & ~0xFFF, 4096);
         memsetptr(pt, lazy_flags, 1024);
     }
@@ -355,7 +355,7 @@ void vmmc_lazy_map_area(vmm_context_t *context, void *virt, ptrdiff_t sz, unsign
             }
             else
             {
-                uintptr_t phys = pmm_alloc(1);
+                uintptr_t phys = pmm_alloc();
                 context->arch.pd[pdi] = phys | MAP_PR | MAP_RW | MAP_US | MAP_CC | MAP_LC | MAP_4K;
                 pt = kernel_map(phys, 4096);
 
@@ -412,7 +412,7 @@ bool vmmc_do_cow(vmm_context_t *context, void *address)
 
         case 1:
             pt[pti] |= MAP_RW;
-            pmm_mark_cow(pt[pti] & ~0xFFF, 1, false);
+            pmm_mark_cow(pt[pti] & ~0xFFF, false);
 
             kernel_unmap(pt, 1);
 
@@ -422,7 +422,7 @@ bool vmmc_do_cow(vmm_context_t *context, void *address)
     }
 
 
-    uintptr_t npf = pmm_alloc(1);
+    uintptr_t npf = pmm_alloc();
 
     void *np = kernel_map(npf, 4096);
     void *op = kernel_map(pt[pti] & ~0xFFF, 4096);
@@ -434,7 +434,7 @@ bool vmmc_do_cow(vmm_context_t *context, void *address)
     kernel_unmap(op, 1);
 
 
-    pmm_free(pt[pti] & ~0xFFF, 1);
+    pmm_free(pt[pti] & ~0xFFF);
 
     pt[pti] = npf | MAP_PR | MAP_RW | MAP_US | MAP_CC | MAP_LC;
 
@@ -473,7 +473,7 @@ bool vmmc_do_lazy_map(vmm_context_t *context, void *address)
     {
         kassert(!(pde & MAP_4M));
 
-        uintptr_t phys = pmm_alloc(1);
+        uintptr_t phys = pmm_alloc();
         context->arch.pd[pdi] = (pde & MAP_RW) | MAP_US | MAP_PR | MAP_CC | MAP_LC | MAP_4K | phys;
         pt = kernel_map(phys, 4096);
 
@@ -488,7 +488,7 @@ bool vmmc_do_lazy_map(vmm_context_t *context, void *address)
         return false;
     }
 
-    uintptr_t phys = pmm_alloc(1);
+    uintptr_t phys = pmm_alloc();
     pt[pti] = (pt[pti] & MAP_RW) | MAP_US | MAP_PR | MAP_CC | MAP_LC | phys;
 
     unlock(&context->arch.lock);
@@ -534,13 +534,13 @@ void vmmc_clear_user(vmm_context_t *context, bool preserve_heritage)
 
             for (unsigned pti = 0; pti < 1024; pti++)
                 if (pt[pti] & MAP_PR)
-                    pmm_free(pt[pti] & ~0xFFF, 1);
+                    pmm_free(pt[pti] & ~0xFFF);
 
             kernel_unmap(pt, 4096);
         }
 
 
-        pmm_free(context->arch.pd[pdi] & ~0xFFF, 1);
+        pmm_free(context->arch.pd[pdi] & ~0xFFF);
 
         context->arch.pd[pdi] = MAP_NP;
     }
@@ -568,7 +568,7 @@ void vmmc_clone(vmm_context_t *dest, vmm_context_t *source)
             continue;
 
 
-        uintptr_t nppt = pmm_alloc(1);
+        uintptr_t nppt = pmm_alloc();
 
         dest->arch.pd[pdi] = nppt | MAP_PR | MAP_RW | MAP_US | MAP_CC | MAP_LC | MAP_4K;
 
@@ -581,8 +581,8 @@ void vmmc_clone(vmm_context_t *dest, vmm_context_t *source)
         {
             if (spt[pti] & MAP_PR)
             {
-                pmm_use(spt[pti] & ~0xFFF, 1);
-                pmm_mark_cow(spt[pti] & ~0xFFF, 1, true);
+                pmm_use(spt[pti] & ~0xFFF);
+                pmm_mark_cow(spt[pti] & ~0xFFF, true);
 
                 spt[pti] &= ~MAP_RW;
 
@@ -635,7 +635,7 @@ void vmmc_user_unmap(vmm_context_t *context, void *virt, size_t length)
 
         if ((pti_start == 0) && (pti_end == 1024))
         {
-            pmm_free(context->arch.pd[pdi] & ~0xFFF, 1);
+            pmm_free(context->arch.pd[pdi] & ~0xFFF);
             context->arch.pd[pdi] = MAP_NP;
         }
     }
