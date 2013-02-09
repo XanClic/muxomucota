@@ -15,7 +15,7 @@ void *kmalloc(size_t size)
 
     // Externe Fragmentation vermeiden
     for (int i = 0; i < frame_count; i++)
-        pageframes[i] = pmm_alloc(1);
+        pageframes[i] = pmm_alloc();
 
 
     size_t *mem = kernel_map_nc(pageframes, sizeof(pageframes) / sizeof(pageframes[0]));
@@ -43,5 +43,5 @@ void kfree(void *ptr)
     int frame_count = (size + PAGE_SIZE) >> PAGE_SHIFT;
 
     for (int i = 0; i < frame_count; i++)
-        pmm_free(kernel_unmap((void *)((uintptr_t)ptr + ((uintptr_t)i << PAGE_SHIFT)), PAGE_SIZE), 1);
+        pmm_free(kernel_unmap((void *)((uintptr_t)ptr + ((uintptr_t)i << PAGE_SHIFT)), PAGE_SIZE));
 }

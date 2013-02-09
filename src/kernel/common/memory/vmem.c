@@ -111,10 +111,10 @@ void *vmmc_open_shm(vmm_context_t *context, uintptr_t shm_id, unsigned flags)
 
     if (sg->users)
         for (int i = 0; i < pages; i++)
-            pmm_use(sg->phys[i], 1);
+            pmm_use(sg->phys[i]);
     else
         for (int i = 0; i < pages; i++)
-            sg->phys[i] = pmm_alloc(1);
+            sg->phys[i] = pmm_alloc();
 
     sg->users++;
 
@@ -129,7 +129,7 @@ void vmmc_close_shm(vmm_context_t *context, uintptr_t shm_id, void *virt)
     int pages = (sg->size + PAGE_SIZE - 1) / PAGE_SIZE;
 
     for (int i = 0; i < pages; i++)
-        pmm_free(sg->phys[i], 1);
+        pmm_free(sg->phys[i]);
 
     vmmc_user_unmap(context, (void *)((uintptr_t)virt - sg->offset), sg->size);
 
@@ -182,7 +182,7 @@ void *context_sbrk(vmm_context_t *context, intptr_t inc)
         {
             uintptr_t dummy;
             if (!vmmc_address_mapped(context, (void *)page, &dummy))
-                vmmc_map_user_page(context, (void *)page, pmm_alloc(1), VMM_UR | VMM_UW);
+                vmmc_map_user_page(context, (void *)page, pmm_alloc(), VMM_UR | VMM_UW);
         }
     }
     else
@@ -195,7 +195,7 @@ void *context_sbrk(vmm_context_t *context, intptr_t inc)
             uintptr_t phys;
             if (vmmc_address_mapped(context, (void *)page, &phys))
             {
-                pmm_free(phys, 1);
+                pmm_free(phys);
                 vmmc_user_unmap(context, (void *)page, PAGE_SIZE);
             }
         }

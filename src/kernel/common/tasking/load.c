@@ -101,7 +101,7 @@ bool load_image_to_process(process_t *proc, const void *address, void **heap_sta
 
         for (uintptr_t base = phdr[i].p_vaddr & ~(PAGE_SIZE - 1); rem_msz > 0; base += PAGE_SIZE)
         {
-            uintptr_t ppf = pmm_alloc(1); // physical page frame
+            uintptr_t ppf = pmm_alloc(); // physical page frame
 
             size_t block_length = PAGE_SIZE - block_ofs;
 
