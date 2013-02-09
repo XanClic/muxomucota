@@ -565,7 +565,10 @@ void vmmc_clone(vmm_context_t *dest, vmm_context_t *source)
     for (unsigned pdi = 0; pdi < (PHYS_BASE >> 22); pdi++)
     {
         if (!(source->arch.pd[pdi] & MAP_PR))
+        {
+            dest->arch.pd[pdi] = source->arch.pd[pdi];
             continue;
+        }
 
 
         uintptr_t nppt = pmm_alloc();
@@ -579,7 +582,9 @@ void vmmc_clone(vmm_context_t *dest, vmm_context_t *source)
 
         for (unsigned pti = 0; pti < 1024; pti++)
         {
-            if (spt[pti] & MAP_PR)
+            if (!(spt[pti] & MAP_PR))
+                npt[pti] = spt[pti];
+            else
             {
                 pmm_use(spt[pti] & ~0xFFF);
                 pmm_mark_cow(spt[pti] & ~0xFFF, true);
