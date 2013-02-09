@@ -23,6 +23,10 @@ static int module_count;
 extern const void __kernel_elf_end;
 
 
+void *kernel_elf_shdr;
+int kernel_elf_shdr_count;
+
+
 bool get_boot_info(void *info)
 {
     // Ist das auch GRUB?
@@ -52,6 +56,10 @@ bool get_boot_info(void *info)
         modules = NULL;
         module_count = 0;
     }
+
+
+    kernel_elf_shdr = (void *)((uintptr_t)mboot->elfshdr_addr | PHYS_BASE);
+    kernel_elf_shdr_count = mboot->elfshdr_num;
 
 
     return true;
