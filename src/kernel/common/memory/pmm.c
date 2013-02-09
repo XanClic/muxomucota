@@ -216,6 +216,12 @@ int pmm_user_count(uintptr_t paddr)
 }
 
 
+bool pmm_alloced(uintptr_t paddr)
+{
+    return pmm_user_count(paddr) && (pmm_user_count(paddr) < BITMAP_USERS);
+}
+
+
 void pmm_mark_cow(uintptr_t paddr, bool flag)
 {
     kassert(!(paddr & (PAGE_SIZE - 1)));

@@ -1,3 +1,4 @@
+#include <arch-constants.h>
 #include <kassert.h>
 #include <kmalloc.h>
 #include <pmm.h>
@@ -94,6 +95,10 @@ uintptr_t vmmc_make_shm(vmm_context_t *context, int count, void **vaddr_list, in
             uintptr_t vaddr = ((uintptr_t)vaddr_list[i] & ~(PAGE_SIZE - 1)) + (uintptr_t)j * PAGE_SIZE;
 
             kassert_exec(vmmc_address_mapped(context, (void *)vaddr, &dst) & (VMM_UR | VMM_UW));
+
+            // Sanity checks
+            kassert(vaddr < PHYS_BASE);
+            kassert(pmm_alloced(dst));
 
             sg->phys[k] = dst;
         }
