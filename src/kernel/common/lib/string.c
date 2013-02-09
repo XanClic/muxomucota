@@ -195,3 +195,18 @@ int strcmp(const char *s1, const char *s2)
 
     return ret;
 }
+
+
+char *strcat(char *restrict d, const char *restrict s)
+{
+    char *vd = d;
+
+    while (*(vd++));
+    vd--;
+
+    while (*s)
+        *(vd++) = *(s++);
+    *vd = 0;
+
+    return d;
+}
