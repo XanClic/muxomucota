@@ -16,7 +16,13 @@ void enter_idle_process(void)
     for (;;)
     {
         if (dead == NULL)
+        {
+#ifdef COOPERATIVE
+            yield();
+#else
             cpu_halt();
+#endif
+        }
 
         sweep_dead_processes();
     }
