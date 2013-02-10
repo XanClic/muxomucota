@@ -5,6 +5,23 @@ require 'find'
 require 'trollop'
 
 
+class Array
+    def drop!(n)
+        self.replace(self.drop(n))
+    end
+end
+
+
+def find(*paths, &block)
+    remaining = paths.to_a.select { |d| File.directory?(d) }.flatten
+    return nil if remaining.empty?
+
+    remaining = remaining[0] if remaining.length == 1
+
+    Find.find(remaining, &block)
+end
+
+
 arch = `uname -m`.chomp
 
 if arch == 'x86'
@@ -93,6 +110,12 @@ target = ARGV[0] ? ARGV[0] : 'all'
 Trollop::die('Unsupported target') unless ['clean', 'all'].include?(target)
 
 
+
+exit 1 unless system('mkdir -p build/root') if target == 'all'
+
+image_root = "#{Dir.pwd}/build/root"
+
+
 exts = ['.c', '.asm', '.S', '.incbin']
 
 
@@ -114,7 +137,11 @@ threads = Array.new
     Dir.chdir("src/#{dir}")
 
     if target == 'clean'
-        system("rm -f obj/* #{{ 'kernel' => 'kernel*', 'lib' => 'crt/*.o libc.a libm.a', 'progs' => 'progs/*' }[dir]}")
+        if dir == 'lib'
+            system('rm -f obj/* crt/*.o libc.a libm.a')
+        else
+            system('rm -f obj/*')
+        end
         Dir.chdir(pushed)
         next
     end
@@ -131,8 +158,8 @@ threads = Array.new
 
     subdirs = Array.new
 
-    Find.find('.') do |path|
-        subdirs << File.dirname(path)[2..-1] if exts.include?(File.extname(path))
+    Find.find('common', "platform/#{platform}", "arch/#{arch}") do |path|
+        subdirs << File.dirname(path) if exts.include?(File.extname(path))
     end
 
 
@@ -180,7 +207,7 @@ threads = Array.new
 
 
         if dir == 'progs'
-            ret = [['LD', ">#{sd}"], "#{pars[:ld][:cmd]} #{pars[:ld][:flags]} #{objdir}/#{objprefix}__*.o ../lib/crt/*.o -L../lib -o '#{progdir}/#{File.basename(sd)}' -\\( -lc #{pars[:ld][:libs]} -\\)"]
+            ret = [['LD', ">#{sd}"], "#{pars[:ld][:cmd]} #{pars[:ld][:flags]} #{objdir}/#{objprefix}__*.o ../lib/crt/*.o -L../lib -o '#{image_root}/#{File.basename(sd)}' -\\( -lc #{pars[:ld][:libs]} -\\)"]
 
             ret += " && #{pars[:strip][:cmd]} #{pars[:strip][:flags]} #{progdir}/#{File.basename(sd)}" if pars[:strip]
 
@@ -228,7 +255,7 @@ threads = Array.new
     when 'kernel'
         puts('<<< . >>>')
         puts('%-8s%s' % ['LD', '>kernel'])
-        exit 1 unless system("#{pars[:ld][:cmd]} #{pars[:ld][:flags]} obj/*.o -o kernel #{pars[:ld][:libs]}")
+        exit 1 unless system("#{pars[:ld][:cmd]} #{pars[:ld][:flags]} obj/*.o -o '#{image_root}/kernel' #{pars[:ld][:libs]}")
     when 'lib'
         puts('<<< . >>>')
         [ 'c', 'm' ].each do |lib|
@@ -240,6 +267,55 @@ threads = Array.new
 
     Dir.chdir(pushed)
 end
+
+
+
+if target == 'clean'
+    exit 1 unless system("rm -rf '#{image_root}'")
+else
+    puts("——— blobs ———")
+
+    pushed = Dir.pwd
+    Dir.chdir("src/blobs")
+
+    subdirs = Array.new
+
+    find('common', "platform/#{platform}", "arch/#{arch}") do |path|
+        subdirs << File.dirname(path) if File.file?(path)
+    end
+
+
+    subdirs.uniq.each do |sd|
+        puts("<<< #{sd} >>>")
+
+        pathparts = sd.split('/')
+
+        if pathparts[0] == 'common'
+            pathparts.drop!(1)
+        else
+            pathparts.drop!(2)
+        end
+
+        if pathparts.empty?
+            image_dir = '.'
+        else
+            image_dir = pathparts.join('/')
+
+            puts('%-8s%s' % ['MKDIR', image_dir])
+            exit 1 unless system("mkdir -p '#{image_root}/#{image_dir}'")
+        end
+
+        Dir.new(sd).each do |file|
+            next unless File.file?("#{sd}/#{file}")
+
+            puts('%-8s%s' % ['CP', file])
+            exit 1 unless system("cp '#{sd}/#{file}' '#{image_root}/#{image_dir}/#{file}'")
+        end
+    end
+
+    Dir.chdir(pushed)
+end
+
 
 
 exit 1 unless system("mkdir -p build/images")
