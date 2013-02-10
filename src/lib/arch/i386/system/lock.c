@@ -13,3 +13,9 @@ void unlock(volatile lock_t *v)
 {
     __sync_lock_release(v);
 }
+
+
+bool trylock(volatile lock_t *v)
+{
+    return (__sync_lock_test_and_set(v, locked) != locked);
+}
