@@ -9,17 +9,24 @@
 lock_t _pipe_allocation_lock;
 
 
-// TODO: service:/path implementieren (statt (service)path)
 static bool extract_path(const char *fullpath, char *service, char *relpath)
 {
-    if (*(fullpath++) != '(')
+    if (!*fullpath)
         return false;
 
-    while (*fullpath && (*fullpath != ')'))
+    bool expect_brackets = (*fullpath == '(');
+
+    if (expect_brackets)
+        fullpath++;
+
+    while (*fullpath && (!expect_brackets || (*fullpath != ')')) && (expect_brackets || (*fullpath != ':')))
         *(service++) = *(fullpath++);
     *service = 0;
 
     if (!*(fullpath++))
+        return false;
+
+    if (!expect_brackets && (*(fullpath++) != '/'))
         return false;
 
     if (*fullpath != '/')

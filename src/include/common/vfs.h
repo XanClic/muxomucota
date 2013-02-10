@@ -21,6 +21,7 @@
 enum
 {
 #include <vfs/interfaces/file.h>
+#include <vfs/interfaces/fs.h>
 #include <vfs/interfaces/tty.h>
 };
 
@@ -33,6 +34,7 @@ enum
     F_FLUSH,
 
 #include <vfs/flags/file.h>
+#include <vfs/flags/fs.h>
 #include <vfs/flags/tty.h>
 };
 
