@@ -79,25 +79,25 @@ void init_interrupts(void)
 
 
     // Exceptions
-    IDT_SYS_INTR_ENTRY(0x00);
-    IDT_SYS_INTR_ENTRY(0x01);
-    IDT_SYS_INTR_ENTRY(0x02);
-    IDT_SYS_INTR_ENTRY(0x03);
-    IDT_SYS_INTR_ENTRY(0x04);
-    IDT_SYS_INTR_ENTRY(0x05);
-    IDT_SYS_INTR_ENTRY(0x06);
-    IDT_SYS_INTR_ENTRY(0x07);
-    IDT_SYS_INTR_ENTRY(0x08);
-    IDT_SYS_INTR_ENTRY(0x09);
-    IDT_SYS_INTR_ENTRY(0x0A);
-    IDT_SYS_INTR_ENTRY(0x0B);
-    IDT_SYS_INTR_ENTRY(0x0C);
-    IDT_SYS_INTR_ENTRY(0x0D);
-    IDT_SYS_INTR_ENTRY(0x0E);
-    IDT_SYS_INTR_ENTRY(0x10);
-    IDT_SYS_INTR_ENTRY(0x11);
-    IDT_SYS_INTR_ENTRY(0x12);
-    IDT_SYS_INTR_ENTRY(0x13);
+    IDT_SYS_TRAP_ENTRY(0x00);
+    IDT_SYS_TRAP_ENTRY(0x01);
+    IDT_SYS_TRAP_ENTRY(0x02);
+    IDT_SYS_TRAP_ENTRY(0x03);
+    IDT_SYS_TRAP_ENTRY(0x04);
+    IDT_SYS_TRAP_ENTRY(0x05);
+    IDT_SYS_TRAP_ENTRY(0x06);
+    IDT_SYS_TRAP_ENTRY(0x07);
+    IDT_SYS_TRAP_ENTRY(0x08);
+    IDT_SYS_TRAP_ENTRY(0x09);
+    IDT_SYS_TRAP_ENTRY(0x0A);
+    IDT_SYS_TRAP_ENTRY(0x0B);
+    IDT_SYS_TRAP_ENTRY(0x0C);
+    IDT_SYS_TRAP_ENTRY(0x0D);
+    IDT_SYS_TRAP_ENTRY(0x0E);
+    IDT_SYS_TRAP_ENTRY(0x10);
+    IDT_SYS_TRAP_ENTRY(0x11);
+    IDT_SYS_TRAP_ENTRY(0x12);
+    IDT_SYS_TRAP_ENTRY(0x13);
 
     // IRQs
     IDT_SYS_TRAP_ENTRY(0x20);
@@ -178,6 +178,8 @@ struct cpu_state *i386_common_isr(struct cpu_state *state)
     {
         if ((state->int_vector == 0x0E) && handle_pagefault(state))
             return state;
+
+        __asm__ __volatile__ ("cli");
 
         sod_print("Unhandled exception\n\n");
 
