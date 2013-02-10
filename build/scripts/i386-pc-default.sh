@@ -15,17 +15,6 @@ EOF
 echo 'DD      /dev/zero -> floppy.img'
 dd if=/dev/zero of=images/floppy.img bs=512 count=2880 &> /dev/null
 
-echo 'CP      kernel -> root/'
-cp ../src/kernel/kernel root
-echo 'CP      progs -> root/'
-cp ../src/progs/progs/* root
-
-echo 'CREATE  root/init.conf'
-cat > root/init.conf << EOF
-daemon (mboot)/root-mapper
-(mboot)/wait4server root
-EOF
-
 echo "STRIP'n'ZIP"
 for f in $(ls root); do
     if ! [ -f $f ]; then
@@ -48,7 +37,7 @@ mcopy -s root/* x:/ > /dev/null
 echo 'GRUB    floppy.img'
 echo -e 'device (fd0) images/floppy.img\nroot (fd0)\nsetup (fd0)\nquit' | grub --batch &> /dev/null
 
-rm -rf $MTOOLSRC root
+rm -rf $MTOOLSRC
 
 export PATH=$PATH_WAS
 
