@@ -1,3 +1,4 @@
+#include <ipc.h>
 #include <process.h>
 #include <x86-segments.h>
 

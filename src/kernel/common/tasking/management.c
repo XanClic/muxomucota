@@ -60,9 +60,9 @@ process_t *create_empty_process(const char *name)
 }
 
 
-void make_process_entry(process_t *proc, void (*address)(void), void *stack)
+void make_process_entry(struct cpu_state *state, void (*address)(void), void *stack)
 {
-    initialize_cpu_state(proc->cpu_state, address, stack, 0);
+    initialize_cpu_state(state, address, stack, 0);
 }
 
 
@@ -74,7 +74,7 @@ void process_create_basic_mappings(process_t *proc)
 }
 
 
-void process_set_args(process_t *proc, int argc, const char *const *argv)
+void process_set_args(process_t *proc, struct cpu_state *state, int argc, const char *const *argv)
 {
     size_t sz = 0;
 
@@ -88,9 +88,9 @@ void process_set_args(process_t *proc, int argc, const char *const *argv)
 
 
     // FIXME: Dies nimmt einen Descending Stack an.
-    void *initial = process_stack_alloc(proc->cpu_state, 0);
+    void *initial = process_stack_alloc(state, 0);
 
-    void *stack = process_stack_alloc(proc->cpu_state, sz);
+    void *stack = process_stack_alloc(state, sz);
 
 
     uintptr_t end = ((uintptr_t)initial + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
@@ -160,7 +160,7 @@ void process_set_args(process_t *proc, int argc, const char *const *argv)
     kernel_unmap(argv_map, PAGE_SIZE);
 
 
-    process_set_initial_params(proc, argc, stack);
+    process_set_initial_params(proc, state, argc, stack);
 }
 
 
@@ -667,7 +667,7 @@ pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer
 }
 
 
-pid_t fork(void)
+pid_t fork(struct cpu_state *current_state)
 {
     process_t *child = create_empty_process(current_process->name);
 
@@ -680,7 +680,7 @@ pid_t fork(void)
     vmmc_clone(child->vmmc, current_process->vmmc);
 
 
-    initialize_forked_cpu_state(child->cpu_state, current_process->cpu_state);
+    initialize_forked_cpu_state(child->cpu_state, current_state);
 
 
     register_process(child);
@@ -693,7 +693,7 @@ pid_t fork(void)
 }
 
 
-int exec(const void *file, size_t file_length, char *const *argv)
+int exec(struct cpu_state *state, const void *file, size_t file_length, char *const *argv)
 {
     if (!check_process_file_image(file))
     {
@@ -729,9 +729,9 @@ int exec(const void *file, size_t file_length, char *const *argv)
 
     vmmc_set_heap_top(current_process->vmmc, heap_start);
 
-    make_process_entry(current_process, entry, (void *)USER_STACK_TOP);
+    make_process_entry(state, entry, (void *)USER_STACK_TOP);
 
-    process_set_args(current_process, argc, (const char **)kargv);
+    process_set_args(current_process, state, argc, (const char **)kargv);
 
 
     kfree(mem);
