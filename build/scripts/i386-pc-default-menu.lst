@@ -10,6 +10,8 @@ title Myxomycota
   module /init.conf
   module /wait4server
   module /root-mapper
+  module /tar
+  module /mount
 
 title Erste Festplatte
   rootnoverify (hd0)
