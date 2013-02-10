@@ -10,6 +10,11 @@
 #include <sys/types.h>
 
 
+#ifdef KERNEL
+// #define COOPERATIVE
+#endif
+
+
 struct cpu_state;
 
 
