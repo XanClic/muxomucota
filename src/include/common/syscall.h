@@ -5,6 +5,7 @@
 
 #ifndef KERNEL
 #include <arch-syscall.h>
+#include <cpu-state.h>
 #endif
 
 
@@ -34,6 +35,6 @@ enum syscall_number
 };
 
 
-uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, uintptr_t p3, uintptr_t p4);
+uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, uintptr_t p3, uintptr_t p4, struct cpu_state *state);
 
 #endif

@@ -1,4 +1,5 @@
 #include <arch-constants.h>
+#include <cpu-state.h>
 #include <errno.h>
 #include <ipc.h>
 #include <process.h>
@@ -14,7 +15,7 @@
 // besser.
 
 
-uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, uintptr_t p3, uintptr_t p4)
+uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, uintptr_t p3, uintptr_t p4, struct cpu_state *state)
 {
     switch (syscall_nr)
     {
@@ -190,10 +191,10 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
             return 0;
 
         case SYS_FORK:
-            return fork();
+            return fork(state);
 
         case SYS_EXEC:
-            return exec((const void *)p0, p1, (char *const *)p2);
+            return exec(state, (const void *)p0, p1, (char *const *)p2);
 
         case SYS_WAIT:
             return raw_waitpid(p0, (uintmax_t *)p1, p2);
