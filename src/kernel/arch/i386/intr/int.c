@@ -281,7 +281,7 @@ struct cpu_state *i386_common_isr(struct cpu_state *state)
         state = common_irq_handler(irq, state);
 
 
-        if (irq & 8)
+        if (state->int_vector & 8)
             out8(0xA0, 0x20);
         out8(0x20, 0x20);
     }

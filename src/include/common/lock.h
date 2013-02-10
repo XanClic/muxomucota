@@ -8,5 +8,6 @@
 
 void lock(volatile lock_t *v);
 void unlock(volatile lock_t *v);
+bool trylock(volatile lock_t *v);
 
 #endif
