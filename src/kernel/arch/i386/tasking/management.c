@@ -86,12 +86,12 @@ void *process_stack_alloc(struct cpu_state *state, size_t size)
 }
 
 
-void process_set_initial_params(process_t *proc, int argc, const char *const *argv)
+void process_set_initial_params(process_t *proc, struct cpu_state *state, int argc, const char *const *argv)
 {
     uintptr_t initial = proc->cpu_state->esp;
 
     // GCC möchte den Stack an 16 ausgerichtet haben.
-    proc->cpu_state->esp = (proc->cpu_state->esp - sizeof(argc) - sizeof(argv)) & ~0xF;
+    state->esp = (state->esp - sizeof(argc) - sizeof(argv)) & ~0xF;
 
 
     uintptr_t end = (initial + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
@@ -101,7 +101,7 @@ void process_set_initial_params(process_t *proc, int argc, const char *const *ar
 
 
     uintptr_t paddr;
-    kassert_exec(vmmc_address_mapped(proc->vmmc, (void *)proc->cpu_state->esp, &paddr));
+    kassert_exec(vmmc_address_mapped(proc->vmmc, (void *)state->esp, &paddr));
 
     // Das muss sich innerhalb einer Page befinden (insg. acht Byte, an 16
     // ausgerichtet).
@@ -113,7 +113,7 @@ void process_set_initial_params(process_t *proc, int argc, const char *const *ar
     kernel_unmap(mapped_stack, sizeof(argc) + sizeof(argv));
 
     // Ein Funktionsaufruf, ein simulierter. Was denn sonst?
-    proc->cpu_state->esp -= sizeof(void (*)(void));
+    state->esp -= sizeof(void (*)(void));
 }
 
 

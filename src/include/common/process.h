@@ -2,6 +2,7 @@
 #define _PROCESS_H
 
 #include <arch-process.h>
+#include <cpu-state.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -82,11 +83,11 @@ void make_idle_process(void);
 void enter_idle_process(void);
 
 
-void make_process_entry(process_t *proc, void (*address)(void), void *stack);
+void make_process_entry(struct cpu_state *state, void (*address)(void), void *stack);
 
 void process_create_basic_mappings(process_t *proc);
 
-void process_set_args(process_t *proc, int argc, const char *const *argv);
+void process_set_args(process_t *proc, struct cpu_state *state, int argc, const char *const *argv);
 
 void alloc_cpu_state(process_t *proc);
 void alloc_cpu_state_on_stack(process_t *proc, void *stack, size_t stacksz);
@@ -94,7 +95,7 @@ void initialize_cpu_state(struct cpu_state *state, void (*entry)(void), void *st
 void initialize_kernel_thread_cpu_state(struct cpu_state *state, void (*entry)(void));
 void initialize_forked_cpu_state(struct cpu_state *dest, const struct cpu_state *src);
 
-void process_set_initial_params(process_t *proc, int argc, const char *const *argv);
+void process_set_initial_params(process_t *proc, struct cpu_state *state, int argc, const char *const *argv);
 
 void *process_stack_alloc(struct cpu_state *state, size_t size);
 
@@ -110,10 +111,7 @@ void set_process_popup_entry(process_t *proc, void (*entry)(void));
 process_t *find_process(pid_t pid);
 
 
-void yield(void);
-
-
-int exec(const void *file, size_t file_length, char *const *argv);
+int exec(struct cpu_state *state, const void *file, size_t file_length, char *const *argv);
 
 
 pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer, size_t length, bool zombify);

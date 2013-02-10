@@ -295,7 +295,5 @@ uintptr_t i386_syscall(struct cpu_state *state);
 
 uintptr_t i386_syscall(struct cpu_state *state)
 {
-    current_process->cpu_state = state;
-
-    return syscall_krn(state->eax, state->ebx, state->ecx, state->edx, state->esi, state->edi);
+    return syscall_krn(state->eax, state->ebx, state->ecx, state->edx, state->esi, state->edi, state);
 }
