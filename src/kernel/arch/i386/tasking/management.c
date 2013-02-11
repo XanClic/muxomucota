@@ -86,12 +86,12 @@ void *process_stack_alloc(struct cpu_state *state, size_t size)
 }
 
 
-void process_set_initial_params(process_t *proc, struct cpu_state *state, int argc, const char *const *argv)
+void process_set_initial_params(process_t *proc, struct cpu_state *state, int argc, const char *const *argv, const char *const *envp)
 {
     uintptr_t initial = proc->cpu_state->esp;
 
     // GCC möchte den Stack an 16 ausgerichtet haben.
-    state->esp = (state->esp - sizeof(argc) - sizeof(argv)) & ~0xF;
+    state->esp = (state->esp - sizeof(argc) - sizeof(argv) - sizeof(envp)) & ~0xF;
 
 
     uintptr_t end = (initial + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
@@ -105,12 +105,13 @@ void process_set_initial_params(process_t *proc, struct cpu_state *state, int ar
 
     // Das muss sich innerhalb einer Page befinden (insg. acht Byte, an 16
     // ausgerichtet).
-    void *mapped_stack = kernel_map(paddr, sizeof(argc) + sizeof(argv));
+    void *mapped_stack = kernel_map(paddr, sizeof(argc) + sizeof(argv) + sizeof(envp));
 
     *(int *)mapped_stack = argc;
-    *(const char *const **)((int *)mapped_stack + 1) = argv;
+    ((const char *const **)((int *)mapped_stack + 1))[0] = argv;
+    ((const char *const **)((int *)mapped_stack + 1))[1] = envp;
 
-    kernel_unmap(mapped_stack, sizeof(argc) + sizeof(argv));
+    kernel_unmap(mapped_stack, sizeof(argc) + sizeof(argv) + sizeof(envp));
 
     // Ein Funktionsaufruf, ein simulierter. Was denn sonst?
     state->esp -= sizeof(void (*)(void));

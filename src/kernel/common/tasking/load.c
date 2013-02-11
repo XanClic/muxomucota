@@ -55,7 +55,7 @@ pid_t create_process_from_image(int argc, const char *const *argv, const void *a
 
     make_process_entry(proc->cpu_state, entry, (void *)USER_STACK_TOP);
 
-    process_set_args(proc, proc->cpu_state, argc, argv);
+    process_set_args(proc, proc->cpu_state, argc, argv, 0, NULL);
 
     run_process(proc);
 

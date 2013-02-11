@@ -57,7 +57,7 @@ puts("STRIP'n'ZIP")
 relevant_files.map { |f| "root/#{f}" }.each do |f|
     next unless File.file?(f)
 
-    system("strip -s '#{f}' 2> /dev/null")
+    #system("strip -s '#{f}' 2> /dev/null")
     system("gzip -9 '#{f}'")
 
     File.rename("#{f}.gz", f)

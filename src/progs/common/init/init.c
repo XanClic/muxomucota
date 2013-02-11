@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <ipc.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -52,6 +53,13 @@ int main(int argc, char *argv[])
 
     printf("Primordial servers running.\n");
     printf("stdin/stdout/stderr via %s.\n\n", tty);
+
+
+    setenv("PATH", "/", 1);
+
+    chdir("/");
+    setenv("PWD", "/", 1);
+    setenv("OLDPWD", "/", 1);
 
 
     if (script == NULL)
