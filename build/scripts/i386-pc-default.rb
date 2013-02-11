@@ -40,7 +40,7 @@ File.open('scripts/i386-pc-default-menu.lst') do |f|
 end
 
 
-initrd_files = (Dir.entries('root') - relevant_files).select { |f| File.file?("root/#{f}") }
+initrd_files = Dir.entries('root').reject { |f| ['initrd.tar', 'boot', '.', '..'].include?(f) }
 
 
 # Damit die relativen Pfadangaben im tar korrekt sind
