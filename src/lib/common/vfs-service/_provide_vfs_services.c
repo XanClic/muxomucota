@@ -15,6 +15,8 @@ extern uintmax_t _vfs_pipe_set_flag(void);
 
 extern uintmax_t _vfs_pipe_implements(void);
 
+extern uintmax_t _vfs_is_symlink(uintptr_t shmid);
+
 
 void _provide_vfs_services(void);
 
@@ -31,4 +33,6 @@ void _provide_vfs_services(void)
     popup_message_handler(PIPE_SET_FLAG,   _vfs_pipe_set_flag);
 
     popup_message_handler(PIPE_IMPLEMENTS, _vfs_pipe_implements);
+
+    popup_shm_handler    (IS_SYMLINK,      _vfs_is_symlink);
 }
