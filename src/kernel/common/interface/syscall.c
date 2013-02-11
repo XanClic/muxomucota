@@ -194,7 +194,12 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
             return fork(state);
 
         case SYS_EXEC:
-            return exec(state, (const void *)p0, p1, (char *const *)p2);
+            if (IS_KERNEL(p0) || IS_KERNEL(p2) || IS_KERNEL(p3))
+            {
+                *current_process->errno = EFAULT;
+                return (uintptr_t)-EFAULT;
+            }
+            return exec(state, (const void *)p0, p1, (char *const *)p2, (char *const *)p3);
 
         case SYS_WAIT:
             return raw_waitpid(p0, (uintmax_t *)p1, p2);

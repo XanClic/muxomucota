@@ -20,4 +20,6 @@ pid_t fork(void);
 
 int execvp(const char *file, char *const argv[]);
 
+int chdir(const char *path);
+
 #endif

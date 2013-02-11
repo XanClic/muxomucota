@@ -3,8 +3,13 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdnoreturn.h>
+#include <string.h>
+#include <unistd.h>
+
 
 int errno;
+char **environ;
+char *_cwd;
 
 extern int main(int argc, char *argv[], char *envp[]);
 
@@ -12,9 +17,10 @@ extern void _popup_ll_trampoline(int func_index, uintptr_t shmid);
 
 extern void _vfs_init(void);
 
-noreturn void _start(int argc, char *argv[]);
+noreturn void _start(int argc, char *argv[], char *envp[]);
 
-noreturn void _start(int argc, char *argv[])
+
+noreturn void _start(int argc, char *argv[], char *envp[])
 {
     set_errno(&errno);
 
@@ -22,7 +28,20 @@ noreturn void _start(int argc, char *argv[])
 
     _vfs_init();
 
-    exit(main(argc, argv, NULL));
+
+    int envc;
+    for (envc = 0; envp[envc] != NULL; envc++);
+
+    environ = malloc(sizeof(char *) * (envc + 1));
+    memcpy(environ, envp, sizeof(char *) * (envc + 1));
+
+
+    const char *cwd = getenv("_SYS_PWD");
+    chdir((cwd == NULL) ? "/bwbw" : cwd);
+
+
+    exit(main(argc, argv, envp));
+
 
     for (;;);
 }

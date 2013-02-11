@@ -9,6 +9,8 @@
 
 lock_t _pipe_allocation_lock;
 
+extern char *_cwd;
+
 
 static bool extract_path(const char *fullpath, char *service, char *relpath)
 {
@@ -23,6 +25,23 @@ static bool extract_path(const char *fullpath, char *service, char *relpath)
 
         if (expect_brackets)
             fullpath++;
+
+        if (!expect_brackets)
+        {
+            const char *colon = strchr(fullpath, ':');
+            const char *slash = strchr(fullpath, '/');
+
+            if ((colon == NULL) || (slash == NULL) || (colon + 1 != slash))
+            {
+                char realpath[strlen(_cwd) + strlen(fullpath) + 2];
+
+                strcpy(realpath, _cwd);
+                strcat(realpath, "/");
+                strcat(realpath, fullpath);
+
+                return extract_path(realpath, service, relpath);
+            }
+        }
 
         while (*fullpath && (!expect_brackets || (*fullpath != ')')) && (expect_brackets || (*fullpath != ':')))
             *(service++) = *(fullpath++);
@@ -39,7 +58,14 @@ static bool extract_path(const char *fullpath, char *service, char *relpath)
     }
 
     while (*fullpath)
-        *(relpath++) = *(fullpath++);
+    {
+        // TODO: Auch . und .. behandeln
+        if ((fullpath[0] == '/') && (fullpath[1] == '/'))
+            fullpath++;
+        else
+            *(relpath++) = *(fullpath++);
+    }
+
     *relpath = 0;
 
     return true;

@@ -74,14 +74,17 @@ void process_create_basic_mappings(process_t *proc)
 }
 
 
-void process_set_args(process_t *proc, struct cpu_state *state, int argc, const char *const *argv)
+void process_set_args(process_t *proc, struct cpu_state *state, int argc, const char *const *argv, int envc, const char *const *envp)
 {
     size_t sz = 0;
 
     for (int i = 0; i < argc; i++)
         sz += strlen(argv[i]) + 1;
 
-    sz += sizeof(char *) * (argc + 1); // Platz für NULL am Ende
+    for (int i = 0; i < envc; i++)
+        sz += strlen(envp[i]) + 1;
+
+    sz += sizeof(char *) * (argc + 1) + sizeof(char *) * (envc + 1); // Jeweils Platz für NULL am Ende
 
     // Schön alignen
     sz = (sz + sizeof(char *) - 1) & ~(sizeof(char *) - 1);
@@ -99,7 +102,7 @@ void process_set_args(process_t *proc, struct cpu_state *state, int argc, const 
         vmmc_do_lazy_map(proc->vmmc, (void *)stack_page);
 
 
-    char *d = (char *)&((char **)stack)[argc + 1];
+    char *d = (char *)&((char **)stack)[argc + envc + 2];
 
 
     uintptr_t paddr;
@@ -108,7 +111,7 @@ void process_set_args(process_t *proc, struct cpu_state *state, int argc, const 
 
     void *argv_map = kernel_map(paddr & ~(PAGE_SIZE - 1), PAGE_SIZE);
 
-    for (int i = 0; i <= argc; i++)
+    for (int i = 0; i < argc + envc + 2; i++)
     {
         uintptr_t argv_i = (uintptr_t)&((char **)stack)[i];
 
@@ -124,13 +127,19 @@ void process_set_args(process_t *proc, struct cpu_state *state, int argc, const 
             argv_map = kernel_map(paddr, PAGE_SIZE);
         }
 
-        ((char **)argv_map)[(argv_i % PAGE_SIZE) / sizeof(char **)] = (i < argc) ? d : NULL;
+        if ((i != argc) && (i != argc + 1 + envc))
+            ((char **)argv_map)[(argv_i % PAGE_SIZE) / sizeof(char **)] = d;
+        else
+        {
+            ((char **)argv_map)[(argv_i % PAGE_SIZE) / sizeof(char **)] = NULL;
+            continue;
+        }
 
-        if (i == argc)
-            break;
+
+        const char *src = (i < argc) ? argv[i] : envp[i - argc - 1];
 
 
-        size_t len = strlen(argv[i]) + 1;
+        size_t len = strlen(src) + 1;
         size_t copied = 0;
 
         uintptr_t start_p = (uintptr_t)d & ~(PAGE_SIZE - 1);
@@ -145,7 +154,7 @@ void process_set_args(process_t *proc, struct cpu_state *state, int argc, const 
 
             char *f_d = kernel_map(paddr, PAGE_SIZE);
 
-            memcpy(f_d + out_off, argv[i] + copied, (page == end_p - 1) ? (len - copied) : (size_t)(PAGE_SIZE - out_off));
+            memcpy(f_d + out_off, src + copied, (page == end_p - 1) ? (len - copied) : (size_t)(PAGE_SIZE - out_off));
 
             copied += PAGE_SIZE - out_off;
             out_off = 0;
@@ -160,7 +169,7 @@ void process_set_args(process_t *proc, struct cpu_state *state, int argc, const 
     kernel_unmap(argv_map, PAGE_SIZE);
 
 
-    process_set_initial_params(proc, state, argc, stack);
+    process_set_initial_params(proc, state, argc, stack, &((const char *const *)stack)[argc + 1]);
 }
 
 
@@ -693,7 +702,7 @@ pid_t fork(struct cpu_state *current_state)
 }
 
 
-int exec(struct cpu_state *state, const void *file, size_t file_length, char *const *argv)
+int exec(struct cpu_state *state, const void *file, size_t file_length, char *const *argv, char *const *envp)
 {
     if (!check_process_file_image(file))
     {
@@ -705,13 +714,17 @@ int exec(struct cpu_state *state, const void *file, size_t file_length, char *co
     void *mem = kmalloc(file_length);
     memcpy(mem, file, file_length);
 
-    int argc;
+    int argc, envc;
     for (argc = 0; argv[argc] != NULL; argc++);
+    for (envc = 0; envp[envc] != NULL; envc++);
 
-    char *kargv[argc];
+    char *kargv[argc], *kenvp[envc];
 
     for (int i = 0; argv[i] != NULL; i++)
         kargv[i] = strdup(argv[i]);
+
+    for (int i = 0; envp[i] != NULL; i++)
+        kenvp[i] = strdup(envp[i]);
 
 
     strncpy(current_process->name, kargv[0], sizeof(current_process->name) - 1);
@@ -731,12 +744,16 @@ int exec(struct cpu_state *state, const void *file, size_t file_length, char *co
 
     make_process_entry(state, entry, (void *)USER_STACK_TOP);
 
-    process_set_args(current_process, state, argc, (const char **)kargv);
+    process_set_args(current_process, state, argc, (const char **)kargv, envc, (const char **)kenvp);
 
 
     kfree(mem);
+
     for (int i = 0; i < argc; i++)
         kfree(kargv[i]);
+
+    for (int i = 0; i < envc; i++)
+        kfree(kenvp[i]);
 
 
     return 0;

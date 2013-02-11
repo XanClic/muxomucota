@@ -92,7 +92,7 @@ void make_process_entry(struct cpu_state *state, void (*address)(void), void *st
 
 void process_create_basic_mappings(process_t *proc);
 
-void process_set_args(process_t *proc, struct cpu_state *state, int argc, const char *const *argv);
+void process_set_args(process_t *proc, struct cpu_state *state, int argc, const char *const *argv, int envc, const char *const *envp);
 
 void alloc_cpu_state(process_t *proc);
 void alloc_cpu_state_on_stack(process_t *proc, void *stack, size_t stacksz);
@@ -100,7 +100,7 @@ void initialize_cpu_state(struct cpu_state *state, void (*entry)(void), void *st
 void initialize_kernel_thread_cpu_state(struct cpu_state *state, void (*entry)(void));
 void initialize_forked_cpu_state(struct cpu_state *dest, const struct cpu_state *src);
 
-void process_set_initial_params(process_t *proc, struct cpu_state *state, int argc, const char *const *argv);
+void process_set_initial_params(process_t *proc, struct cpu_state *state, int argc, const char *const *argv, const char *const *envp);
 
 void *process_stack_alloc(struct cpu_state *state, size_t size);
 
@@ -116,7 +116,7 @@ void set_process_popup_entry(process_t *proc, void (*entry)(void));
 process_t *find_process(pid_t pid);
 
 
-int exec(struct cpu_state *state, const void *file, size_t file_length, char *const *argv);
+int exec(struct cpu_state *state, const void *file, size_t file_length, char *const *argv, char *const *envp);
 
 
 pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer, size_t length, bool zombify);
