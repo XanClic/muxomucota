@@ -44,7 +44,7 @@ end
 
 
 def image_types
-    Dir.entries('build/scripts').select { |e| e =~ /^.*-.*-.*\.sh$/ }.map { |e| e.chomp('.sh').split('-') }
+    Dir.entries('build/scripts').select { |e| e =~ /^.*-.*-.*\.rb$/ }.map { |e| e.chomp('.rb').split('-') }
 end
 
 def platform_output
@@ -83,7 +83,7 @@ Supported image types:
 #{image_type_output}
 
 Usage:
-    ./build.sh [options] [target]
+    ./build.rb [options] [target]
 
 where [options] are:
     EOS
@@ -101,7 +101,7 @@ image    = opts[:image]
 
 Trollop::die('Unsupported architecture') unless File.directory?("src/kernel/arch/#{arch}")
 Trollop::die('Unsupported platform')     unless File.directory?("src/kernel/platform/#{platform}")
-Trollop::die('Unsupported image type')   unless File.file?("build/scripts/#{arch}-#{platform}-#{image}.sh")
+Trollop::die('Unsupported image type')   unless File.file?("build/scripts/#{arch}-#{platform}-#{image}.rb")
 
 
 target = ARGV[0] ? ARGV[0] : 'all'
@@ -195,11 +195,7 @@ threads = Array.new
             when '.c'
                 operations << [['CC', file], "#{pars[:cc][:cmd]} #{pars[:cc][:flags]} -c '#{sd}/#{file}' -o '#{output}'"]
             when '.asm', '.S'
-                if pars[:asm][:quiet]
-                    operations << [['ASM', file], "#{pars[:asm][:cmd]} #{pars[:asm][:flags]} '#{sd}/#{file}' #{pars[:asm][:out]} '#{output}' &> /dev/null"]
-                else
-                    operations << [['ASM', file], "#{pars[:asm][:cmd]} #{pars[:asm][:flags]} '#{sd}/#{file}' #{pars[:asm][:out]} '#{output}'"]
-                end
+                operations << [['ASM', file], "#{pars[:asm][:cmd]} #{pars[:asm][:flags]} '#{sd}/#{file}' #{pars[:asm][:out]} '#{output}'"]
             when '.incbin'
                 operations << [['OBJCP', file], "pushd '#{sd}' &> /dev/null; #{pars[:objcp][:cmd]} #{pars[:objcp][:bin2elf]} '#{file}' '#{output}' && popd &> /dev/null"]
             end
@@ -237,7 +233,17 @@ threads = Array.new
                 puts('%-8s%s' % op[0])
                 print_mtx.unlock()
 
-                exit 1 unless system(op[1])
+                if (op[0][0] == 'ASM') && pars[:asm][:quiet]
+                    outp = `#{op[1]} 2>&1`
+                    unless $?.success?
+                        print_mtx.lock()
+                        STDERR.puts(outp)
+                        print_mtx.unlock()
+                        exit 1
+                    end
+                else
+                    exit 1 unless system(op[1])
+                end
             end
         end
 
@@ -323,7 +329,7 @@ exit 1 unless system("mkdir -p build/images")
 if target == 'all'
     # build initrd here
     puts("——— image ———")
-    exit 1 unless system("build/scripts/#{arch}-#{platform}-#{image}.sh")
+    exit 1 unless system("build/scripts/#{arch}-#{platform}-#{image}.rb")
 else
     system("rm -rf build/images/*")
 end
