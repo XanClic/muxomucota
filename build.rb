@@ -16,9 +16,7 @@ def find(*paths, &block)
     remaining = paths.to_a.select { |d| File.directory?(d) }.flatten
     return nil if remaining.empty?
 
-    remaining = remaining[0] if remaining.length == 1
-
-    Find.find(remaining, &block)
+    Find.find(*remaining, &block)
 end
 
 
