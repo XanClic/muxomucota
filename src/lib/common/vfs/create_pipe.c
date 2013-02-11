@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <ipc.h>
 #include <lock.h>
+#include <shm.h>
 #include <stdbool.h>
 #include <string.h>
 #include <vfs.h>
@@ -14,23 +15,28 @@ static bool extract_path(const char *fullpath, char *service, char *relpath)
     if (!*fullpath)
         return false;
 
-    bool expect_brackets = (*fullpath == '(');
+    if (*fullpath == '/')
+        strcpy(service, "root");
+    else
+    {
+        bool expect_brackets = (*fullpath == '(');
 
-    if (expect_brackets)
-        fullpath++;
+        if (expect_brackets)
+            fullpath++;
 
-    while (*fullpath && (!expect_brackets || (*fullpath != ')')) && (expect_brackets || (*fullpath != ':')))
-        *(service++) = *(fullpath++);
-    *service = 0;
+        while (*fullpath && (!expect_brackets || (*fullpath != ')')) && (expect_brackets || (*fullpath != ':')))
+            *(service++) = *(fullpath++);
+        *service = 0;
 
-    if (!*(fullpath++))
-        return false;
+        if (!*(fullpath++))
+            return false;
 
-    if (!expect_brackets && (*(fullpath++) != '/'))
-        return false;
+        if (!expect_brackets && (*(fullpath++) != '/'))
+            return false;
 
-    if (*fullpath != '/')
-        return false;
+        if (*fullpath != '/')
+            return false;
+    }
 
     while (*fullpath)
         *(relpath++) = *(fullpath++);
@@ -58,6 +64,9 @@ int create_pipe(const char *path, int flags)
 
 
             size_t len = strlen(path);
+
+            if (len < 4) // Platz für (root) in procname
+                len = 4;
 
             char procname[len + 1], relpath[len + 1 + sizeof(int)];
 
@@ -87,6 +96,28 @@ int create_pipe(const char *path, int flags)
 
             if (!_pipes[i].id)
             {
+                if (!(flags & O_NOFOLLOW))
+                {
+                    uintptr_t shmid = shm_create(4096);
+                    char *npath = shm_open(shmid, VMM_UR);
+
+                    if (ipc_shm_message_synced(_pipes[i].pid, IS_SYMLINK, shmid, ipc_cp->relpath, strlen(ipc_cp->relpath) + 1))
+                    {
+                        lock(&_pipe_allocation_lock);
+                        _pipes[i].pid = 0;
+                        unlock(&_pipe_allocation_lock);
+
+                        // FIXME: ELOOP
+                        int fd = create_pipe(npath, flags);
+
+                        shm_close(shmid, npath);
+
+                        return fd;
+                    }
+
+                    shm_close(shmid, npath);
+                }
+
                 errno = ENOENT; // FIXME
                 goto error_after_allocation;
             }

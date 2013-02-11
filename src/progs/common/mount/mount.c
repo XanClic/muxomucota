@@ -8,7 +8,7 @@
 
 int main(int argc, char *argv[])
 {
-    if (argc < 3)
+    if (argc != 3)
     {
         fprintf(stderr, "Usage: mount <file> <directory>\n");
         return 1;

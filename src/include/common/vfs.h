@@ -17,6 +17,7 @@
 #define O_JUST_STAT   (1 << 3)
 #define O_TRUNC       (1 << 4)
 #define O_APPEND      (1 << 5)
+#define O_NOFOLLOW    (1 << 6)
 
 enum
 {
@@ -51,7 +52,9 @@ typedef enum
     PIPE_GET_FLAG,
     PIPE_SET_FLAG,
 
-    PIPE_IMPLEMENTS
+    PIPE_IMPLEMENTS,
+
+    IS_SYMLINK
 } vfs_function_t;
 
 
@@ -142,5 +145,7 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag);
 int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value);
 
 bool service_pipe_implements(uintptr_t id, int interface);
+
+bool service_is_symlink(const char *relpath, char *linkpath);
 
 #endif
