@@ -23,7 +23,10 @@ struct cpu_state *dispatch(struct cpu_state *state)
     process_t *next_process = schedule();
 
     if (unlikely(next_process == NULL))
+    {
+        unlock(&dispatch_lock);
         return state;
+    }
 
 
     change_vmm_context(next_process->vmmc);
