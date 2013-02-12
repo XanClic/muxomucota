@@ -7,6 +7,7 @@ ENV['MTOOLSRC'] = 'myxomycota.cfg'
 ENV['PATH'] += ':/usr/local/sbin:/usr/sbin:/sbin'
 
 system('mkdir -p root/boot/grub')
+system('mkdir -p root-unstripped')
 
 IO.write(ENV['MTOOLSRC'], 'drive x:
   file="images/floppy.img" cylinders=80 heads=2 sectors=18 filter')
@@ -57,7 +58,8 @@ puts("STRIP'n'ZIP")
 relevant_files.map { |f| "root/#{f}" }.each do |f|
     next unless File.file?(f)
 
-    #system("strip -s '#{f}' 2> /dev/null")
+    system("cp #{f} root-unstripped")
+    system("strip -s '#{f}' 2> /dev/null")
     system("gzip -9 '#{f}'")
 
     File.rename("#{f}.gz", f)

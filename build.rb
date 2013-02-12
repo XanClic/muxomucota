@@ -329,5 +329,5 @@ if target == 'all'
     puts("——— image ———")
     exit 1 unless system("build/scripts/#{arch}-#{platform}-#{image}.rb")
 else
-    system("rm -rf build/images/*")
+    system("rm -rf build/images/* build/root build/root-unstripped")
 end
