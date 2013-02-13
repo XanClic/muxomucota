@@ -109,7 +109,7 @@ Trollop::die('Unsupported target') unless ['clean', 'all'].include?(target)
 
 
 
-exit 1 unless system('mkdir -p build/root') if target == 'all'
+exit 1 unless system('mkdir -p build/root')  if target == 'all'
 
 image_root = "#{Dir.pwd}/build/root"
 
@@ -153,10 +153,12 @@ threads = Array.new
     progdir = { 'progs' => "#{Dir.pwd}/progs" }[dir]
     exit 1 unless system("mkdir -p '#{progdir}'") if progdir
 
+    exit 1 unless system('mkdir -p crt') if dir == 'lib'
+
 
     subdirs = Array.new
 
-    Find.find('common', "platform/#{platform}", "arch/#{arch}") do |path|
+    find('common', "platform/#{platform}", "arch/#{arch}") do |path|
         subdirs << File.dirname(path) if exts.include?(File.extname(path))
     end
 
