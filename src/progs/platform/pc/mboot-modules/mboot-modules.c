@@ -104,8 +104,6 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
             return (hmod->mod->size - hmod->file_off) > 0;
         case F_WRITABLE:
             return false;
-        case F_FLUSH:
-            return 0;
     }
 
 
@@ -122,6 +120,8 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
     {
         case F_POSITION:
             hmod->file_off = (value > hmod->mod->size) ? hmod->mod->size : value;
+            return 0;
+        case F_FLUSH:
             return 0;
     }
 

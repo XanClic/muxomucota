@@ -93,7 +93,7 @@ int main(int argc, char *argv[])
 
     STRTOK_FOREACH(commands, "\n", line)
     {
-        printf("$ %-70s", line);
+        printf("$ %-71s", line);
         fflush(stdout);
 
         int c_argc;
@@ -110,31 +110,41 @@ int main(int argc, char *argv[])
         c_argv[i] = NULL;
 
 
-        bool daemon = !strcmp(c_argv[0], "daemon");
-
-        pid_t child = fork();
-        if (!child)
+        if (!strcmp(c_argv[0], "stdin"))
         {
-            execvp(c_argv[daemon ? 1 : 0], &c_argv[daemon ? 1 : 0]);
-            exit(errno);
+            destroy_pipe(STDIN_FILENO, 0);
+            infd = create_pipe(c_argv[1], O_RDONLY);
+            assert(infd == STDIN_FILENO);
+            printf("\033[1m[\033[32mDONE");
         }
-
-
-        if (daemon)
-            printf("\033[1m[\033[0mBKGN");
         else
         {
-            int status;
-            waitpid(child, &status, 0);
+            bool daemon = !strcmp(c_argv[0], "daemon");
 
-            printf("\033[1m[");
+            pid_t child = fork();
+            if (!child)
+            {
+                execvp(c_argv[daemon ? 1 : 0], &c_argv[daemon ? 1 : 0]);
+                exit(errno);
+            }
 
-            if (!WIFEXITED(status))
-                printf("\033[31mCRSH");
-            else if (WEXITSTATUS(status))
-                printf("\033[31mE%03i", WEXITSTATUS(status));
+
+            if (daemon)
+                printf("\033[1m[\033[0mBKGN");
             else
-                printf("\033[32mDONE");
+            {
+                int status;
+                waitpid(child, &status, 0);
+
+                printf("\033[1m[");
+
+                if (!WIFEXITED(status))
+                    printf("\033[31mCRSH");
+                else if (WEXITSTATUS(status))
+                    printf("\033[31mE%03i", WEXITSTATUS(status));
+                else
+                    printf("\033[32mDONE");
+            }
         }
 
         printf("\033[0;1m]\033[0m\n");
