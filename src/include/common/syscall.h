@@ -33,7 +33,9 @@ enum syscall_number
     SYS_EXEC,
     SYS_WAIT,
     SYS_HANDLE_IRQ,
-    SYS_IOPL
+    SYS_IRQ_HANDLER_EXIT,
+    SYS_IOPL,
+    SYS_GETPID // 18
 };
 
 

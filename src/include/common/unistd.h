@@ -22,4 +22,6 @@ int execvp(const char *file, char *const argv[]);
 
 int chdir(const char *path);
 
+pid_t getpid(void);
+
 #endif

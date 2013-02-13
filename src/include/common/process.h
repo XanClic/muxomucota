@@ -132,6 +132,7 @@ bool load_image_to_process(process_t *proc, const void *address, void **heap_sta
 
 
 void daemonize_process(process_t *proc, const char *name);
+void daemonize_from_irq_handler(process_t *proc);
 
 
 void destroy_process_struct(process_t *proc);

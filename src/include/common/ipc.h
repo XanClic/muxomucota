@@ -8,7 +8,6 @@
 
 
 #define MAX_POPUP_HANDLERS 32
-#define MAX_IRQ_HANDLERS   16
 
 
 struct ipc_syscall_params
@@ -28,11 +27,18 @@ struct ipc_syscall_params
 void popup_entry(void (*entry)(int, uintptr_t));
 noreturn void popup_exit(uintmax_t exit_info);
 
+void popup_ping_handler(int index, uintmax_t (*handler)(void));
 void popup_message_handler(int index, uintmax_t (*handler)(void));
 void popup_shm_handler(int index, uintmax_t (*handler)(uintptr_t));
-void popup_irq_handler(int irq, void (*handler)(void));
+
+void register_irq_handler(int irq, void (*handler)(void));
+noreturn void irq_handler_exit(void);
+
 
 size_t popup_get_message(void *buffer, size_t buflen);
+
+void ipc_ping(pid_t pid, int func_index);
+uintmax_t ipc_ping_synced(pid_t pid, int func_index);
 
 void ipc_message(pid_t pid, int func_index, const void *buffer, size_t length);
 uintmax_t ipc_message_synced(pid_t pid, int func_index, const void *buffer, size_t length);

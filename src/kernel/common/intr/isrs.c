@@ -15,7 +15,11 @@ struct isr
     union
     {
         void (*kernel_handler)(void);
-        process_t *process;
+        struct
+        {
+            process_t *process;
+            void (*process_handler)(void);
+        };
     };
 };
 
@@ -47,12 +51,13 @@ void register_kernel_isr(int irq, void (*isr)(void))
 }
 
 
-void register_user_isr(int irq, process_t *process)
+void register_user_isr(int irq, process_t *process, void (*process_handler)(void))
 {
     struct isr *nisr = kmalloc(sizeof(*nisr));
 
     nisr->is_kernel = false;
     nisr->process = process;
+    nisr->process_handler = process_handler;
 
     register_isr(irq, nisr);
 }
@@ -87,17 +92,16 @@ void common_irq_handler(int irq)
 
     for (struct isr *isr = handlers[irq]; isr != NULL; isr = isr->next)
     {
-        if (unlikely(isr->is_kernel))
+        if (isr->is_kernel)
             isr->kernel_handler();
-        else if (likely((isr->process->status == PROCESS_ACTIVE) || (isr->process->status == PROCESS_DAEMON)))
+        else if (likely(__sync_bool_compare_and_swap(&isr->process->status, PROCESS_DAEMON, PROCESS_ACTIVE)))
         {
-            // FIXME: Das funktioniert nur Race-Condition-frei, weil beide
-            // kmallocs, die im Ausführungspfad liegen, weniger als eine Page
-            // anfordern (und eine Page bekommt der VMM auch lockfrei hin).
-            // Besser wäre es, den handlenden Prozess explizit einen Thread
-            // abstellen zu lassen (bspw. sich selbst), der hier benutzt wird,
-            // sodass hier kein neuer Prozess angelegt werden muss.
-            popup(isr->process, -irq - 1, 0, NULL, 0, false);
+            // Das funktioniert ohne jegliche Race Conditions, weil der Prozess
+            // ein Daemon war, der sich nicht in der Runqueue befindet. Somit
+            // gibt es auch keinen State, den man hier kaputtmachen könnte.
+            make_process_entry(isr->process, isr->process->cpu_state, isr->process_handler, (void *)USER_STACK_TOP);
+
+            register_process(isr->process);
         }
     }
 

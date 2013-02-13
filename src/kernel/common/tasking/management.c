@@ -505,6 +505,7 @@ static pid_t wait_for_any_child(uintmax_t *status, int options)
     return raw_waitpid(p->pid, status, options);
 }
 
+
 pid_t raw_waitpid(pid_t pid, uintmax_t *status, int options)
 {
     if (pid == -1)
@@ -590,6 +591,22 @@ void daemonize_process(process_t *proc, const char *name)
     q_register_process(&daemons, proc);
 
     unlock(&daemons_lock);
+
+    proc->status = PROCESS_DAEMON;
+
+    unlock(&runqueue_lock);
+
+    if (proc == current_process)
+        for (;;)
+            yield();
+}
+
+
+void daemonize_from_irq_handler(process_t *proc)
+{
+    lock(&runqueue_lock);
+
+    q_unregister_process(&runqueue, current_process);
 
     proc->status = PROCESS_DAEMON;
 
