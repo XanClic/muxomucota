@@ -1,14 +1,18 @@
 #ifndef _ISR_H
 #define _ISR_H
 
+#include <process.h>
+
 
 struct cpu_state;
 
 
 void init_interrupts(void);
 
-struct cpu_state *common_irq_handler(int irq, struct cpu_state *state);
+void common_irq_handler(int irq);
 
-void register_isr(int irq, struct cpu_state *(*isr)(int irq, struct cpu_state *state));
+void register_kernel_isr(int irq, void (*isr)(void));
+void register_user_isr(int irq, process_t *process);
+void unregister_isr_process(process_t *process);
 
 #endif

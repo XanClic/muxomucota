@@ -22,6 +22,7 @@ typedef struct FILE
 extern FILE *stdin, *stdout, *stderr;
 
 
+int getchar(void);
 int putchar(int c);
 
 int puts(const char *s);

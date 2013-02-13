@@ -2,6 +2,7 @@
 #include <cpu-state.h>
 #include <errno.h>
 #include <ipc.h>
+#include <isr.h>
 #include <process.h>
 #include <stdint.h>
 #include <string.h>
@@ -203,6 +204,30 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
 
         case SYS_WAIT:
             return raw_waitpid(p0, (uintmax_t *)p1, p2);
+
+        case SYS_HANDLE_IRQ:
+            if (current_process->pid != current_process->pgid)
+            {
+                // Nur der Hauptthread darf sich registrieren
+                *current_process->errno = EPERM;
+                return (uintptr_t)-EPERM;
+            }
+            register_user_isr(p0, current_process);
+            return 0;
+
+        case SYS_IOPL:
+#ifdef X86
+            if (p0 > 3)
+            {
+                *current_process->errno = EINVAL;
+                return (uintptr_t)-EINVAL;
+            }
+            kiopl(p0, state);
+            return 0;
+#else
+            *current_process->errno = ENOSYS;
+            return (uintptr_t)-ENOSYS;
+#endif
     }
 
     *current_process->errno = ENOSYS;
