@@ -5,6 +5,18 @@
 #include <sys/types.h>
 
 
+void ipc_ping(pid_t pid, int func_index)
+{
+    ipc_shm_message(pid, func_index, 0, NULL, 0);
+}
+
+
+uintmax_t ipc_ping_synced(pid_t pid, int func_index)
+{
+    return ipc_shm_message_synced(pid, func_index, 0, NULL, 0);
+}
+
+
 void ipc_message(pid_t pid, int func_index, const void *buffer, size_t length)
 {
     ipc_shm_message(pid, func_index, 0, buffer, length);

@@ -55,7 +55,7 @@ Dir.chdir('..')
 
 puts("STRIP'n'ZIP")
 
-relevant_files.map { |f| "root/#{f}" }.each do |f|
+Dir.entries('root').map { |f| "root/#{f}" }.each do |f|
     next unless File.file?(f)
 
     system("cp #{f} root-unstripped")

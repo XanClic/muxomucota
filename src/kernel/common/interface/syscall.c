@@ -206,13 +206,22 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
             return raw_waitpid(p0, (uintmax_t *)p1, p2);
 
         case SYS_HANDLE_IRQ:
-            if (current_process->pid != current_process->pgid)
+            if (current_process->popup_stack_index >= 0)
             {
-                // Nur der Hauptthread darf sich registrieren
+                // Popupthreads dürfen sich nicht registrieren
                 *current_process->errno = EPERM;
                 return (uintptr_t)-EPERM;
             }
-            register_user_isr(p0, current_process);
+            if (IS_KERNEL(p1))
+            {
+                *current_process->errno = EFAULT;
+                return (uintptr_t)-EFAULT;
+            }
+            register_user_isr(p0, current_process, (void (*)(void))p1);
+            return 0;
+
+        case SYS_IRQ_HANDLER_EXIT:
+            daemonize_from_irq_handler(current_process);
             return 0;
 
         case SYS_IOPL:
@@ -228,6 +237,9 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
             *current_process->errno = ENOSYS;
             return (uintptr_t)-ENOSYS;
 #endif
+
+        case SYS_GETPID:
+            return current_process->pid;
     }
 
     *current_process->errno = ENOSYS;

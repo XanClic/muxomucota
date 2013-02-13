@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <vfs.h>
 
 
@@ -172,9 +173,14 @@ static int kbd_b[128] =
 
 static void irq(void)
 {
-    if (!(in8(0x64) & 1))
-        return;
+    flush_input_queue();
 
+    irq_handler_exit();
+}
+
+
+static void flush_input_queue(void)
+{
     while (in8(0x64) & 1)
     {
         int scancode = in8(0x60);
@@ -353,7 +359,6 @@ int main(void)
 
     set_leds(1, 1, 1);
 
-
     // Controller Command Byte setzen
     kbc_send_command(0x60, 0x61);
 
@@ -368,23 +373,13 @@ int main(void)
     // Tastatur aktivieren
     kbd_send_command(0xF4, -1);
 
-    flush_input_queue();
-
-
-    popup_irq_handler(1, &irq);
-
-
     set_leds(0, 0, 0);
 
 
+    register_irq_handler(1, &irq);
+
+
     daemonize("kbd");
-}
-
-
-static void flush_input_queue(void)
-{
-    while (in8(0x64) & 1)
-        in8(0x60);
 }
 
 
@@ -406,6 +401,9 @@ static void kbc_send_command(uint8_t command, int data)
 
         out8(0x60, data);
     }
+
+
+    flush_input_queue();
 }
 
 
@@ -424,6 +422,9 @@ static void kbd_send_command(uint8_t command, int data)
 
     lc = command;
     lcd = data;
+
+
+    flush_input_queue();
 }
 
 
