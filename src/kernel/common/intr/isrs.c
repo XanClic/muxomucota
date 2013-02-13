@@ -90,7 +90,15 @@ void common_irq_handler(int irq)
         if (unlikely(isr->is_kernel))
             isr->kernel_handler();
         else if (likely((isr->process->status == PROCESS_ACTIVE) || (isr->process->status == PROCESS_DAEMON)))
+        {
+            // FIXME: Das funktioniert nur Race-Condition-frei, weil beide
+            // kmallocs, die im Ausführungspfad liegen, weniger als eine Page
+            // anfordern (und eine Page bekommt der VMM auch lockfrei hin).
+            // Besser wäre es, den handlenden Prozess explizit einen Thread
+            // abstellen zu lassen (bspw. sich selbst), der hier benutzt wird,
+            // sodass hier kein neuer Prozess angelegt werden muss.
             popup(isr->process, -irq - 1, 0, NULL, 0, false);
+        }
     }
 
     plz_dont_free = false;

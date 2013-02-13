@@ -8,7 +8,7 @@
 #include <x86-segments.h>
 
 
-#define KERNEL_STACK_SIZE 8192
+#define KERNEL_STACK_SIZE 2048
 
 
 void alloc_cpu_state_on_stack(process_t *proc, void *stack, size_t stacksz)
