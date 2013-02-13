@@ -26,7 +26,7 @@ void alloc_cpu_state(process_t *proc)
 }
 
 
-void initialize_cpu_state(struct cpu_state *state, void (*entry)(void), void *stack, int parcount, ...)
+void initialize_cpu_state(process_t *proc, struct cpu_state *state, void (*entry)(void), void *stack, int parcount, ...)
 {
     va_list va;
 
@@ -52,11 +52,11 @@ void initialize_cpu_state(struct cpu_state *state, void (*entry)(void), void *st
     state->ss  = SEG_USR_DS;
     state->esp = (uintptr_t)stack;
 
-    state->eflags = 0x202;
+    state->eflags = 0x202 | (proc->arch.iopl << 12);
 }
 
 
-void initialize_kernel_thread_cpu_state(struct cpu_state *state, void (*entry)(void))
+void initialize_kernel_thread_cpu_state(process_t *proc, struct cpu_state *state, void (*entry)(void))
 {
     state->eax = state->ebx = state->ecx = state->edx = state->esi = state->edi = state->ebp = 0;
 
@@ -66,7 +66,7 @@ void initialize_kernel_thread_cpu_state(struct cpu_state *state, void (*entry)(v
     state->ds  = SEG_SYS_DS;
     state->es  = SEG_SYS_DS;
 
-    state->eflags = 0x202;
+    state->eflags = 0x202 | (proc->arch.iopl << 12);
 }
 
 
@@ -75,6 +75,17 @@ void initialize_forked_cpu_state(struct cpu_state *dest, const struct cpu_state 
     memcpy(dest, src, sizeof(*src));
 
     dest->eax = 0;
+}
+
+
+void initialize_child_process_arch(process_t *child, process_t *parent)
+{
+    child->arch.iopl = parent->arch.iopl;
+}
+
+void initialize_orphan_process_arch(process_t *proc)
+{
+    proc->arch.iopl = 0;
 }
 
 
@@ -121,4 +132,12 @@ void process_set_initial_params(process_t *proc, struct cpu_state *state, int ar
 void destroy_process_arch_struct(process_t *proc)
 {
     kfree((void *)proc->arch.kernel_stack);
+}
+
+
+void kiopl(int level, struct cpu_state *state)
+{
+    current_process->arch.iopl = level;
+
+    state->eflags = (state->eflags & ~(3 << 12)) | (level << 12);
 }

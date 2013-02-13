@@ -6,7 +6,7 @@
 
 
 #ifndef COOPERATIVE
-static struct cpu_state *timer_isr(int irq, struct cpu_state *state);
+static void timer_isr(void);
 #endif
 
 
@@ -15,7 +15,7 @@ void init_system_timer(void)
     int multiplier = 1193182 / SYSTEM_TIMER_FREQUENCY;
 
 #ifndef COOPERATIVE
-    register_isr(0, timer_isr);
+    register_kernel_isr(0, timer_isr);
 #endif
 
     out8(0x43, 0x34);
@@ -25,15 +25,8 @@ void init_system_timer(void)
 
 
 #ifndef COOPERATIVE
-static struct cpu_state *timer_isr(int irq, struct cpu_state *state)
+static void timer_isr(void)
 {
-    (void)irq;
-
-    // return dispatch(state); funktioniert interessanterweise nicht. Das schon.
-    // Also gibts nichts zu fixen.
-
     yield();
-
-    return state;
 }
 #endif

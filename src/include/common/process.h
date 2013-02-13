@@ -88,7 +88,7 @@ void make_idle_process(void);
 void enter_idle_process(void);
 
 
-void make_process_entry(struct cpu_state *state, void (*address)(void), void *stack);
+void make_process_entry(process_t *proc, struct cpu_state *state, void (*address)(void), void *stack);
 
 void process_create_basic_mappings(process_t *proc);
 
@@ -96,9 +96,12 @@ void process_set_args(process_t *proc, struct cpu_state *state, int argc, const 
 
 void alloc_cpu_state(process_t *proc);
 void alloc_cpu_state_on_stack(process_t *proc, void *stack, size_t stacksz);
-void initialize_cpu_state(struct cpu_state *state, void (*entry)(void), void *stack, int parcount, ...);
-void initialize_kernel_thread_cpu_state(struct cpu_state *state, void (*entry)(void));
+void initialize_cpu_state(process_t *proc, struct cpu_state *state, void (*entry)(void), void *stack, int parcount, ...);
+void initialize_kernel_thread_cpu_state(process_t *proc, struct cpu_state *state, void (*entry)(void));
 void initialize_forked_cpu_state(struct cpu_state *dest, const struct cpu_state *src);
+
+void initialize_child_process_arch(process_t *child, process_t *parent);
+void initialize_orphan_process_arch(process_t *proc);
 
 void process_set_initial_params(process_t *proc, struct cpu_state *state, int argc, const char *const *argv, const char *const *envp);
 
@@ -143,5 +146,10 @@ pid_t raw_waitpid(pid_t pid, uintmax_t *status, int options);
 
 
 void sweep_dead_processes(void);
+
+
+#ifdef X86
+void kiopl(int level, struct cpu_state *state);
+#endif
 
 #endif

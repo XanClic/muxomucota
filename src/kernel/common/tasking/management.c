@@ -2,6 +2,7 @@
 #include <cpu-state.h>
 #include <errno.h>
 #include <ipc.h>
+#include <isr.h>
 #include <kassert.h>
 #include <kmalloc.h>
 #include <limits.h>
@@ -47,6 +48,8 @@ process_t *create_empty_process(const char *name)
     p->popup_stack_index = -1;
 
 
+    initialize_orphan_process_arch(p);
+
     alloc_cpu_state(p);
 
 
@@ -60,9 +63,9 @@ process_t *create_empty_process(const char *name)
 }
 
 
-void make_process_entry(struct cpu_state *state, void (*address)(void), void *stack)
+void make_process_entry(process_t *proc, struct cpu_state *state, void (*address)(void), void *stack)
 {
-    initialize_cpu_state(state, address, stack, 0);
+    initialize_cpu_state(proc, state, address, stack, 0);
 }
 
 
@@ -190,6 +193,8 @@ void make_idle_process(void)
     idle_process->next = idle_process;
 
 
+    initialize_orphan_process_arch(idle_process);
+
     alloc_cpu_state(idle_process);
 
 
@@ -214,6 +219,8 @@ process_t *create_kernel_thread(const char *name, void (*function)(void), void *
     p->popup_stack_index = -1;
 
 
+    initialize_orphan_process_arch(p);
+
     alloc_cpu_state_on_stack(p, stack, stacksz);
 
 
@@ -221,7 +228,7 @@ process_t *create_kernel_thread(const char *name, void (*function)(void), void *
     use_vmm_context(p->vmmc);
 
 
-    initialize_kernel_thread_cpu_state(p->cpu_state, function);
+    initialize_kernel_thread_cpu_state(p, p->cpu_state, function);
 
 
     return p;
@@ -383,6 +390,9 @@ void destroy_process_struct(process_t *proc)
 
 void destroy_process(process_t *proc, uintmax_t exit_info)
 {
+    unregister_isr_process(proc);
+
+
     lock(&runqueue_lock);
 
     q_unregister_process(&runqueue, proc);
@@ -641,6 +651,8 @@ pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer
     pop->popup_stack_index = stack_index;
 
 
+    initialize_child_process_arch(pop, proc);
+
     alloc_cpu_state(pop);
 
 
@@ -663,7 +675,7 @@ pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer
     use_vmm_context(pop->vmmc);
 
 
-    initialize_cpu_state(pop->cpu_state, proc->popup_entry, (void *)stack_top, 2, func_index, shmid);
+    initialize_cpu_state(pop, pop->cpu_state, proc->popup_entry, (void *)stack_top, 2, func_index, shmid);
 
 
     register_process(pop);
@@ -688,6 +700,8 @@ pid_t fork(struct cpu_state *current_state)
 
     vmmc_clone(child->vmmc, current_process->vmmc);
 
+
+    initialize_child_process_arch(child, current_process);
 
     initialize_forked_cpu_state(child->cpu_state, current_state);
 
@@ -742,7 +756,7 @@ int exec(struct cpu_state *state, const void *file, size_t file_length, char *co
 
     vmmc_set_heap_top(current_process->vmmc, heap_start);
 
-    make_process_entry(state, entry, (void *)USER_STACK_TOP);
+    make_process_entry(current_process, state, entry, (void *)USER_STACK_TOP);
 
     process_set_args(current_process, state, argc, (const char **)kargv, envc, (const char **)kenvp);
 

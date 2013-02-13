@@ -1,11 +1,11 @@
 #ifndef _SYSCALL_H
 #define _SYSCALL_H
 
+#include <cpu-state.h>
 #include <stdint.h>
 
 #ifndef KERNEL
 #include <arch-syscall.h>
-#include <cpu-state.h>
 #endif
 
 
@@ -25,13 +25,15 @@ enum syscall_number
     SYS_SHM_MAKE,
     SYS_SHM_OPEN,
     SYS_SHM_CLOSE,
-    SYS_SHM_UNMAKE, // 10
+    SYS_SHM_UNMAKE,
     SYS_SHM_SIZE,
-    SYS_SBRK,
+    SYS_SBRK, // 10
     SYS_YIELD,
     SYS_FORK,
     SYS_EXEC,
-    SYS_WAIT
+    SYS_WAIT,
+    SYS_HANDLE_IRQ,
+    SYS_IOPL
 };
 
 

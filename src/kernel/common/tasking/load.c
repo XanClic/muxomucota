@@ -53,7 +53,7 @@ pid_t create_process_from_image(int argc, const char *const *argv, const void *a
 
     vmmc_set_heap_top(proc->vmmc, heap_start);
 
-    make_process_entry(proc->cpu_state, entry, (void *)USER_STACK_TOP);
+    make_process_entry(proc, proc->cpu_state, entry, (void *)USER_STACK_TOP);
 
     process_set_args(proc, proc->cpu_state, argc, argv, 0, NULL);
 
