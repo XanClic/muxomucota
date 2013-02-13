@@ -137,6 +137,7 @@ void init_interrupts(void)
 
 
 // FIXME. Das ist plattform-, und nicht architekturabhängig.
+// Außerdem ist das verdammt viel Code, der hier nicht rein muss.
 
 static uint16_t *sod_out_text = (uint16_t *)(0xB8000 | PHYS_BASE);
 
@@ -277,13 +278,13 @@ struct cpu_state *i386_common_isr(struct cpu_state *state)
         }
 
 
-        // IRQ hier behandeln
-        state = common_irq_handler(irq, state);
-
-
         if (state->int_vector & 8)
             out8(0xA0, 0x20);
         out8(0x20, 0x20);
+
+
+        // IRQ hier behandeln
+        common_irq_handler(irq);
     }
 
 
