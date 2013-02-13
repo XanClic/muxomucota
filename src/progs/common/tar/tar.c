@@ -239,8 +239,6 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
             return (f->sz - f->off) > 0;
         case F_WRITABLE:
             return false;
-        case F_FLUSH:
-            return 0;
     }
 
     return 0;
@@ -255,6 +253,8 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
     {
         case F_POSITION:
             f->off = value;
+            return 0;
+        case F_FLUSH:
             return 0;
     }
 

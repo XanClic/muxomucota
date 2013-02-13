@@ -1,5 +1,7 @@
 #include <drivers.h>
 #include <drivers/memory.h>
+#include <errno.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -424,6 +426,37 @@ bool service_pipe_implements(uintptr_t id, int interface)
     (void)id;
 
     return ARRAY_CONTAINS((int[]){ I_TTY }, interface);
+}
+
+
+int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
+{
+    (void)id;
+    (void)value;
+
+    switch (flag)
+    {
+        case F_FLUSH:
+            return 0;
+    }
+
+    return -EINVAL;
+}
+
+
+uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
+{
+    (void)id;
+
+    switch (flag)
+    {
+        case F_READABLE:
+            return false;
+        case F_WRITABLE:
+            return true;
+    }
+
+    return 0;
 }
 
 
