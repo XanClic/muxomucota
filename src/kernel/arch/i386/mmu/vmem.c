@@ -120,24 +120,32 @@ void *kernel_map_nc(uintptr_t *pageframe_list, int frames)
     {
         if (kpt[i] == MAP_NP)
         {
-            lock(&kpt_lock);
-
-            int j;
-            for (j = 0; j < frames; j++)
-                if (kpt[i + j] != MAP_NP)
-                    break;
-
-            if (kpt[i + j] != MAP_NP)
+            if (frames == 1)
             {
-                unlock(&kpt_lock);
-                i += j;
-                continue;
+                if (!__sync_bool_compare_and_swap(&kpt[i], MAP_NP, pageframe_list[0] | MAP_PR | MAP_RW | MAP_OS | MAP_GB | MAP_CC))
+                    continue;
             }
+            else
+            {
+                lock(&kpt_lock);
 
-            for (j = 0; j < frames; j++)
-                kpt[i + j] = pageframe_list[j] | MAP_PR | MAP_RW | MAP_OS | MAP_GB | MAP_CC;
+                int j;
+                for (j = 0; j < frames; j++)
+                    if (kpt[i + j] != MAP_NP)
+                        break;
 
-            unlock(&kpt_lock);
+                if (kpt[i + j] != MAP_NP)
+                {
+                    unlock(&kpt_lock);
+                    i += j;
+                    continue;
+                }
+
+                for (j = 0; j < frames; j++)
+                    kpt[i + j] = pageframe_list[j] | MAP_PR | MAP_RW | MAP_OS | MAP_GB | MAP_CC;
+
+                unlock(&kpt_lock);
+            }
 
             return (void *)(HMEM_BASE + (uintptr_t)i * 4096);
         }
