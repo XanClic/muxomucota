@@ -333,12 +333,8 @@ static void flush_input_queue(void)
                     menu ^= 1;
                     break;
                 case KEY_DELETE:
-#ifdef X86
                     if (ctrl && menu)
                         kbc_send_command(0xFE, -1);
-#else
-                    break;
-#endif
             }
             up = (lshift | rshift) ^ caps;
         }
@@ -355,17 +351,17 @@ int main(void)
 
 
     // Tastatur deaktivieren
-    kbd_send_command(0xF5, -1);
+    //kbd_send_command(0xF5, -1);
 
     set_leds(1, 1, 1);
 
     // Controller Command Byte setzen
-    kbc_send_command(0x60, 0x61);
+    //kbc_send_command(0x60, 0x61);
 
     // Typematic rate
     kbd_send_command(0xF3, 0);
     // Scancodeset
-    kbd_send_command(0xF0, 0x01);
+    //kbd_send_command(0xF0, 0x01);
 
     // KBC aktivieren
     kbc_send_command(0xAE, -1);
