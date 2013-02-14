@@ -3,7 +3,6 @@
 
 
 extern uintmax_t (*popup_entries[])(uintptr_t);
-extern void (*popup_irq_entries[])(void);
 
 
 void popup_message_handler(int index, uintmax_t (*handler)(void))
@@ -19,9 +18,13 @@ void popup_shm_handler(int index, uintmax_t (*handler)(uintptr_t))
 }
 
 
-void popup_irq_handler(int irq, void (*handler)(void))
+void popup_ping_handler(int index, uintmax_t (*handler)(void))
 {
-    popup_irq_entries[irq] = handler;
+    popup_entries[index] = (uintmax_t (*)(uintptr_t))handler;
+}
 
-    syscall1(SYS_HANDLE_IRQ, irq);
+
+void register_irq_handler(int irq, void (*handler)(void))
+{
+    syscall2(SYS_HANDLE_IRQ, irq, (uintptr_t)handler);
 }
