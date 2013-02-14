@@ -11,7 +11,7 @@
 
 
 #ifdef KERNEL
-// #define COOPERATIVE
+#define COOPERATIVE
 #endif
 
 
@@ -43,7 +43,8 @@ typedef struct process
     struct cpu_state *cpu_state;
     vmm_context_t *vmmc;
 
-    struct process *next;
+    // rq_next = runqueue_next
+    struct process *rq_next, *next;
 
     struct process_arch_info arch;
 

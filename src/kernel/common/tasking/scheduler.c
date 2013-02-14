@@ -36,7 +36,7 @@ process_t *schedule(void)
 
     do
     {
-        current_process = current_process->next;
+        current_process = current_process->rq_next;
 
         if ((current_process->status != PROCESS_ACTIVE) && (current_process == initial))
             current_process = idle_process;
