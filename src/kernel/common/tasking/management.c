@@ -190,7 +190,8 @@ void make_idle_process(void)
     idle_process->popup_stack_mask = NULL;
     idle_process->popup_stack_index = -1;
 
-    idle_process->next = idle_process;
+    idle_process->rq_next = idle_process;
+    idle_process->next    = idle_process;
 
 
     initialize_orphan_process_arch(idle_process);
@@ -243,12 +244,33 @@ void run_process(process_t *proc)
 }
 
 
+// FIXME: Zwei Versionen sind doof (eine für die Runqueue, eine für alles
+// andere).
+void rq_register_process(process_t *proc);
+
+void rq_register_process(process_t *proc)
+{
+    if (runqueue != NULL)
+    {
+        proc->rq_next = runqueue->rq_next;
+        runqueue->rq_next = proc;
+    }
+    else
+    {
+        proc->rq_next = proc;
+        runqueue = proc;
+    }
+}
+
+
 void q_register_process(process_t **list, process_t *proc);
 
 // Locking muss der Aufrufer machen
 void q_register_process(process_t **list, process_t *proc)
 {
-    if (*list != NULL)
+    if (list == &runqueue)
+        rq_register_process(proc);
+    else if (*list != NULL)
     {
         proc->next = (*list)->next;
         (*list)->next = proc;
@@ -271,11 +293,43 @@ void register_process(process_t *proc)
 }
 
 
+// FIXME
+void rq_unregister_process(process_t *proc);
+
+void rq_unregister_process(process_t *proc)
+{
+    process_t **lp = &runqueue;
+
+    if (proc == proc->rq_next)
+    {
+        runqueue = NULL;
+        return;
+    }
+
+    lp = &(*lp)->rq_next;
+
+    while (*lp != proc)
+        lp = &(*lp)->rq_next;
+
+    if (runqueue == proc)
+        runqueue = proc->rq_next;
+
+    *lp = proc->rq_next;
+}
+
+
 // Locking muss der Aufrufer machen
 void q_unregister_process(process_t **list, process_t *proc);
 
 void q_unregister_process(process_t **list, process_t *proc)
 {
+    if (list == &runqueue)
+    {
+        rq_unregister_process(proc);
+        return;
+    }
+
+
     process_t **lp = list;
 
     // FIXME: Prozess nicht in der Liste
@@ -321,10 +375,36 @@ pid_t find_daemon_by_name(const char *name)
 }
 
 
+// FIXME
+static process_t *find_process_in_runqueue(pid_t pid)
+{
+    process_t *p = runqueue;
+
+    if (p == NULL)
+        return NULL;
+
+    if (p->pid == pid)
+        return p;
+
+    do
+        p = p->rq_next;
+    while ((p->pid != pid) && (p != runqueue));
+
+    if (p->pid == pid)
+        return p;
+
+    return NULL;
+}
+
+
 static process_t *find_process_in(process_t **list, pid_t pid);
 
 static process_t *find_process_in(process_t **list, pid_t pid)
 {
+    if (list == &runqueue)
+        return find_process_in_runqueue(pid);
+
+
     process_t *p = *list;
 
     if (p == NULL)
@@ -460,10 +540,38 @@ void destroy_this_popup_thread(uintmax_t exit_info)
 }
 
 
+// FIXME
+static process_t *find_child_in_runqueue(pid_t pid);
+
+static process_t *find_child_in_runqueue(pid_t pid)
+{
+    process_t *p = runqueue;
+
+    if (p == NULL)
+        return NULL;
+
+    if (p->ppid == pid)
+        return p;
+
+    do
+        p = p->rq_next;
+    while ((p->ppid != pid) && (p != runqueue));
+
+    if (p->ppid == pid)
+        return p;
+
+    return NULL;
+}
+
+
 static process_t *find_child_in(process_t **list, pid_t pid);
 
 static process_t *find_child_in(process_t **list, pid_t pid)
 {
+    if (list == &runqueue)
+        return find_child_in_runqueue(pid);
+
+
     process_t *p = *list;
 
     if (p == NULL)
