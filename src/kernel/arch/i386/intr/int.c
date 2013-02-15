@@ -3,6 +3,7 @@
 #include <cpu.h>
 #include <cpu-state.h>
 #include <isr.h>
+#include <panic.h>
 #include <port-io.h>
 #include <process.h>
 #include <stdbool.h>
@@ -136,41 +137,6 @@ void init_interrupts(void)
 }
 
 
-// FIXME. Das ist plattform-, und nicht architekturabhängig.
-// Außerdem ist das verdammt viel Code, der hier nicht rein muss.
-
-static uint16_t *sod_out_text = (uint16_t *)(0xB8000 | PHYS_BASE);
-
-
-static void sod_print(const char *s)
-{
-    do
-    {
-        if (*s == '\n')
-            do
-                *(sod_out_text++) = 0x4420;
-            while ((sod_out_text - (uint16_t *)(0xB8000 | PHYS_BASE)) % 80);
-        else
-            *(sod_out_text++) = *s | 0x4F00;
-    }
-    while (*++s);
-}
-
-
-static void sod_print_ptr(uintptr_t ptr)
-{
-    char tmem[11] = "0x";
-
-    for (int i = 0; i < 8; i++)
-    {
-        int digit = (ptr >> ((7 - i) * 4)) & 0xF;
-        tmem[i + 2] = (digit >= 10) ? (digit - 10 + 'A') : (digit + '0');
-    }
-
-    sod_print(tmem);
-}
-
-
 struct cpu_state *i386_common_isr(struct cpu_state *state);
 
 struct cpu_state *i386_common_isr(struct cpu_state *state)
@@ -182,80 +148,27 @@ struct cpu_state *i386_common_isr(struct cpu_state *state)
 
         __asm__ __volatile__ ("cli");
 
-        sod_print("Unhandled exception\n\n");
-
-        sod_print("current process: ");
-
-        if (current_process == NULL)
-            sod_print("(none)\n\n");
-        else
-        {
-            if (current_process->pgid != current_process->pid)
-                sod_print("(belongs to) ");
-
-            sod_print("\"");
-            sod_print(current_process->name);
-            sod_print("\"\n\n");
-        }
-
-        sod_print("exc: ");
-        sod_print_ptr(state->int_vector);
-        sod_print(" err: ");
-        sod_print_ptr(state->err_code);
-        sod_print(" efl: ");
-        sod_print_ptr(state->eflags);
-        sod_print(" cr2: ");
         uintptr_t cr2;
         __asm__ __volatile__ ("mov %0,cr2" : "=r"(cr2));
-        sod_print_ptr(cr2);
 
-        sod_print("\n cs: ");
-        sod_print_ptr(state->cs);
-        sod_print(" eip: ");
-        sod_print_ptr(state->eip);
+        uintptr_t ksp = (state->cs & 3) ? (uintptr_t)(state + 1) : ((uintptr_t)(state + 1) - sizeof(state->ss) - sizeof(state->esp));
 
-        sod_print("  ss: ");
-        sod_print_ptr(state->ss);
-        sod_print(" esp: ");
-        sod_print_ptr(state->esp);
-
-        sod_print("\n ds: ");
-        sod_print_ptr(state->ds);
-        sod_print("  es: ");
-        sod_print_ptr(state->es);
-
-        sod_print("\neax: ");
-        sod_print_ptr(state->eax);
-        sod_print(" ebx: ");
-        sod_print_ptr(state->ebx);
-        sod_print(" ecx: ");
-        sod_print_ptr(state->ecx);
-        sod_print(" edx: ");
-        sod_print_ptr(state->edx);
-
-        sod_print("\nesi: ");
-        sod_print_ptr(state->esi);
-        sod_print(" edi: ");
-        sod_print_ptr(state->edi);
-        sod_print(" ebp: ");
-        sod_print_ptr(state->ebp);
-        sod_print(" ksp: ");
-        if (state->cs & 3)
-            sod_print_ptr((uintptr_t)(state + 1));
-        else
-            sod_print_ptr((uintptr_t)(state + 1) - 8); // kein SS:ESP auf dem Stack
-
-        sod_print("\n");
-
-        if ((current_process != NULL) && (current_process->errno != NULL))
-        {
-            sod_print("\nerrno: ");
-            sod_print_ptr(*current_process->errno);
-            sod_print("\n");
-        }
-
-        for (;;)
-            cpu_halt();
+        format_panic("Unhandled exception\n\ncurrent process: %s (%i in %i)\n\n"
+                "exc: %p err: %p efl: %p cr2: %p\n"
+                " cs: %p eip: %p  ss: %p esp: %p\n"
+                " ds: %p  es: %p\n"
+                "eax: %p ebx: %p ecx: %p edx: %p\n"
+                "esi: %p edi: %p ebp: %p ksp: %p\n\n"
+                "errno: %i",
+                (current_process == NULL) ? "none" : current_process->name,
+                (current_process == NULL) ? -1 : current_process->pid,
+                (current_process == NULL) ? -1 : current_process->pgid,
+                state->int_vector, state->err_code, state->eflags, cr2,
+                state->cs, state->eip, (state->cs & 3) ? state->ss : SEG_SYS_DS, (state->cs & 3) ? state->esp : ksp,
+                state->ds, state->es,
+                state->eax, state->ebx, state->ecx, state->edx,
+                state->esi, state->edi, state->ebp, ksp,
+                (current_process == NULL) ? -1 : *current_process->errno);
     }
     else if ((state->int_vector & 0xF0) == 0x20)
     {

@@ -1,8 +1,6 @@
 format ELF
 use32
 
-extrn i386_common_isr
-
 section '.text' executable
 
 macro isr num
@@ -11,7 +9,7 @@ macro isr num
     int_stub_#num#:
     push  dword 0
     push  dword num
-    jmp   std_isr_handler
+    jmp   _asm_common_isr
 }
 
 macro err_isr num
@@ -19,7 +17,7 @@ macro err_isr num
     public int_stub_#num
     int_stub_#num#:
     push  dword num
-    jmp   std_isr_handler
+    jmp   _asm_common_isr
 }
 
 
@@ -61,7 +59,9 @@ isr 0x2E
 isr 0x2F
 
 
-std_isr_handler:
+extrn i386_common_isr
+public _asm_common_isr ; Für Backtraces
+_asm_common_isr:
 cld
 
 push  ds
