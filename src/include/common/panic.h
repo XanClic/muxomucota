@@ -5,5 +5,6 @@
 
 
 noreturn void panic(const char *msg);
+noreturn void format_panic(const char *format, ...);
 
 #endif
