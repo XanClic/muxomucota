@@ -770,7 +770,7 @@ pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer
 
     pop->errno = proc->errno;
 
-    pop->name[0] = 0;
+    strcpy(pop->name, "[popup]");
 
     pop->popup_stack_mask = NULL;
     pop->popup_stack_index = stack_index;
