@@ -273,6 +273,16 @@ static int change_dir(void)
     return 0;
 }
 
+
+static int clear(void)
+{
+    printf("\033[2J\033[H");
+    fflush(stdout);
+
+    return 0;
+}
+
+
 struct
 {
     const char name[8];
@@ -290,6 +300,10 @@ struct
     {
         .name = "cd",
         .function = &change_dir
+    },
+    {
+        .name = "clear",
+        .function = &clear
     }
 };
 
