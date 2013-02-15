@@ -68,10 +68,10 @@ uintptr_t vmmc_create_shm(size_t sz)
 
 uintptr_t vmmc_make_shm(vmm_context_t *context, int count, void **vaddr_list, int *page_count_list, ptrdiff_t offset)
 {
-    kassert(count > 0);
+    kassert_print(count > 0, "count: %i", count);
 
     // Wie soll man damit sonst umgehen?
-    kassert((offset >= 0) && (offset < PAGE_SIZE));
+    kassert_print((offset >= 0) && (offset < PAGE_SIZE), "offset: %p", offset);
 
 
     int pages = 0;
@@ -94,11 +94,11 @@ uintptr_t vmmc_make_shm(vmm_context_t *context, int count, void **vaddr_list, in
             uintptr_t dst;
             uintptr_t vaddr = ((uintptr_t)vaddr_list[i] & ~(PAGE_SIZE - 1)) + (uintptr_t)j * PAGE_SIZE;
 
-            kassert_exec(vmmc_address_mapped(context, (void *)vaddr, &dst) & (VMM_UR | VMM_UW));
+            kassert_exec_print(vmmc_address_mapped(context, (void *)vaddr, &dst) & (VMM_UR | VMM_UW), "vaddr: %p", vaddr);
 
             // Sanity checks
-            kassert(vaddr < PHYS_BASE);
-            kassert(pmm_alloced(dst));
+            kassert_print(vaddr < PHYS_BASE, "vaddr: %p\nPHYS_BASE: %p", vaddr, PHYS_BASE);
+            kassert_print(pmm_alloced(dst), "dst: %p", dst);
 
             sg->phys[k] = dst;
         }
