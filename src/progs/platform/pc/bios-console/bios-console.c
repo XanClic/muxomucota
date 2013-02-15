@@ -1,5 +1,6 @@
 #include <drivers.h>
 #include <drivers/memory.h>
+#include <drivers/ports.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -81,6 +82,17 @@ static void clrscr(int fg, int bg)
 
     for (int i = 0; i < 1000; i++)
         *(dst++) = mask;
+}
+
+
+static void display_cursor(uint8_t x, uint8_t y)
+{
+    uint16_t tmp = y * 80 + x;
+
+    out8(0x3D4, 14);
+    out8(0x3D5, tmp >> 8);
+    out8(0x3D4, 15);
+    out8(0x3D5, tmp);
 }
 
 
@@ -247,12 +259,17 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
                         {
                             int nx, ny;
                             const char *np = saved_pos;
-                            ny = strtol(np, (char **)&np, 10) - 1;
-                            if ((*np != ';') || (ny < 0) || (ny >= 25))
-                                continue;
-                            nx = strtol(np + 1, (char **)&np, 10) - 1;
-                            if ((*np != 'f') || (nx < 0) || (nx >= 80))
-                                continue;
+                            if (np == s - 1)
+                                nx = ny = 0;
+                            else
+                            {
+                                ny = strtol(np, (char **)&np, 10) - 1;
+                                if ((*np != ';') || (ny < 0) || (ny >= 25))
+                                    continue;
+                                nx = strtol(np + 1, (char **)&np, 10) - 1;
+                                if ((*np != 'f') || (nx < 0) || (nx >= 80))
+                                    continue;
+                            }
                             x = nx;
                             y = ny;
                             break;
@@ -414,6 +431,10 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
         }
     }
 
+
+    display_cursor(x, y);
+
+
     unlock(&output_lock);
 
 
@@ -462,9 +483,14 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
 
 int main(void)
 {
+    // Für display_cursor().
+    iopl(3);
+
+
     text_mem = map_memory(0xB8000, 80 * 25 * 2, VMM_UW);
 
-    memset(text_mem, 0, 80 * 25 * 2);
+    for (int i = 0; i < 80 * 25; i++)
+        text_mem[i] = 0x0700;
 
 
     daemonize("tty");
