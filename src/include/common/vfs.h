@@ -10,6 +10,7 @@
 
 #define __MFILE 32
 
+// create_pipe-Flags
 #define O_RDONLY      (1 << 0)
 #define O_WRONLY      (1 << 1)
 #define O_RDWR        (O_RDONLY | O_WRONLY)
@@ -18,6 +19,11 @@
 #define O_TRUNC       (1 << 4)
 #define O_APPEND      (1 << 5)
 #define O_NOFOLLOW    (1 << 6)
+
+// stream_send/stream_recv-Flags
+#define O_NONBLOCK    (1 << 0)
+#define O_BLOCKING    !O_NONBLOCK
+
 
 enum
 {

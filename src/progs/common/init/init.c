@@ -91,10 +91,16 @@ int main(int argc, char *argv[])
     destroy_pipe(fd, 0);
 
 
+    bool echo = true;
+
+
     STRTOK_FOREACH(commands, "\n", line)
     {
-        printf("$ %-71s", line);
-        fflush(stdout);
+        if (echo)
+        {
+            printf("$ %-71s", line);
+            fflush(stdout);
+        }
 
         int c_argc;
         const char *l = line;
@@ -115,7 +121,20 @@ int main(int argc, char *argv[])
             destroy_pipe(STDIN_FILENO, 0);
             infd = create_pipe(c_argv[1], O_RDONLY);
             assert(infd == STDIN_FILENO);
-            printf("\033[1m[\033[32mDONE");
+            if (echo)
+                printf("\033[1m[\033[32mDONE\033[0;1m]\033[0m\n");
+        }
+        else if (!strcmp(c_argv[0], "@echo"))
+        {
+            if (!strcmp(c_argv[1], "off"))
+            {
+                echo = false;
+                printf("\033[1m[\033[32mDONE\033[0;1m]\033[0m\n");
+            }
+            else if (!strcmp(c_argv[1], "on"))
+                echo = true;
+            else if (echo)
+                printf("\033[1m[\033[31mINVA\033[0;1m]\033[0m\n");
         }
         else
         {
@@ -129,25 +148,29 @@ int main(int argc, char *argv[])
             }
 
 
-            if (daemon)
+            if (daemon && echo)
                 printf("\033[1m[\033[0mBKGN");
-            else
+            else if (!daemon)
             {
                 int status;
                 waitpid(child, &status, 0);
 
-                printf("\033[1m[");
+                if (echo)
+                {
+                    printf("\033[1m[");
 
-                if (!WIFEXITED(status))
-                    printf("\033[31mCRSH");
-                else if (WEXITSTATUS(status))
-                    printf("\033[31mE%03i", WEXITSTATUS(status));
-                else
-                    printf("\033[32mDONE");
+                    if (!WIFEXITED(status))
+                        printf("\033[31mCRSH");
+                    else if (WEXITSTATUS(status))
+                        printf("\033[31mE%03i", WEXITSTATUS(status));
+                    else
+                        printf("\033[32mDONE");
+                }
             }
-        }
 
-        printf("\033[0;1m]\033[0m\n");
+            if (echo)
+                printf("\033[0;1m]\033[0m\n");
+        }
     }
 
 
