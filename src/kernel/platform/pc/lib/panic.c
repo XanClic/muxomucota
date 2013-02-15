@@ -2,10 +2,12 @@
 #include <cpu.h>
 #include <ksym.h>
 #include <panic.h>
+#include <process.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdnoreturn.h>
+#include <vmem.h>
 
 
 noreturn void panic(const char *msg)
@@ -42,7 +44,9 @@ noreturn void panic(const char *msg)
 
     y += 2;
 
-    while (ebp != NULL)
+
+    uintptr_t phys_ebp;
+    while ((ebp != NULL) && vmmc_address_mapped(current_process->vmmc, ebp, &phys_ebp))
     {
         dst = (int8_t *)((0xb8000 | PHYS_BASE) + y++ * 160);
 
