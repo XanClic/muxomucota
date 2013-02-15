@@ -153,7 +153,9 @@ struct cpu_state *i386_common_isr(struct cpu_state *state)
 
         uintptr_t ksp = (state->cs & 3) ? (uintptr_t)(state + 1) : ((uintptr_t)(state + 1) - sizeof(state->ss) - sizeof(state->esp));
 
-        format_panic("Unhandled exception\n\ncurrent process: %s (%i in %i)\n\n"
+        process_t *main_process = (current_process == NULL) ? NULL : find_process(current_process->pgid);
+
+        format_panic("Unhandled exception\n\ncurrent process: %s in %s (%i in %i)\n\n"
                 "exc: %p err: %p efl: %p cr2: %p\n"
                 " cs: %p eip: %p  ss: %p esp: %p\n"
                 " ds: %p  es: %p\n"
@@ -161,6 +163,7 @@ struct cpu_state *i386_common_isr(struct cpu_state *state)
                 "esi: %p edi: %p ebp: %p ksp: %p\n\n"
                 "errno: %i",
                 (current_process == NULL) ? "none" : current_process->name,
+                (main_process == NULL) ? "none" : main_process->name,
                 (current_process == NULL) ? -1 : current_process->pid,
                 (current_process == NULL) ? -1 : current_process->pgid,
                 state->int_vector, state->err_code, state->eflags, cr2,
