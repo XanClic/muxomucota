@@ -126,7 +126,7 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
 
     size_t omsz = size;
 
-    while (*s && size)
+    while (size)
     {
         unsigned uni = 0;
         const char *d = s;
@@ -415,17 +415,23 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
                 }
                 output = &text_mem[y * 80 + x];
                 break;
+            case 0:
+                break;
             case '\t':
                 uni = ' '; // FIXME
             default:
                 *(output++) = get_c437_from_unicode(uni) | (tp->fg << 8) | (tp->bg << 12);
+
                 if (++x >= 80)
                 {
                     x -= 80;
+
                     if (++y >= 25)
                     {
                         scroll_down();
                         y--;
+
+                        output -= 80; // Eine Zeile nach oben
                     }
                 }
         }
