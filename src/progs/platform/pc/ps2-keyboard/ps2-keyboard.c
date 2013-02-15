@@ -11,6 +11,9 @@
 #include <vfs.h>
 
 
+static bool echo_keys = true;
+
+
 static char *fifo_buffer;
 static int fifo_read_idx = 0, fifo_write_idx = 0;
 static lock_t fifo_lock = unlocked;
@@ -89,10 +92,12 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
 int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
 {
     (void)id;
-    (void)value;
 
     switch (flag)
     {
+        case F_ECHO:
+            echo_keys = value;
+            return 0;
         case F_FLUSH:
             return 0;
     }
@@ -104,7 +109,6 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
 big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int flags)
 {
     (void)id;
-    (void)flags;
 
     big_size_t got;
     char *out_stream = data;
@@ -113,7 +117,16 @@ big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int fl
     {
         int chr = fifo_read();
         if (chr == EOF)
-            break;
+        {
+            if (flags & O_NONBLOCK)
+                break;
+            else
+            {
+                yield();
+                got--;
+                continue;
+            }
+        }
 
         out_stream[got] = chr;
     }
@@ -305,7 +318,8 @@ static void flush_input_queue(void)
                 fifo_write(echo[i]);
             }
 
-            printf("%s", echo);
+            if (echo_keys)
+                printf("%s", echo);
         }
         else
         {

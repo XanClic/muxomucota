@@ -1,6 +1,8 @@
 #ifndef _UNISTD_H
 #define _UNISTD_H
 
+#include <stddef.h>
+
 #ifdef KERNEL
 #include <cpu-state.h>
 #endif
@@ -23,5 +25,7 @@ int execvp(const char *file, char *const argv[]);
 int chdir(const char *path);
 
 pid_t getpid(void);
+
+char *getcwd(char *buf, size_t size);
 
 #endif

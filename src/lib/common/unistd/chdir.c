@@ -29,7 +29,7 @@ int chdir(const char *path)
 
     _cwd = strdup(path);
 
-    setenv("_SYS_PWD", "/", 1);
+    setenv("_SYS_PWD", _cwd, 1);
 
 
     return 0;
