@@ -59,7 +59,7 @@ Dir.entries('root').map { |f| "root/#{f}" }.each do |f|
     next unless File.file?(f)
 
     system("cp #{f} root-unstripped")
-    system("strip -s '#{f}' 2> /dev/null")
+    system("strip -s '#{f}' 2> /dev/null") unless f == 'root/kernel' # Kernel wegen Backtraces nicht strippen
     system("gzip -9 '#{f}'")
 
     File.rename("#{f}.gz", f)
