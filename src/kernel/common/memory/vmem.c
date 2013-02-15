@@ -98,7 +98,10 @@ uintptr_t vmmc_make_shm(vmm_context_t *context, int count, void **vaddr_list, in
             kassert_print((map_flags & (VMM_UR | VMM_UW)) || !map_flags, "vaddr: %p", vaddr);
 
             if (!map_flags)
+            {
                 kassert_exec_print(vmmc_do_lazy_map(context, (void *)vaddr), "vaddr: %p", vaddr);
+                kassert_print(vmmc_address_mapped(context, (void *)vaddr, &dst) & (VMM_UR | VMM_UW), "vaddr: %p", vaddr);
+            }
 
             // Sanity checks
             kassert_print(vaddr < PHYS_BASE, "vaddr: %p\nPHYS_BASE: %p", vaddr, PHYS_BASE);
