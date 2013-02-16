@@ -37,7 +37,7 @@ noreturn void _start(int argc, char *argv[], char *envp[])
 
 
     const char *cwd = getenv("_SYS_PWD");
-    chdir((cwd == NULL) ? "/bwbw" : cwd);
+    chdir((cwd == NULL) ? "/" : cwd);
 
 
     exit(main(argc, argv, envp));

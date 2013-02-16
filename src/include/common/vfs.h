@@ -29,6 +29,7 @@ enum
 {
 #include <vfs/interfaces/file.h>
 #include <vfs/interfaces/fs.h>
+#include <vfs/interfaces/statable.h>
 #include <vfs/interfaces/tty.h>
 };
 
@@ -42,6 +43,7 @@ enum
 
 #include <vfs/flags/file.h>
 #include <vfs/flags/fs.h>
+#include <vfs/flags/statable.h>
 #include <vfs/flags/tty.h>
 };
 

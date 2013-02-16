@@ -12,6 +12,57 @@ lock_t _pipe_allocation_lock;
 extern char *_cwd;
 
 
+void __simplify_path(char *path);
+
+void __simplify_path(char *path)
+{
+    size_t len = strlen(path) + 1;
+
+    for (char *part = strchr(path, '/'); part != NULL; part = strchr(part + 1, '/'))
+    {
+        while (part[1] == '/')
+            memmove(&part[1], &part[2], &path[len] - part - 2);
+
+        if (!part[1])
+        {
+            part[0] = 0;
+            break;
+        }
+
+        while ((part[1] == '.') && (part[2] == '/'))
+            memmove(&part[1], &part[3], &path[len] - part - 3);
+
+        if ((part[1] == '.') && !part[2])
+        {
+            part[0] = 0;
+            break;
+        }
+
+        while ((part[1] == '.') && (part[2] == '.') && ((part[3] == '/') || !part[3]))
+        {
+            char *prev = part - 1;
+            while ((prev > path) && (*prev != '/'))
+                prev--;
+
+            if (*prev != '/')
+                break;
+
+            if (part[3])
+            {
+                memmove(&prev[1], &part[4], &path[len] - part - 4);
+                part = prev;
+            }
+            else
+            {
+                prev[0] = 0;
+                part = prev;
+                break;
+            }
+        }
+    }
+}
+
+
 static bool extract_path(const char *fullpath, char *service, char *relpath)
 {
     if (!*fullpath)
@@ -33,7 +84,10 @@ static bool extract_path(const char *fullpath, char *service, char *relpath)
 
             if ((colon == NULL) || (slash == NULL) || (colon + 1 != slash))
             {
-                char realpath[strlen(_cwd) + strlen(fullpath) + 2];
+                if (_cwd == NULL)
+                    return false;
+
+                char realpath[strlen(_cwd) + 1 + strlen(fullpath) + 1];
 
                 strcpy(realpath, _cwd);
                 strcat(realpath, "/");
@@ -53,20 +107,13 @@ static bool extract_path(const char *fullpath, char *service, char *relpath)
         if (!expect_brackets && (*(fullpath++) != '/'))
             return false;
 
-        if (*fullpath != '/')
+        if (*fullpath && (*fullpath != '/'))
             return false;
     }
 
-    while (*fullpath)
-    {
-        // TODO: Auch . und .. behandeln
-        if ((fullpath[0] == '/') && (fullpath[1] == '/'))
-            fullpath++;
-        else
-            *(relpath++) = *(fullpath++);
-    }
+    strcpy(relpath, fullpath);
 
-    *relpath = 0;
+    __simplify_path(relpath);
 
     return true;
 }
@@ -94,7 +141,10 @@ int create_pipe(const char *path, int flags)
             if (len < 4) // Platz für (root) in procname
                 len = 4;
 
-            char procname[len + 1], relpath[len + 1 + sizeof(int)];
+            // evtl. muss da auch das CWD rein
+            size_t relpath_maxlen = ((_cwd == NULL) ? 0 : (strlen(_cwd) + 1)) + len + 1 + sizeof(int);
+
+            char procname[len + 1], relpath[relpath_maxlen];
 
             // FIXME
             struct ipc_create_pipe *ipc_cp = (struct ipc_create_pipe *)relpath;

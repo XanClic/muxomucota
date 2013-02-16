@@ -195,6 +195,9 @@ static int echo_help(void)
     return 0;
 }
 
+
+extern void __simplify_path(char *path);
+
 static int change_dir(void)
 {
     const char *dir = cmdtok(NULL);
@@ -208,63 +211,36 @@ static int change_dir(void)
     size_t total_sz = strlen(getenv("PWD")) + 1 + strlen(dir) + 1;
     char curpath[total_sz];
 
-    if (dir[0] == '/')
-        curpath[0] = 0;
-    else
+
+    curpath[0] = 0;
+
+    if ((dir[0] != '/') && (dir[0] != '('))
     {
-        strcpy(curpath, getenv("PWD"));
-        strcat(curpath, "/");
+        const char *colon = strchr(dir, ':');
+        const char *slash = strchr(dir, '/');
+
+        if ((colon == NULL) || (slash == NULL) || (colon + 1 != slash))
+        {
+            strcpy(curpath, getenv("PWD"));
+            strcat(curpath, "/");
+        }
     }
 
     strcat(curpath, dir);
 
-    if (chdir(dir))
+    if (chdir(curpath))
     {
         fprintf(stderr, "cd: %s: %s\n", dir, strerror(errno));
         return 1;
     }
 
-    for (char *part = strchr(curpath, '/'); part != NULL; part = strchr(part + 1, '/'))
+    // Gewusst, wie
+    __simplify_path(curpath);
+
+    if (!curpath[0])
     {
-        while (part[1] == '/')
-            memmove(&part[1], &part[2], &curpath[total_sz] - part - 2);
-
-        if (!part[1])
-        {
-            part[0] = 0;
-            break;
-        }
-
-        while ((part[1] == '.') && (part[2] == '/'))
-            memmove(&part[1], &part[3], &curpath[total_sz] - part - 3);
-
-        if ((part[1] == '.') && !part[2])
-        {
-            part[0] = 0;
-            break;
-        }
-
-        while ((part[1] == '.') && (part[2] == '.') && ((part[3] == '/') || !part[4]))
-        {
-            char *prev = part - 1;
-            while ((prev > curpath) && (*prev != '/'))
-                prev--;
-
-            if (*prev != '/')
-                break;
-
-            if (part[4])
-            {
-                memmove(&prev[1], &part[4], &curpath[total_sz] - part - 4);
-                part = prev;
-            }
-            else
-            {
-                prev[0] = 0;
-                part = prev;
-                break;
-            }
-        }
+        curpath[0] = '/';
+        curpath[1] = 0;
     }
 
     setenv("OLDPWD", getenv("PWD"), 1);
