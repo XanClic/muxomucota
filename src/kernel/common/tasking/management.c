@@ -359,6 +359,12 @@ pid_t find_daemon_by_name(const char *name)
 
     process_t *p = daemons;
 
+    if (p == NULL)
+    {
+        unlock(&daemons_lock);
+        return -1;
+    }
+
     if (!strncmp(p->name, name, sizeof(p->name)))
     {
         unlock(&daemons_lock);
