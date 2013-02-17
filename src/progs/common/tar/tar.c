@@ -313,6 +313,8 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
     {
         struct tar_node **tp = &f->mp->tar, *final = NULL;
 
+        bool isdir = header->filename[strlen(header->filename) - 1] == '/';
+
         STRTOK_FOREACH(header->filename, "/", part)
         {
             if (!*part)
@@ -350,6 +352,9 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
         final->uid   = parse_tar_number(header->uid, sizeof(header->uid));
         final->gid   = parse_tar_number(header->gid, sizeof(header->gid));
         final->mtime = parse_tar_number(header->mtime, sizeof(header->mtime));
+
+        if (!(final->mode & S_IFMT))
+            final->mode |= isdir ? S_IFDIR : S_IFREG;
 
         if (final->sz)
         {

@@ -55,7 +55,7 @@ int main(int argc, char *argv[])
     printf("stdin/stdout/stderr via %s.\n\n", tty);
 
 
-    setenv("PATH", "/", 1);
+    setenv("PATH", "/bin", 1);
 
     chdir("/");
     setenv("PWD", "/", 1);

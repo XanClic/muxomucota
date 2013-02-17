@@ -1,6 +1,9 @@
 #!/usr/bin/env ruby
 # coding: utf-8
 
+require 'find'
+
+
 Dir.chdir('build')
 
 ENV['MTOOLSRC'] = 'myxomycota.cfg'
@@ -48,18 +51,18 @@ initrd_files = Dir.entries('root').reject { |f| ['initrd.tar', 'boot', '.', '..'
 Dir.chdir('root')
 
 puts('%-8s%s' % ['TAR', '>initrd.tar'])
-exit 1 unless system("tar cf initrd.tar #{initrd_files.map { |f| "'#{f}'" } * ' '}")
+exit 1 unless system("tar cf boot/initrd.tar #{initrd_files.map { |f| "'#{f}'" } * ' '}")
 
 Dir.chdir('..')
 
 
 puts("STRIP'n'ZIP")
 
-Dir.entries('root').map { |f| "root/#{f}" }.each do |f|
+Find.find('root').select { |f| File.file?(f) }.each do |f|
     next unless File.file?(f)
 
     system("cp #{f} root-unstripped")
-    system("strip -s '#{f}' 2> /dev/null") unless f == 'root/kernel' # Kernel wegen Backtraces nicht strippen
+    system("strip -s '#{f}' 2> /dev/null") unless f == 'root/kernel/kernel' # Kernel wegen Backtraces nicht strippen
     system("gzip -9 '#{f}'")
 
     File.rename("#{f}.gz", f)
@@ -74,7 +77,7 @@ puts('%-8s%s' % ['MFMT', 'floppy.img'])
 exit 1 unless system('mformat -l MYXOMYCOTA x: > /dev/null')
 
 puts('%-8s%s' % ['CP', 'root/... -> floppy.img/'])
-exit 1 unless system("mcopy -s root/boot #{relevant_files.map { |f| "'root/#{f}'" } * ' '} x:/ > /dev/null")
+exit 1 unless system("mcopy -s root/{bin,boot,etc} x:/ > /dev/null")
 
 puts('%-8s%s' % ['GRUB', 'floppy.img'])
 exit 1 unless system("echo -e 'device (fd0) images/floppy.img\nroot (fd0)\nsetup (fd0)\nquit' | grub --batch &> /dev/null")

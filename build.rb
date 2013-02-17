@@ -109,7 +109,7 @@ Trollop::die('Unsupported target') unless ['clean', 'all'].include?(target)
 
 
 
-exit 1 unless system('mkdir -p build/root')  if target == 'all'
+exit 1 unless system('mkdir -p build/root/{bin,boot,etc}') if target == 'all'
 
 image_root = "#{Dir.pwd}/build/root"
 
@@ -203,7 +203,7 @@ threads = Array.new
 
 
         if dir == 'progs'
-            ret = [['LD', ">#{sd}"], "#{pars[:ld][:cmd]} #{pars[:ld][:flags]} #{objdir}/#{objprefix}__*.o ../lib/crt/*.o -L../lib -o '#{image_root}/#{File.basename(sd)}' -\\( -lc #{pars[:ld][:libs]} -\\)"]
+            ret = [['LD', ">#{sd}"], "#{pars[:ld][:cmd]} #{pars[:ld][:flags]} #{objdir}/#{objprefix}__*.o ../lib/crt/*.o -L../lib -o '#{image_root}/bin/#{File.basename(sd)}' -\\( -lc #{pars[:ld][:libs]} -\\)"]
 
             ret += " && #{pars[:strip][:cmd]} #{pars[:strip][:flags]} #{progdir}/#{File.basename(sd)}" if pars[:strip]
 
@@ -261,7 +261,7 @@ threads = Array.new
     when 'kernel'
         puts('<<< . >>>')
         puts('%-8s%s' % ['LD', '>kernel'])
-        exit 1 unless system("#{pars[:ld][:cmd]} #{pars[:ld][:flags]} obj/*.o -o '#{image_root}/kernel' #{pars[:ld][:libs]}")
+        exit 1 unless system("#{pars[:ld][:cmd]} #{pars[:ld][:flags]} obj/*.o -o '#{image_root}/boot/kernel' #{pars[:ld][:libs]}")
     when 'lib'
         puts('<<< . >>>')
         [ 'c', 'm' ].each do |lib|
@@ -308,14 +308,14 @@ else
             image_dir = pathparts.join('/')
 
             puts('%-8s%s' % ['MKDIR', image_dir])
-            exit 1 unless system("mkdir -p '#{image_root}/#{image_dir}'")
+            exit 1 unless system("mkdir -p '#{image_root}/etc/#{image_dir}'")
         end
 
         Dir.new(sd).each do |file|
             next unless File.file?("#{sd}/#{file}")
 
             puts('%-8s%s' % ['CP', file])
-            exit 1 unless system("cp '#{sd}/#{file}' '#{image_root}/#{image_dir}/#{file}'")
+            exit 1 unless system("cp '#{sd}/#{file}' '#{image_root}/etc/#{image_dir}/#{file}'")
         end
     end
 
@@ -327,7 +327,6 @@ end
 exit 1 unless system("mkdir -p build/images")
 
 if target == 'all'
-    # build initrd here
     puts("——— image ———")
     exit 1 unless system("build/scripts/#{arch}-#{platform}-#{image}.rb")
 else
