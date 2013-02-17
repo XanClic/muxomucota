@@ -18,10 +18,17 @@ void __simplify_path(char *path)
 {
     size_t len = strlen(path) + 1;
 
-    for (char *part = strchr(path, '/'); part != NULL; part = strchr(part + 1, '/'))
+    int changed_anything = 0;
+
+    for (char *part = strchr(path, '/'); part != NULL; part = strchr(part + !changed_anything, '/'))
     {
+        changed_anything = 0;
+
         while (part[1] == '/')
+        {
             memmove(&part[1], &part[2], &path[len] - part - 2);
+            changed_anything = 1;
+        }
 
         if (!part[1])
         {
@@ -30,7 +37,10 @@ void __simplify_path(char *path)
         }
 
         while ((part[1] == '.') && (part[2] == '/'))
+        {
             memmove(&part[1], &part[3], &path[len] - part - 3);
+            changed_anything = 1;
+        }
 
         if ((part[1] == '.') && !part[2])
         {
@@ -58,6 +68,8 @@ void __simplify_path(char *path)
                 part = prev;
                 break;
             }
+
+            changed_anything = 1;
         }
     }
 }
