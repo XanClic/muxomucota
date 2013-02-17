@@ -234,8 +234,14 @@ static int change_dir(void)
         return 1;
     }
 
-    // Gewusst, wie
-    __simplify_path(curpath);
+    // Gewusst, wie (__simplify_path)
+    if ((curpath[0] == '/') || (curpath[0] == '('))
+        __simplify_path(curpath);
+    else
+    {
+        // bspw. "tar://blub", erst ab dem zweiten Slash arbeiten (sonst werden beide zusammengestrichen)
+        __simplify_path(strchr(curpath, ':') + 2);
+    }
 
     if (!curpath[0])
     {

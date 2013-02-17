@@ -81,8 +81,7 @@ static void list(const char *cmd, const char *dir)
 
     pmem = malloc(strlen(dir) + 256 + 2);
     strcpy(pmem, dir);
-    if (pmem[strlen(pmem) - 1] != '/')
-        strcat(pmem, "/");
+    strcat(pmem, "/");
 
     pmemp = &pmem[strlen(pmem)];
 
