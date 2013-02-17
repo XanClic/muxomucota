@@ -57,6 +57,8 @@ void __simplify_path(char *path)
             if (*prev != '/')
                 break;
 
+            changed_anything = 1;
+
             if (part[3])
             {
                 memmove(&prev[1], &part[4], &path[len] - part - 4);
@@ -68,8 +70,6 @@ void __simplify_path(char *path)
                 part = prev;
                 break;
             }
-
-            changed_anything = 1;
         }
     }
 }
