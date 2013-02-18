@@ -20,6 +20,13 @@ static void wait_for(const char *name)
 
 int main(int argc, char *argv[])
 {
+    if (getpid() != 1)
+    {
+        fprintf(stderr, "%s: No init commands available.\n", argv[0]);
+        return 1;
+    }
+
+
     const char *tty = NULL, *script = NULL;
 
     for (int i = 0; i < argc; i++)

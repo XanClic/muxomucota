@@ -26,7 +26,7 @@ process_t *current_process, *idle_process, *runqueue, *daemons, *zombies, *dead;
 
 static inline pid_t get_new_pid(void)
 {
-    static pid_t pid_counter = 0;
+    static pid_t pid_counter = 1;
 
     return __sync_fetch_and_add(&pid_counter, 1);
 }
