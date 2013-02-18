@@ -19,7 +19,7 @@
 // FIXME: Die Ringlisten sind doof.
 
 
-lock_t runqueue_lock = unlocked, daemons_lock = unlocked, zombies_lock = unlocked, dead_lock = unlocked; // haha dead_lock
+lock_t runqueue_lock = LOCK_INITIALIZER, daemons_lock = LOCK_INITIALIZER, zombies_lock = LOCK_INITIALIZER, dead_lock = LOCK_INITIALIZER; // haha dead_lock
 
 
 process_t *current_process, *idle_process, *runqueue, *daemons, *zombies, *dead;
@@ -48,6 +48,8 @@ process_t *create_empty_process(const char *name)
 
     p->popup_stack_mask = NULL;
     p->popup_stack_index = -1;
+
+    p->handles_irqs = false;
 
 
     initialize_orphan_process_arch(p);
@@ -220,6 +222,8 @@ void make_idle_process(void)
     idle_process->rq_next = idle_process;
     idle_process->next    = idle_process;
 
+    idle_process->handles_irqs = false;
+
 
     initialize_orphan_process_arch(idle_process);
 
@@ -247,6 +251,8 @@ process_t *create_kernel_thread(const char *name, void (*function)(void), void *
 
     p->popup_stack_mask = NULL;
     p->popup_stack_index = -1;
+
+    p->handles_irqs = false;
 
 
     initialize_orphan_process_arch(p);
@@ -677,7 +683,7 @@ pid_t raw_waitpid(pid_t pid, uintmax_t *status, int options)
 
     // FIXME: Das ist alles ziemlich fehleranfällig
     while (proc->status != PROCESS_ZOMBIE)
-        yield();
+        yield_to(proc->pid);
 
     lock(&zombies_lock);
     q_unregister_process(&zombies, (process_t *)proc);
@@ -726,7 +732,8 @@ void daemonize_process(process_t *proc, const char *name)
 
     lock(&runqueue_lock);
 
-    q_unregister_process(&runqueue, proc);
+    if (!proc->handles_irqs)
+        q_unregister_process(&runqueue, proc);
 
     // yay potentieller dead lock (FIXME, btw)
     lock(&daemons_lock);
@@ -747,13 +754,7 @@ void daemonize_process(process_t *proc, const char *name)
 
 void daemonize_from_irq_handler(process_t *proc)
 {
-    lock(&runqueue_lock);
-
-    q_unregister_process(&runqueue, current_process);
-
     proc->status = PROCESS_DAEMON;
-
-    unlock(&runqueue_lock);
 
     if (proc == current_process)
         for (;;)
@@ -827,6 +828,8 @@ pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer
 
     pop->popup_stack_mask = NULL;
     pop->popup_stack_index = stack_index;
+
+    pop->handles_irqs = false;
 
 
     initialize_child_process_arch(pop, proc);

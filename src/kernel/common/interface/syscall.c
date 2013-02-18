@@ -181,7 +181,7 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
             return (uintptr_t)context_sbrk(current_process->vmmc, (ptrdiff_t)p0);
 
         case SYS_YIELD:
-            yield();
+            yield_to(p0);
             return 0;
 
         case SYS_FORK:

@@ -70,16 +70,19 @@ typedef struct process
 
 
     uintmax_t exit_info;
+
+
+    bool handles_irqs;
 } process_t;
 
 
 extern process_t *current_process;
 
 
-struct cpu_state *dispatch(struct cpu_state *state);
+struct cpu_state *dispatch(struct cpu_state *state, pid_t switch_to);
 void arch_process_change(process_t *new_process);
 
-process_t *schedule(void);
+process_t *schedule(pid_t schedule_to);
 
 
 process_t *create_empty_process(const char *name);

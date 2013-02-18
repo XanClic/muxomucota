@@ -1,12 +1,12 @@
 format ELF
 use32
 
-public yield
+public yield_to
 extrn dispatch
 
 section '.text' executable
 
-yield:
+yield_to:
 pushfd
 push    dword 0x08
 push    dword yield_return
@@ -22,7 +22,10 @@ push    esi
 push    edi
 push    ebp
 
-push    esp
+mov     eax,esp
+
+push    dword [eax+0x4c] ; Erster Parameter
+push    eax
 call    dispatch
 mov     esp,eax
 

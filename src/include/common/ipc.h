@@ -53,6 +53,7 @@ uintmax_t ipc_shm_message_synced(pid_t pid, int func_index, uintptr_t shmid, con
 pid_t find_daemon_by_name(const char *name);
 
 
-void yield(void);
+void yield_to(pid_t pid);
+static inline void yield(void) { yield_to(-1); }
 
 #endif

@@ -60,6 +60,9 @@ void register_user_isr(int irq, process_t *process, void (*process_handler)(void
     nisr->process_handler = process_handler;
 
     register_isr(irq, nisr);
+
+
+    process->handles_irqs = true;
 }
 
 
@@ -83,7 +86,15 @@ void unregister_isr_process(process_t *process)
             }
         }
     }
+
+
+    process->handles_irqs = false;
+
+    // TODO: Prozess aus der Runqueue entfernen
 }
+
+
+extern lock_t runqueue_lock;
 
 
 void common_irq_handler(int irq)
@@ -94,14 +105,14 @@ void common_irq_handler(int irq)
     {
         if (isr->is_kernel)
             isr->kernel_handler();
-        else if (likely(__sync_bool_compare_and_swap(&isr->process->status, PROCESS_DAEMON, PROCESS_ACTIVE)))
+        else if (likely(__sync_bool_compare_and_swap(&isr->process->status, PROCESS_DAEMON, PROCESS_COMA)))
         {
             // Das funktioniert ohne jegliche Race Conditions, weil der Prozess
             // ein Daemon war, der sich nicht in der Runqueue befindet. Somit
             // gibt es auch keinen State, den man hier kaputtmachen könnte.
-            make_process_entry(isr->process, isr->process->cpu_state, isr->process_handler, (void *)USER_STACK_TOP);
+            make_process_entry(isr->process, isr->process->cpu_state, isr->process_handler, (void *)(USER_STACK_TOP - sizeof(struct tls)));
 
-            register_process(isr->process);
+            isr->process->status = PROCESS_ACTIVE;
         }
     }
 
