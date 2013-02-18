@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <tls.h>
 #include <vmem.h>
 #include <sys/types.h>
 
@@ -50,7 +51,7 @@ typedef struct process
 
     char name[32]; // FIXME
 
-    int *errno;
+    struct tls *tls;
 
 
     pid_t ppid;

@@ -1,4 +1,5 @@
 #include <cpu-state.h>
+#include <kassert.h>
 #include <process.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -9,6 +10,8 @@ bool handle_pagefault(struct cpu_state *state);
 
 bool handle_pagefault(struct cpu_state *state)
 {
+    kassert(current_process != NULL);
+
     uintptr_t cr2;
 
     __asm__ __volatile__ ("mov %0,%%cr2" : "=r"(cr2));

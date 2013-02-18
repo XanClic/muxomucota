@@ -171,7 +171,7 @@ struct cpu_state *i386_common_isr(struct cpu_state *state)
                 state->ds, state->es,
                 state->eax, state->ebx, state->ecx, state->edx,
                 state->esi, state->edi, state->ebp, ksp,
-                (current_process == NULL) ? -1 : *current_process->errno);
+                ((current_process == NULL) || (current_process->tls == NULL)) ? -1 : current_process->tls->errno);
     }
     else if ((state->int_vector & 0xF0) == 0x20)
     {

@@ -46,7 +46,7 @@ noreturn void panic(const char *msg)
 
 
     uintptr_t phys_ebp;
-    while ((ebp != NULL) && vmmc_address_mapped(current_process->vmmc, ebp, &phys_ebp))
+    while ((ebp != NULL) && (current_process != NULL) && vmmc_address_mapped(current_process->vmmc, ebp, &phys_ebp))
     {
         dst = (int8_t *)((0xb8000 | PHYS_BASE) + y++ * 160);
 

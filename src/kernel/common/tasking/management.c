@@ -44,6 +44,8 @@ process_t *create_empty_process(const char *name)
     strncpy(p->name, name, sizeof(p->name) - 1);
     p->name[sizeof(p->name) - 1] = 0;
 
+    p->tls = NULL;
+
     p->popup_stack_mask = NULL;
     p->popup_stack_index = -1;
 
@@ -66,6 +68,29 @@ process_t *create_empty_process(const char *name)
 void make_process_entry(process_t *proc, struct cpu_state *state, void (*address)(void), void *stack)
 {
     initialize_cpu_state(proc, state, address, stack, 0);
+
+    if (proc->tls == NULL)
+    {
+        proc->tls = (struct tls *)stack - 1;
+
+        vmmc_do_lazy_map(proc->vmmc, proc->tls);
+
+        uintptr_t phys;
+        kassert_exec_print(vmmc_address_mapped(proc->vmmc, proc->tls, &phys), "proc->tls = %p", proc->tls);
+
+        struct tls *tls = kernel_map(phys, sizeof(*tls));
+
+        tls->absolute = proc->tls;
+
+        tls->errno = 0;
+        tls->pid   = proc->pid;
+        tls->pgid  = proc->pgid;
+        tls->ppid  = proc->ppid;
+
+        kernel_unmap(tls, sizeof(*tls));
+
+        process_stack_alloc(state, sizeof(struct tls));
+    }
 }
 
 
@@ -157,7 +182,7 @@ void process_set_args(process_t *proc, struct cpu_state *state, int argc, const 
 
             char *f_d = kernel_map(paddr, PAGE_SIZE);
 
-            memcpy(f_d + out_off, src + copied, (page == end_p - 1) ? (len - copied) : (size_t)(PAGE_SIZE - out_off));
+            memcpy(f_d + out_off, src + copied, (page + PAGE_SIZE >= end_p) ? (len - copied) : (size_t)(PAGE_SIZE - out_off));
 
             copied += PAGE_SIZE - out_off;
             out_off = 0;
@@ -187,6 +212,8 @@ void make_idle_process(void)
 
     strcpy(idle_process->name, "[idle]");
 
+    idle_process->tls = NULL;
+
     idle_process->popup_stack_mask = NULL;
     idle_process->popup_stack_index = -1;
 
@@ -212,6 +239,8 @@ process_t *create_kernel_thread(const char *name, void (*function)(void), void *
 
     p->pgid = p->pid = get_new_pid();
     p->ppid = 0;
+
+    idle_process->tls = NULL;
 
     strncpy(p->name, name, sizeof(p->name) - 1);
     p->name[sizeof(p->name) - 1] = 0;
@@ -636,7 +665,7 @@ pid_t raw_waitpid(pid_t pid, uintmax_t *status, int options)
 
         if (proc == NULL)
         {
-            *current_process->errno = ECHILD;
+            current_process->tls->errno = ECHILD;
             return -1;
         }
     }
@@ -771,10 +800,28 @@ pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer
 
     pop->status = PROCESS_COMA;
 
-    pop->pid = get_new_pid();
+    pop->pid  = get_new_pid();
     pop->pgid = proc->pid;
+    pop->ppid = current_process->pid;
 
-    pop->errno = proc->errno;
+    pop->tls = (struct tls *)stack_top - 1;
+    stack_top = (uintptr_t)pop->tls;
+
+    vmmc_do_lazy_map(proc->vmmc, pop->tls);
+
+    uintptr_t phys;
+    kassert_exec_print(vmmc_address_mapped(proc->vmmc, pop->tls, &phys), "pop->tls = %p", pop->tls);
+
+    struct tls *tls = kernel_map(phys, sizeof(*tls));
+
+    tls->absolute = pop->tls;
+
+    tls->errno = 0;
+    tls->pid   = pop->pid;
+    tls->pgid  = pop->pgid;
+    tls->ppid  = pop->ppid;
+
+    kernel_unmap(tls, sizeof(*tls));
 
     strcpy(pop->name, "[popup]");
 
@@ -826,7 +873,7 @@ pid_t fork(struct cpu_state *current_state)
     if (current_process->popup_entry != NULL)
         set_process_popup_entry(child, current_process->popup_entry);
 
-    child->errno = current_process->errno;
+    child->tls = current_process->tls;
 
 
     vmmc_clone(child->vmmc, current_process->vmmc);
@@ -835,6 +882,20 @@ pid_t fork(struct cpu_state *current_state)
     initialize_child_process_arch(child, current_process);
 
     initialize_forked_cpu_state(child->cpu_state, current_state);
+
+
+    vmmc_do_lazy_map(child->vmmc, child->tls);
+
+    uintptr_t phys;
+    kassert_exec(vmmc_address_mapped(child->vmmc, child->tls, &phys));
+
+    struct tls *tls = kernel_map(phys, sizeof(*tls));
+
+    tls->pid  = child->pid;
+    tls->pgid = child->pgid;
+    tls->ppid = child->ppid;
+
+    kernel_unmap(tls, sizeof(*tls));
 
 
     register_process(child);
@@ -851,7 +912,7 @@ int exec(struct cpu_state *state, const void *file, size_t file_length, char *co
 {
     if (!check_process_file_image(file))
     {
-        *current_process->errno = ENOEXEC;
+        current_process->tls->errno = ENOEXEC;
         return -1;
     }
 
@@ -886,6 +947,8 @@ int exec(struct cpu_state *state, const void *file, size_t file_length, char *co
 
 
     vmmc_set_heap_top(current_process->vmmc, heap_start);
+
+    current_process->tls = NULL;
 
     make_process_entry(current_process, state, entry, (void *)USER_STACK_TOP);
 
