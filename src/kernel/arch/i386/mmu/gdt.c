@@ -2,6 +2,7 @@
 
 #include <compiler.h>
 #include <stdint.h>
+#include <tls.h>
 #include <vmem.h>
 #include <x86-segments.h>
 
@@ -13,15 +14,16 @@ struct tss x86_tss = {
 };
 
 
-static uint64_t gdt[6];
+static uint64_t gdt[7];
 
 void init_gdt(void)
 {
-    gdt[1] = UINT64_C(0x00CF9A000000FFFF); // Kernelcodesegment
-    gdt[2] = UINT64_C(0x00CF92000000FFFF); // Kerneldatensegment
-    gdt[3] = UINT64_C(0x00CEFA000000FFFF); // Usercodesegment
-    gdt[4] = UINT64_C(0x00CEF2000000FFFF); // Userdatensegment
-    gdt[5] = UINT64_C(0x0040E90000000000) | (sizeof(x86_tss) - 1); // TSS
+    gdt[1] = UINT64_C(0x00cf9a000000ffff); // Kernelcodesegment
+    gdt[2] = UINT64_C(0x00cf92000000ffff); // Kerneldatensegment
+    gdt[3] = UINT64_C(0x00cefa000000ffff); // Usercodesegment
+    gdt[4] = UINT64_C(0x00cef2000000ffff); // Userdatensegment
+    gdt[5] = UINT64_C(0x0040e90000000000) | (sizeof(x86_tss) - 1); // TSS
+    gdt[6] = UINT64_C(0x0040f20000000000); // TLS
 
     uint64_t tss_base = (uintptr_t)&x86_tss;
     gdt[5] |= (tss_base & 0x00FFFFFF) << 16;
@@ -48,10 +50,17 @@ void init_gdt(void)
                           "retf;"
                           "mov ds,ax;"
                           "mov es,ax;"
-                          "mov fs,ax;"
-                          "mov gs,ax;"
                           "mov ss,ax;"
                           :: "a"(SEG_SYS_DS), "b"(&gdtr) : "memory");
 
     __asm__ __volatile__ ("ltr %0" :: "r"((uint16_t)0x28));
+}
+
+
+void set_tls(struct tls *ptr)
+{
+    gdt[6] = UINT64_C(0x0040f20000000000) | sizeof(*ptr);
+
+    gdt[6] |= ((uint64_t)(uintptr_t)ptr & 0x00ffffff) << 16;
+    gdt[6] |= ((uint64_t)(uintptr_t)ptr & 0xff000000) << 32;
 }

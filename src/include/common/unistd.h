@@ -1,7 +1,9 @@
 #ifndef _UNISTD_H
 #define _UNISTD_H
 
+#include <errno.h>
 #include <stddef.h>
+#include <tls.h>
 
 #ifdef KERNEL
 #include <cpu-state.h>
@@ -23,9 +25,23 @@ pid_t fork(void);
 int execvp(const char *file, char *const argv[]);
 
 int chdir(const char *path);
-
-pid_t getpid(void);
-
 char *getcwd(char *buf, size_t size);
+
+
+#ifndef KERNEL
+static inline pid_t getpid(void)  { return __tls()->pid;  }
+static inline pid_t getppid(void) { return __tls()->ppid; }
+
+static inline pid_t getpgid(pid_t pid)
+{
+    if (!pid || (pid == getpid()))
+        return __tls()->pgid;
+    else
+    {
+        errno = EPERM;
+        return -1;
+    }
+}
+#endif
 
 #endif

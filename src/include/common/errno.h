@@ -1,6 +1,9 @@
 #ifndef _ERRNO_H
 #define _ERRNO_H
 
+#include <tls.h>
+
+
 #define EPERM            1  /* Operation not permitted */
 #define ENOENT           2  /* No such file or directory */
 #define ESRCH            3  /* No such process */
@@ -145,9 +148,7 @@
 #ifdef KERNEL
 #include <process.h>
 #else
-extern int errno;
-
-void set_errno(int *errno);
+#define errno (__tls()->errno)
 #endif
 
 #endif

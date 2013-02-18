@@ -4,10 +4,11 @@
 #include <compiler.h>
 #include <stdint.h>
 
-#define SEG_SYS_CS 0x0008
-#define SEG_SYS_DS 0x0010
-#define SEG_USR_CS 0x001B
-#define SEG_USR_DS 0x0023
+#define SEG_SYS_CS  0x0008
+#define SEG_SYS_DS  0x0010
+#define SEG_USR_CS  0x001B
+#define SEG_USR_DS  0x0023
+#define SEG_USR_TLS 0x0033
 
 struct tss
 {

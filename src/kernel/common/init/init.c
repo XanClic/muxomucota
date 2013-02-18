@@ -38,7 +38,7 @@ void main(void *boot_info)
             prime = tok + 6;
 
 
-    int prime_proc_load_count = (prime == NULL) ? 0 :strtok_count(prime, ",");
+    int prime_proc_load_count = (prime == NULL) ? 0 : strtok_count(prime, ",");
     char *prime_proc_names[prime_proc_load_count];
 
     if (prime != NULL)

@@ -7,7 +7,6 @@
 #include <unistd.h>
 
 
-int errno;
 char **environ;
 char *_cwd;
 
@@ -22,8 +21,6 @@ noreturn void _start(int argc, char *argv[], char *envp[]);
 
 noreturn void _start(int argc, char *argv[], char *envp[])
 {
-    set_errno(&errno);
-
     popup_entry(&_popup_ll_trampoline);
 
     _vfs_init();

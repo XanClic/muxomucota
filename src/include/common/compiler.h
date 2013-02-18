@@ -5,6 +5,7 @@
 #define cc_packed       __attribute__((packed))
 #define cc_noreturn     __attribute__((noreturn))
 #define cc_weak         __attribute__((weak))
+#define cc_pure         __attribute__((pure))
 #define cc_unreachable  __builtin_unreachable()
 #define cc_unused(func) func __attribute__((unused))
 #define likely(x)       __builtin_expect((x), 1)
