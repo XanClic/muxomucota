@@ -12,7 +12,7 @@ struct free_block
     size_t size;
 };
 
-volatile lock_t __heap_lock = unlocked;
+volatile lock_t __heap_lock = LOCK_INITIALIZER;
 
 struct free_block *__first_free = NULL;
 

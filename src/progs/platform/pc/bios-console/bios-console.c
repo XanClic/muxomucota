@@ -56,7 +56,7 @@ uintptr_t service_duplicate_pipe(uintptr_t id)
 }
 
 
-static lock_t output_lock = unlocked;
+static lock_t output_lock = LOCK_INITIALIZER;
 
 
 static void scroll_down(void)

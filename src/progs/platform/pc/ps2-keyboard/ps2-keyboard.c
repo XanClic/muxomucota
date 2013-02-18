@@ -16,7 +16,7 @@ static bool echo_keys = true;
 
 static char *fifo_buffer;
 static int fifo_read_idx = 0, fifo_write_idx = 0;
-static lock_t fifo_lock = unlocked;
+static lock_t fifo_lock = LOCK_INITIALIZER;
 
 static void fifo_init(void)
 {

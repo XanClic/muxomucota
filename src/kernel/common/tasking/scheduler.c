@@ -9,9 +9,9 @@ extern lock_t runqueue_lock, dead_lock;
 extern process_t *runqueue, *dead, *idle_process;
 
 
-process_t *schedule(void)
+process_t *schedule(pid_t switch_to)
 {
-    if (runqueue_lock == locked)
+    if (IS_LOCKED(runqueue_lock))
         return current_process;
 
 
@@ -30,6 +30,15 @@ process_t *schedule(void)
 
     if (current_process == NULL)
         return idle_process;
+
+
+    if (switch_to > 0)
+    {
+        process_t *target = find_process(switch_to);
+
+        if ((target != NULL) && (target->status == PROCESS_ACTIVE))
+            return (current_process = target);
+    }
 
 
     process_t *initial = current_process;

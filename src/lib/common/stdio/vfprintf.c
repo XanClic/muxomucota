@@ -23,7 +23,7 @@
 #include <stdio.h>
 #include <vfs.h>
 
-static volatile lock_t printf_lock = unlocked;
+static volatile lock_t printf_lock = LOCK_INITIALIZER;
 static char printf_buffer[4096];
 
 int vfprintf(FILE *fp, const char *format, va_list args)

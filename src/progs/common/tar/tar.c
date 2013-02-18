@@ -48,7 +48,7 @@ static struct mountpoint
     struct tar_node *tar;
 } *mountpoints = NULL;
 
-static lock_t mp_lock = unlocked;
+static lock_t mp_lock = LOCK_INITIALIZER;
 
 
 struct file

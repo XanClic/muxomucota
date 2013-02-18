@@ -13,7 +13,7 @@
 extern const void hpstructs;
 
 static uint32_t *kpd, *kpt;
-static lock_t kpt_lock = unlocked;
+static lock_t kpt_lock = LOCK_INITIALIZER;
 
 
 void change_vmm_context(const vmm_context_t *ctx)
@@ -273,7 +273,7 @@ void create_vmm_context_arch(vmm_context_t *context)
 
     memcpy(context->arch.pd, kpd, 4096);
 
-    context->arch.lock = unlocked;
+    lock_init(&context->arch.lock);
 }
 
 

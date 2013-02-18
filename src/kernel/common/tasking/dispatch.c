@@ -6,10 +6,10 @@
 
 extern process_t *idle_process;
 
-static lock_t dispatch_lock = unlocked;
+static lock_t dispatch_lock = LOCK_INITIALIZER;
 
 
-struct cpu_state *dispatch(struct cpu_state *state)
+struct cpu_state *dispatch(struct cpu_state *state, pid_t switch_to)
 {
     if (unlikely(!trylock(&dispatch_lock)))
         return state;
@@ -20,7 +20,7 @@ struct cpu_state *dispatch(struct cpu_state *state)
         idle_process->cpu_state = state;
 
 
-    process_t *next_process = schedule();
+    process_t *next_process = schedule(switch_to);
 
     if (unlikely(next_process == NULL))
     {
