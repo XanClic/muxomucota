@@ -10,7 +10,9 @@ bool handle_pagefault(struct cpu_state *state);
 
 bool handle_pagefault(struct cpu_state *state)
 {
-    kassert(current_process != NULL);
+    if (current_process == NULL)
+        return false;
+
 
     uintptr_t cr2;
 

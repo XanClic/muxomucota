@@ -1,5 +1,6 @@
 #include <cpu.h>
 #include <ipc.h>
+#include <kmalloc.h>
 #include <lock.h>
 #include <process.h>
 #include <stdbool.h>
@@ -11,45 +12,55 @@ extern process_t *dead, *runqueue;
 extern lock_t runqueue_lock;
 
 
+static void reaper(void)
+{
+    for (;;)
+    {
+        if (dead != NULL)
+            sweep_dead_processes();
+
+        yield();
+    }
+}
+
+
 void enter_idle_process(void)
 {
+    run_process(create_kernel_thread("reaper", reaper, kmalloc(1024), 1024));
+
+
     make_idle_process();
 
     for (;;)
     {
-        if (dead == NULL)
-        {
 #ifdef COOPERATIVE
-            bool runqueue_empty = true;
+        bool runqueue_empty = true;
 
-            lock(&runqueue_lock);
+        lock(&runqueue_lock);
 
-            if (runqueue != NULL)
+        if (runqueue != NULL)
+        {
+            process_t *proc = runqueue;
+            do
             {
-                process_t *proc = runqueue;
-                do
+                if (proc->status == PROCESS_ACTIVE)
                 {
-                    if (proc->status == PROCESS_ACTIVE)
-                    {
-                        runqueue_empty = false;
-                        break;
-                    }
-                    proc = proc->next;
+                    runqueue_empty = false;
+                    break;
                 }
-                while (proc != runqueue);
+                proc = proc->next;
             }
-
-            unlock(&runqueue_lock);
-
-            if (runqueue_empty)
-                cpu_halt();
-            else
-                yield();
-#else
-            cpu_halt();
-#endif
+            while (proc != runqueue);
         }
 
-        sweep_dead_processes();
+        unlock(&runqueue_lock);
+
+        if (runqueue_empty)
+            cpu_halt();
+        else
+            yield();
+#else
+        cpu_halt();
+#endif
     }
 }
