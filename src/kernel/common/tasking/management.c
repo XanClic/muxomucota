@@ -244,7 +244,7 @@ process_t *create_kernel_thread(const char *name, void (*function)(void), void *
     p->pgid = p->pid = get_new_pid();
     p->ppid = 0;
 
-    idle_process->tls = NULL;
+    p->tls = NULL;
 
     strncpy(p->name, name, sizeof(p->name) - 1);
     p->name[sizeof(p->name) - 1] = 0;
