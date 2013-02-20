@@ -8,6 +8,7 @@ title Myxomycota
   module /bin/init prime=tty,mboot tty=(tty)/tty0 script=(mboot)/etc/init.conf
   module /bin/bios-console
   module /bin/mboot-modules
+  module /bin/daemon
   module /bin/wait4server
   module /bin/mount
   module /bin/tar
