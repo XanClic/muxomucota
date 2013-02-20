@@ -136,7 +136,7 @@ threads = Array.new
 
     if target == 'clean'
         if dir == 'lib'
-            system('rm -f obj/* crt/*.o libc.a libm.a')
+            system('rm -f obj/* crt/*.o lib*.a')
         else
             system('rm -f obj/*')
         end
@@ -171,12 +171,38 @@ threads = Array.new
 
     subdirs.uniq.each do |sd|
         if dir == 'lib'
-            objprefix = "#{(File.basename(sd) == 'math') ? 'm' : 'c'}_#{sd.gsub('/', '__')}"
+            case File.basename(sd)
+            when 'cdi'
+                objprefix = 'cdi'
+            when 'math'
+                objprefix = 'm'
+            else
+                objprefix = 'c'
+            end
+            objprefix += "_#{sd.gsub('/', '__')}"
         else
             objprefix = sd.gsub('/', '__')
         end
 
         operations << sd
+
+
+        cdi = (dir == 'progs') && File.file?("#{sd}/.cdi")
+
+        cdipars = cdi ? eval(IO.read("#{sd}/.cdi")) : {}
+
+        [:cc, :asm, :objcp, :ld].each { |top| cdipars[top] = {} unless cdipars[top] }
+
+        if cdi
+            cdipars.each do |top, flags|
+                flags.each do |key, value|
+                    next unless value.kind_of?(String)
+
+                    cdipars[top][key].gsub!('${pwd}', File.expand_path(sd))
+                end
+            end
+        end
+
 
         Dir.new(sd).each do |file|
             ext = File.extname(file)
@@ -193,19 +219,17 @@ threads = Array.new
 
             case ext
             when '.c'
-                operations << [['CC', file], "#{pars[:cc][:cmd]} #{pars[:cc][:flags]} -c '#{sd}/#{file}' -o '#{output}'"]
+                operations << [['CC', file], "#{pars[:cc][:cmd]} #{pars[:cc][:flags]} #{cdipars[:cc][:flags]} -c '#{sd}/#{file}' -o '#{output}'"]
             when '.asm', '.S'
-                operations << [['ASM', file], "#{pars[:asm][:cmd]} #{pars[:asm][:flags]} '#{sd}/#{file}' #{pars[:asm][:out]} '#{output}'"]
+                operations << [['ASM', file], "#{(cdipars[:asm][:cmd] ? cdipars : pars)[:asm][:cmd]} #{pars[:asm][:flags]} #{cdipars[:asm][:flags]} '#{sd}/#{file}' #{(cdipars[:asm][:out] ? cdipars : pars)[:asm][:out]} '#{output}'"]
             when '.incbin'
-                operations << [['OBJCP', file], "pushd '#{sd}' &> /dev/null; #{pars[:objcp][:cmd]} #{pars[:objcp][:bin2elf]} '#{file}' '#{output}' && popd &> /dev/null"]
+                operations << [['OBJCP', file], "pushd '#{sd}' &> /dev/null; #{pars[:objcp][:cmd]} #{pars[:objcp][:bin2elf]} #{cdipars[:objcp][:bin2elf]} '#{file}' '#{output}' && popd &> /dev/null"]
             end
         end
 
 
         if dir == 'progs'
-            ret = [['LD', ">#{sd}"], "#{pars[:ld][:cmd]} #{pars[:ld][:flags]} #{objdir}/#{objprefix}__*.o ../lib/crt/*.o -L../lib -o '#{image_root}/bin/#{File.basename(sd)}' -\\( -lc #{pars[:ld][:libs]} -\\)"]
-
-            ret += " && #{pars[:strip][:cmd]} #{pars[:strip][:flags]} #{progdir}/#{File.basename(sd)}" if pars[:strip]
+            ret = [['LD', ">#{sd}"], "#{pars[:ld][:cmd]} #{pars[:ld][:flags]} #{cdipars[:ld][:flags]} #{objdir}/#{objprefix}__*.o ../lib/crt/*.o -L../lib -o '#{image_root}/bin/#{File.basename(sd)}' -\\( -lc #{pars[:ld][:libs]} #{cdi ? '-lcdi' : ''} -\\)"]
 
             retirement << ret
         end
@@ -264,7 +288,7 @@ threads = Array.new
         exit 1 unless system("#{pars[:ld][:cmd]} #{pars[:ld][:flags]} obj/*.o -o '#{image_root}/boot/kernel' #{pars[:ld][:libs]}")
     when 'lib'
         puts('<<< . >>>')
-        [ 'c', 'm' ].each do |lib|
+        [ 'c', 'm', 'cdi' ].each do |lib|
             puts('%-8s%s' % ['AR', ">lib#{lib}.a"])
             exit 1 unless system("#{pars[:ar][:cmd]} #{pars[:ar][:flags]} lib#{lib}.a obj/#{lib}_*.o")
         end
