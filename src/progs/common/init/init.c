@@ -145,34 +145,27 @@ int main(int argc, char *argv[])
         }
         else
         {
-            bool daemon = !strcmp(c_argv[0], "daemon");
-
             pid_t child = fork();
             if (!child)
             {
-                execvp(c_argv[daemon ? 1 : 0], &c_argv[daemon ? 1 : 0]);
+                execvp(c_argv[0], c_argv);
                 exit(errno);
             }
 
 
-            if (daemon && echo)
-                printf("\033[1m[\033[0mBKGN");
-            else if (!daemon)
+            int status;
+            waitpid(child, &status, 0);
+
+            if (echo)
             {
-                int status;
-                waitpid(child, &status, 0);
+                printf("\033[1m[");
 
-                if (echo)
-                {
-                    printf("\033[1m[");
-
-                    if (!WIFEXITED(status))
-                        printf("\033[31mCRSH");
-                    else if (WEXITSTATUS(status))
-                        printf("\033[31mE%03i", WEXITSTATUS(status));
-                    else
-                        printf("\033[32mDONE");
-                }
+                if (!WIFEXITED(status))
+                    printf("\033[31mCRSH");
+                else if (WEXITSTATUS(status))
+                    printf("\033[31mE%03i", WEXITSTATUS(status));
+                else
+                    printf("\033[32mDONE");
             }
 
             if (echo)
