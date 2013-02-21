@@ -29,8 +29,8 @@ typedef enum process_status
 } process_status_t;
 
 
-#define POPUP_STACKS     1024
-#define POPUP_STACK_SIZE 4096
+#define POPUP_STACKS       256
+#define POPUP_STACK_SIZE 16384
 
 
 typedef struct process
