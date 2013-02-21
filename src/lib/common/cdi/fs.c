@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <cdi.h>
 #include <cdi/fs.h>
+#include <cdi/lists.h>
 
 
 static struct cdi_fs_driver *fs_driver;
@@ -44,6 +45,53 @@ void cdi_fs_driver_destroy(struct cdi_fs_driver *driver)
 
 
 
+// TODO: stream_cnt benutzen und unloaden, wenn es geht
+
+static struct cdi_fs_res *find_resource(struct cdi_fs_filesystem *fs, struct cdi_fs_res *base, char *path)
+{
+    if (!*path)
+        return base;
+
+
+    struct cdi_fs_res *current = base;
+
+    struct cdi_fs_stream str = { .fs = fs };
+
+    STRTOK_FOREACH(path, "/", pathpart)
+    {
+        str.res = current;
+
+        if (!current->loaded)
+            current->res->load(&str);
+
+        if ((current->dir == NULL) || !current->flags.browse)
+            return NULL;
+
+
+        cdi_list_t current_dir = current->dir->list(&str);
+
+        struct cdi_fs_res *child = NULL;
+
+        for (int i = 0; i < (int)cdi_list_size(current_dir); i++)
+        {
+            child = cdi_list_get(current_dir, i);
+
+            if (!strcmp(child->name, pathpart))
+                break;
+        }
+
+        if (child == NULL)
+            return NULL;
+
+        current = child;
+    }
+
+
+    return current;
+}
+
+
+
 static struct mountpoint
 {
     struct mountpoint *next;
@@ -60,18 +108,16 @@ struct vfs_file
     enum
     {
         TYPE_DIR,
-        TYPE_CLEAN_MP
+        TYPE_CLEAN_MP,
+        TYPE_FILE
     } type;
 
     off_t pos;
     size_t size;
 
-    union
-    {
-        char *data;
-        struct mountpoint *mp;
-        struct cdi_fs_filesystem *fs;
-    };
+    char *data;
+    struct mountpoint *mp;
+    struct cdi_fs_stream str;
 };
 
 
@@ -87,6 +133,16 @@ static uintptr_t cdi_fs_create_pipe(const char *path, int flags)
 
         file->type = TYPE_DIR;
         file->pos  = 0;
+
+        if (flags & O_JUST_STAT)
+        {
+            file->size = 0;
+            file->data = NULL;
+            file->str.res = NULL;
+
+            return (uintptr_t)file;
+        }
+
         file->size = 1;
 
         lock(&mp_lock);
@@ -105,6 +161,8 @@ static uintptr_t cdi_fs_create_pipe(const char *path, int flags)
         unlock(&mp_lock);
 
         *d = 0;
+
+        file->str.res = NULL;
 
         return (uintptr_t)file;
     }
@@ -170,10 +228,73 @@ static uintptr_t cdi_fs_create_pipe(const char *path, int flags)
     }
 
 
+    struct cdi_fs_res *res = find_resource(fs, fs->root_res, relative);
+
     free(duped);
 
 
-    return 0;
+    if (res == NULL)
+        return 0;
+
+
+    struct cdi_fs_stream str = { .fs = fs, .res = res };
+
+    if (!res->loaded)
+        res->res->load(&str);
+
+    if (res->dir != NULL)
+    {
+        if (flags & O_WRONLY)
+            return 0;
+
+
+        cdi_list_t children = res->dir->list(&str);
+
+        struct vfs_file *file = malloc(sizeof(*file));
+
+        file->type = TYPE_DIR;
+        file->pos  = 0;
+        file->str  = str;
+
+        if (flags & O_JUST_STAT)
+        {
+            file->size = 0;
+            file->data = NULL;
+
+            return (uintptr_t)file;
+        }
+
+        file->size = 1;
+
+        for (int i = 0; i < (int)cdi_list_size(children); i++)
+            file->size += strlen(((struct cdi_fs_res *)cdi_list_get(children, i))->name) + 1;
+
+        char *d = file->data = malloc(file->size);
+
+        for (int i = 0; i < (int)cdi_list_size(children); i++)
+        {
+            struct cdi_fs_res *child = cdi_list_get(children, i);
+            strcpy(d, child->name);
+            d += strlen(child->name) + 1;
+        }
+
+        *d = 0;
+
+        return (uintptr_t)file;
+    }
+
+    if (res->file == NULL)
+        return 0;
+
+
+    struct vfs_file *file = malloc(sizeof(*file));
+
+    file->type = TYPE_FILE;
+    file->pos  = 0;
+    file->str  = str;
+
+
+    return (uintptr_t)file;
 }
 
 
@@ -189,7 +310,7 @@ static uintptr_t cdi_fs_duplicate_pipe(uintptr_t id)
         memcpy(nf->data, f->data, nf->size);
     }
 
-    return 0;
+    return (uintptr_t)nf;
 }
 
 
@@ -233,6 +354,9 @@ static big_size_t cdi_fs_stream_recv(uintptr_t id, void *data, big_size_t size, 
 
     if (f->type == TYPE_DIR)
     {
+        if (f->data == NULL)
+            return 0;
+
         size_t copy_sz = (size > (size_t)(f->size - f->pos)) ? (size_t)(f->size - f->pos) : size;
 
         memcpy(data, (void *)((uintptr_t)f->data + (ptrdiff_t)f->pos), copy_sz);
@@ -240,6 +364,14 @@ static big_size_t cdi_fs_stream_recv(uintptr_t id, void *data, big_size_t size, 
         f->pos += copy_sz;
 
         return copy_sz;
+    }
+    else if (f->type == TYPE_FILE)
+    {
+        size_t count = f->str.res->file->read(&f->str, f->pos, size, data);
+
+        f->pos += count;
+
+        return count;
     }
 
     return 0;
@@ -296,10 +428,19 @@ static big_size_t cdi_fs_stream_send(uintptr_t id, const void *data, big_size_t 
 
         f->mp->fs = newfs;
 
+        if (!newfs->root_res->loaded)
+            newfs->root_res->res->load(&(struct cdi_fs_stream){ .fs = newfs, .res = newfs->root_res });
+
+
         return size;
     }
 
-    return 0;
+
+    size_t count = f->str.res->file->write(&f->str, f->pos, size, data);
+
+    f->pos += count;
+
+    return count;
 }
 
 
@@ -310,29 +451,125 @@ static uintmax_t cdi_fs_pipe_get_flag(uintptr_t id, int flag)
     switch (flag)
     {
         case F_PRESSURE:
-            return f->size - f->pos;
+            switch (f->type)
+            {
+                case TYPE_DIR:
+                    return f->size - f->pos;
+                case TYPE_CLEAN_MP:
+                    return 0;
+                case TYPE_FILE:
+                    return f->str.res->res->meta_read(&f->str, CDI_FS_META_SIZE) - f->pos;
+            }
         case F_POSITION:
             return f->pos;
         case F_FILESIZE:
-            return f->size;
+            switch (f->type)
+            {
+                case TYPE_DIR:
+                    return f->size;
+                case TYPE_CLEAN_MP:
+                    return 0;
+                case TYPE_FILE:
+                    return f->str.res->res->meta_read(&f->str, CDI_FS_META_SIZE);
+            }
+        case F_READABLE:
+            return cdi_fs_pipe_get_flag(id, F_PRESSURE) > 0;
+        case F_WRITABLE:
+            return (f->type == TYPE_FILE); // TODO
         case F_INODE:
             return 0; // TODO
         case F_MODE:
-            return (f->type == TYPE_DIR) ? (S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO) : (S_IFREG | S_IRWXU | S_IRWXG | S_IRWXO);
+            if (f->type == TYPE_CLEAN_MP)
+                return S_IFDIR | S_IFODEV | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+            else if ((f->type == TYPE_DIR) && (f->str.res == NULL))
+                return S_IFDIR | S_IFODEV | S_IRWXU | S_IRWXG | S_IRWXO;
+            else
+            {
+                mode_t mode = (f->type == TYPE_DIR) ? S_IFDIR : S_IFREG;
+
+                // ja was
+                if (f->type == S_IFDIR)
+                    mode |= (f->str.res->flags.browse ? S_IROTH : 0) | (f->str.res->flags.create_child ? S_IWOTH : 0) | (f->str.res->flags.browse ? S_IXOTH : 0);
+                else
+                    mode |= (f->str.res->flags.read ? S_IROTH : 0) | (f->str.res->flags.write ? S_IWOTH : 0) | (f->str.res->flags.execute ? S_IXOTH : 0);
+
+                if (f->str.res->acl == NULL)
+                    return mode | ((mode & S_IRWXO) << 3) | ((mode & S_IRWXO) << 6);
+
+                bool got_usr = false, got_grp = false;
+
+                for (int i = 0; i < (int)cdi_list_size(f->str.res->acl); i++)
+                {
+                    struct cdi_fs_acl_entry *acl = cdi_list_get(f->str.res->acl, i);
+
+                    // FIXME
+                    if (!got_usr && (acl->type == CDI_FS_ACL_USER_NUMERIC))
+                    {
+                        got_usr = true;
+                        if (f->type == S_IFDIR)
+                            mode |= (acl->flags.browse ? S_IRUSR : 0) | (acl->flags.create_child ? S_IWUSR : 0) | (acl->flags.browse ? S_IXUSR : 0);
+                        else
+                            mode |= (acl->flags.read ? S_IRUSR : 0) | (acl->flags.write ? S_IWUSR : 0) | (acl->flags.execute ? S_IXUSR : 0);
+                    }
+
+                    if (!got_grp && (acl->type == CDI_FS_ACL_GROUP_NUMERIC))
+                    {
+                        got_grp = true;
+                        if (f->type == S_IFDIR)
+                            mode |= (acl->flags.browse ? S_IRGRP : 0) | (acl->flags.create_child ? S_IWGRP : 0) | (acl->flags.browse ? S_IXGRP : 0);
+                        else
+                            mode |= (acl->flags.read ? S_IRGRP : 0) | (acl->flags.write ? S_IWGRP : 0) | (acl->flags.execute ? S_IXGRP : 0);
+                    }
+                }
+
+                return mode;
+            }
         case F_NLINK:
             return 1;
         case F_UID:
-            return 0;
         case F_GID:
+            if ((f->type == TYPE_CLEAN_MP) || (f->str.res == NULL) || (f->str.res->acl == NULL))
+                return 0;
+
+            for (int i = 0; i < (int)cdi_list_size(f->str.res->acl); i++)
+            {
+                struct cdi_fs_acl_entry *acl = cdi_list_get(f->str.res->acl, i);
+
+                if ((flag == F_UID) && (acl->type == CDI_FS_ACL_USER_NUMERIC))
+                    return ((struct cdi_fs_acl_entry_usr_num *)acl)->user_id;
+
+                if ((flag == F_GID) && (acl->type == CDI_FS_ACL_GROUP_NUMERIC))
+                    return ((struct cdi_fs_acl_entry_grp_num *)acl)->group_id;
+            }
+
             return 0;
         case F_BLOCK_SIZE:
-            return 1;
+            if ((f->type == TYPE_CLEAN_MP) || ((f->type == TYPE_DIR) && (f->str.res == NULL)))
+                return 1;
+            else
+                return f->str.res->res->meta_read(&f->str, CDI_FS_META_BLOCKSZ);
         case F_BLOCK_COUNT:
-            return f->size;
+            if (f->type == TYPE_CLEAN_MP)
+                return 0;
+            else if ((f->type == TYPE_DIR) && (f->str.res == NULL))
+                return f->size;
+            else
+                return f->str.res->res->meta_read(&f->str, CDI_FS_META_USEDBLOCKS);
         case F_ATIME:
+            if ((f->type == TYPE_CLEAN_MP) || ((f->type == TYPE_DIR) && (f->str.res == NULL)))
+                return 0;
+            else
+                return f->str.res->res->meta_read(&f->str, CDI_FS_META_ACCESSTIME);
         case F_MTIME:
+            if ((f->type == TYPE_CLEAN_MP) || ((f->type == TYPE_DIR) && (f->str.res == NULL)))
+                return 0;
+            else
+                return f->str.res->res->meta_read(&f->str, CDI_FS_META_CHANGETIME);
         case F_CTIME:
-            return 0;
+            if ((f->type == TYPE_CLEAN_MP) || ((f->type == TYPE_DIR) && (f->str.res == NULL)))
+                return 0;
+            else
+                return f->str.res->res->meta_read(&f->str, CDI_FS_META_CREATETIME);
     }
 
     return 0;
@@ -351,6 +588,16 @@ static int cdi_fs_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
         case F_FLUSH:
             // TODO
             return 0;
+        case F_ATIME:
+            if ((f->type == TYPE_CLEAN_MP) || ((f->type == TYPE_DIR) && (f->str.res == NULL)))
+                return -EPERM;
+            else
+                return f->str.res->res->meta_write(&f->str, CDI_FS_META_ACCESSTIME, value);
+        case F_MTIME:
+            if ((f->type == TYPE_CLEAN_MP) || ((f->type == TYPE_DIR) && (f->str.res == NULL)))
+                return -EPERM;
+            else
+                return f->str.res->res->meta_write(&f->str, CDI_FS_META_CHANGETIME, value);
     }
 
     return -EINVAL;
