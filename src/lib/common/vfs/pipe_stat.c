@@ -25,7 +25,7 @@ int pipe_stat(int p, struct stat *buf)
     buf->st_uid     = pipe_get_flag(p, F_UID);
     buf->st_gid     = pipe_get_flag(p, F_GID);
     buf->st_rdev    = 0;
-    buf->st_size    = pipe_get_flag(p, F_PRESSURE);
+    buf->st_size    = pipe_get_flag(p, pipe_implements(p, I_FILE) ? F_FILESIZE : F_PRESSURE);
     buf->st_blksize = pipe_get_flag(p, F_BLOCK_SIZE);
     buf->st_blocks  = pipe_get_flag(p, F_BLOCK_COUNT);
     buf->st_atime   = pipe_get_flag(p, F_ATIME);
