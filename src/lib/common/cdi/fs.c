@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <errno.h>
 #include <lock.h>
 #include <stdbool.h>
@@ -10,6 +11,9 @@
 #include <cdi.h>
 #include <cdi/fs.h>
 #include <cdi/lists.h>
+
+
+// TODO: Locking
 
 
 static struct cdi_fs_driver *fs_driver;
@@ -45,7 +49,40 @@ void cdi_fs_driver_destroy(struct cdi_fs_driver *driver)
 
 
 
-// TODO: stream_cnt benutzen und unloaden, wenn es geht
+static void unload_resource(struct cdi_fs_filesystem *fs, struct cdi_fs_res *node)
+{
+    assert(node->loaded);
+    assert(node->stream_cnt > 0);
+
+    struct cdi_fs_stream str = { .fs = fs, .res = node };
+
+
+    struct cdi_fs_res *parent = node->parent;
+
+
+    if (!--node->stream_cnt)
+        node->res->unload(&str);
+
+
+    if (parent != NULL)
+        unload_resource(fs, parent);
+}
+
+
+static void use_resource(struct cdi_fs_filesystem *fs, struct cdi_fs_res *node)
+{
+    struct cdi_fs_stream str = { .fs = fs, .res = node };
+
+    if (!node->loaded)
+        node->res->load(&str);
+
+    node->stream_cnt++;
+
+
+    if (node->parent != NULL)
+        use_resource(fs, node->parent);
+}
+
 
 static struct cdi_fs_res *find_resource(struct cdi_fs_filesystem *fs, struct cdi_fs_res *base, char *path)
 {
@@ -64,8 +101,14 @@ static struct cdi_fs_res *find_resource(struct cdi_fs_filesystem *fs, struct cdi
         if (!current->loaded)
             current->res->load(&str);
 
-        if ((current->dir == NULL) || !current->flags.browse)
+        current->stream_cnt++;
+
+
+        if (current->dir == NULL)
+        {
+            unload_resource(fs, current);
             return NULL;
+        }
 
 
         cdi_list_t current_dir = current->dir->list(&str);
@@ -81,7 +124,10 @@ static struct cdi_fs_res *find_resource(struct cdi_fs_filesystem *fs, struct cdi
         }
 
         if (child == NULL)
+        {
+            unload_resource(fs, current);
             return NULL;
+        }
 
         current = child;
     }
@@ -242,10 +288,16 @@ static uintptr_t cdi_fs_create_pipe(const char *path, int flags)
     if (!res->loaded)
         res->res->load(&str);
 
+    res->stream_cnt++;
+
+
     if (res->dir != NULL)
     {
         if (flags & O_WRONLY)
+        {
+            unload_resource(fs, res);
             return 0;
+        }
 
 
         cdi_list_t children = res->dir->list(&str);
@@ -284,7 +336,10 @@ static uintptr_t cdi_fs_create_pipe(const char *path, int flags)
     }
 
     if (res->file == NULL)
+    {
+        unload_resource(fs, res);
         return 0;
+    }
 
 
     struct vfs_file *file = malloc(sizeof(*file));
@@ -309,6 +364,9 @@ static uintptr_t cdi_fs_duplicate_pipe(uintptr_t id)
         nf->data = malloc(nf->size);
         memcpy(nf->data, f->data, nf->size);
     }
+
+    if ((nf->type != TYPE_CLEAN_MP) && (nf->str.res != NULL))
+        use_resource(nf->str.fs, nf->str.res);
 
     return (uintptr_t)nf;
 }
@@ -338,6 +396,10 @@ static void cdi_fs_destroy_pipe(uintptr_t id, int flags)
 
         unlock(&mp_lock);
     }
+
+    if ((f->type != TYPE_CLEAN_MP) && (f->str.res != NULL))
+        unload_resource(f->str.fs, f->str.res);
+
 
     free(f);
 }
@@ -430,6 +492,8 @@ static big_size_t cdi_fs_stream_send(uintptr_t id, const void *data, big_size_t 
 
         if (!newfs->root_res->loaded)
             newfs->root_res->res->load(&(struct cdi_fs_stream){ .fs = newfs, .res = newfs->root_res });
+
+        newfs->root_res->stream_cnt++;
 
 
         return size;
