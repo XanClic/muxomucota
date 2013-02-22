@@ -2,8 +2,10 @@
 #include <drivers.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <cdi.h>
 #include <cdi/fs.h>
 #include <cdi/lists.h>
+#include <cdi/net.h>
 
 
 extern struct cdi_driver *__start_cdi_drivers, *__stop_cdi_drivers;

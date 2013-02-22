@@ -27,10 +27,6 @@ struct cdi_net_device
     struct cdi_device dev;
     __extension__ uint64_t mac : 48;
     int number;
-
-    void *recv_buffer;
-    size_t recv_len;
-    uint_fast32_t ip, gw;
 };
 
 struct cdi_net_driver
