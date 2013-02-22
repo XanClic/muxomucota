@@ -1,7 +1,7 @@
 #ifndef _CDI_IO_H_
 #define _CDI_IO_H_
 
-#include <port-io.h>
+#include <drivers/ports.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
