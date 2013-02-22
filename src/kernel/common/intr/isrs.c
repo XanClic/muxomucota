@@ -18,7 +18,8 @@ struct isr
         struct
         {
             process_t *process;
-            void (*process_handler)(void);
+            void (*process_handler)(void *info);
+            void *info;
         };
     };
 };
@@ -51,13 +52,14 @@ void register_kernel_isr(int irq, void (*isr)(void))
 }
 
 
-void register_user_isr(int irq, process_t *process, void (*process_handler)(void))
+void register_user_isr(int irq, process_t *process, void (*process_handler)(void *info), void *info)
 {
     struct isr *nisr = kmalloc(sizeof(*nisr));
 
     nisr->is_kernel = false;
     nisr->process = process;
     nisr->process_handler = process_handler;
+    nisr->info            = info;
 
     register_isr(irq, nisr);
 
@@ -110,7 +112,10 @@ void common_irq_handler(int irq)
             // Das funktioniert ohne jegliche Race Conditions, weil der Prozess
             // ein Daemon war, der sich nicht in der Runqueue befindet. Somit
             // gibt es auch keinen State, den man hier kaputtmachen könnte.
-            make_process_entry(isr->process, isr->process->cpu_state, isr->process_handler, (void *)(USER_STACK_TOP - sizeof(struct tls)));
+            make_process_entry(isr->process, isr->process->cpu_state, (void (*)(void))isr->process_handler, (void *)(USER_STACK_TOP - sizeof(struct tls)));
+
+            add_process_func_param(isr->process, isr->process->cpu_state, (uintptr_t)isr->info);
+            process_stack_alloc(isr->process->cpu_state, sizeof(void (*)(void))); // „Funktionsaufruf“
 
             isr->process->status = PROCESS_ACTIVE;
         }

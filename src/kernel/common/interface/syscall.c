@@ -210,7 +210,7 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
                 current_process->tls->errno = EFAULT;
                 return (uintptr_t)-EFAULT;
             }
-            register_user_isr(p0, current_process, (void (*)(void))p1);
+            register_user_isr(p0, current_process, (void (*)(void *))p1, (void *)p2);
             return 0;
 
         case SYS_IRQ_HANDLER_EXIT:
