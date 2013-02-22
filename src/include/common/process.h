@@ -113,6 +113,9 @@ void process_set_initial_params(process_t *proc, struct cpu_state *state, int ar
 void *process_stack_alloc(struct cpu_state *state, size_t size);
 
 
+void add_process_func_param(process_t *proc, struct cpu_state *state, uintptr_t param);
+
+
 void run_process(process_t *proc);
 
 void register_process(process_t *proc);

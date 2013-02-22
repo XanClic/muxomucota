@@ -22,9 +22,3 @@ void popup_ping_handler(int index, uintmax_t (*handler)(void))
 {
     popup_entries[index] = (uintmax_t (*)(uintptr_t))handler;
 }
-
-
-void register_irq_handler(int irq, void (*handler)(void))
-{
-    syscall2(SYS_HANDLE_IRQ, irq, (uintptr_t)handler);
-}
