@@ -27,10 +27,11 @@
 
 enum
 {
-#include <vfs/interfaces/file.h>
-#include <vfs/interfaces/fs.h>
-#include <vfs/interfaces/statable.h>
-#include <vfs/interfaces/tty.h>
+    I_DEVICE_CONTACT,
+    I_FILE,
+    I_FS,
+    I_STATABLE,
+    I_TTY
 };
 
 // pipe_(g/s)et_flag()-Standardflags
@@ -41,6 +42,7 @@ enum
     F_WRITABLE,
     F_FLUSH,
 
+#include <vfs/flags/device-contact.h>
 #include <vfs/flags/file.h>
 #include <vfs/flags/fs.h>
 #include <vfs/flags/statable.h>
