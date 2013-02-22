@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include <errno.h>
 #include <limits.h>
 #include <stdio.h>
@@ -6,6 +7,7 @@
 #include <unistd.h>
 #include <vfs.h>
 #include <vmem.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 
 static char *cmdtok(char *s)
@@ -20,7 +22,7 @@ static char *cmdtok(char *s)
 
     s = saved;
 
-    while ((*saved != ' ') && *saved)
+    while (!isspace(*saved) && *saved)
     {
         if (*saved == '\\')
         {
@@ -35,13 +37,25 @@ static char *cmdtok(char *s)
             if (!*saved)
                 break;
         }
+        if (*saved == '\'')
+        {
+            saved++;
+            while ((*saved != '\'') && *saved)
+                saved++;
+            if (!*saved)
+                break;
+        }
         saved++;
+    }
+
+    if (isspace(*saved))
+    {
+        *saved = 0;
+        while (isspace(*++saved));
     }
 
     if (!*saved)
         saved = NULL;
-    else
-        *(saved++) = 0;
 
     return s;
 }
@@ -127,9 +141,28 @@ static char *my_fgets(char *s, int size, int stream)
             {
                 for (size_t k = 0; ggt[k] && (i < size); k++)
                 {
-                    printf("%c", ggt[k]);
+                    putchar(ggt[k]);
                     s[i++] = ggt[k];
                 }
+
+                int fd = create_pipe(last_space, O_JUST_STAT);
+
+                if (fd >= 0)
+                {
+                    if (pipe_implements(fd, I_STATABLE))
+                    {
+                        char chr = S_ISDIR(pipe_get_flag(fd, F_MODE)) ? '/' : ' ';
+
+                        if (i < size)
+                        {
+                            putchar(chr);
+                            s[i++] = chr;
+                        }
+                    }
+
+                    destroy_pipe(fd, 0);
+                }
+
                 continue;
             }
 
@@ -138,7 +171,7 @@ static char *my_fgets(char *s, int size, int stream)
 
             j = 0;
 
-            printf("\n");
+            putchar('\n');
             while (buf[j] && (j < sizeof(buf)))
             {
                 if (!strncmp(buf + j, curpart, this_len))
@@ -150,7 +183,7 @@ static char *my_fgets(char *s, int size, int stream)
             continue;
         }
         else if (cc != '\b')
-            printf("%c", cc);
+            putchar(cc);
         else
         {
             if (i)
