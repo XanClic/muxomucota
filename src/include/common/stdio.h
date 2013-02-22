@@ -27,10 +27,10 @@ int putchar(int c);
 
 int puts(const char *s);
 
-int printf(const char *s, ...);
-int fprintf(FILE *fp, const char *s, ...);
-int sprintf(char *buf, const char *s, ...);
-int snprintf(char *str, size_t n, const char *format, ...);
+int printf(const char *s, ...) __attribute__((format(printf, 1, 2)));
+int fprintf(FILE *fp, const char *s, ...) __attribute__((format(printf, 2, 3)));
+int sprintf(char *buf, const char *s, ...) __attribute__((format(printf, 2, 3)));
+int snprintf(char *str, size_t n, const char *format, ...) __attribute__((format(printf, 3, 4)));
 int vfprintf(FILE *fp, const char *format, va_list args);
 int vprintf(const char *format, va_list args);
 int vsprintf(char *str, const char *format, va_list args);
