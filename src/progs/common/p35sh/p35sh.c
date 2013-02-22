@@ -60,6 +60,7 @@ static char *cmdtok(char *s)
     return s;
 }
 
+// TODO: Tab Completion für builtins
 static char *my_fgets(char *s, int size, int stream)
 {
     int cc = 0, i = 0;
@@ -76,66 +77,130 @@ static char *my_fgets(char *s, int size, int stream)
         if (cc == '\t')
         {
             const char *last_space = strrchr(s, ' ');
-            if (last_space != NULL)
-                last_space++;
-            else
-                last_space = s;
+            bool complete_cmd = (last_space == NULL);
 
-            char dirn[strlen(last_space) + 1];
+            if (complete_cmd)
+                last_space = s;
+            else
+                last_space++;
+
+            char *path = getenv("PATH");
+
+            char dirn[strlen(last_space) + strlen(path) + 2];
             char curpart[strlen(last_space) + 1];
             char ggt[1024];
             ggt[0] = 0;
-
-            strcpy(dirn, last_space);
-
-            char *last_slash = strrchr(dirn, '/');
-            if (last_slash != NULL)
-            {
-                strcpy(curpart, last_slash + 1);
-                last_slash[1] = 0;
-            }
-            else
-            {
-                if (dirn[0] == '(')
-                    continue;
-                strcpy(curpart, dirn);
-                strcpy(dirn, ".");
-            }
-
-            int dir = create_pipe(dirn, O_RDONLY);
-            if (dir < 0)
-                continue;
-
-            char buf[pipe_get_flag(dir, F_PRESSURE)];
-            stream_recv(dir, buf, sizeof(buf), 0);
-            destroy_pipe(dir, 0);
-
-            size_t j = 0;
             int got_count = 0;
-            size_t this_len = strlen(curpart);
 
-            while (buf[j] && (j < sizeof(buf)))
+
+            char duped_path[strlen(path) + 1];
+            strcpy(duped_path, path);
+
+            bool complete_from_path = (complete_cmd && (strchr(last_space, '/') == NULL));
+
+            char *path_tok_base = duped_path;
+
+
+            char *all_fitting = NULL;
+            size_t all_fitting_sz = 0;
+
+            bool is_dir = false, is_file = false;
+
+
+            do
             {
-                if (!strncmp(buf + j, curpart, this_len))
+                if (!complete_from_path)
+                    strcpy(dirn, last_space);
+                else
                 {
-                    if (!got_count++)
-                        strcpy(ggt, buf + j + this_len);
-                    else
-                    {
-                        size_t k = 0;
-                        do
-                        {
-                            if (ggt[k] != buf[j + this_len + k])
-                            {
-                                ggt[k] = 0;
-                                break;
-                            }
-                        }
-                        while (ggt[k++]);
-                    }
+                    char *tok = strtok(path_tok_base, ":");
+                    path_tok_base = NULL;
+
+                    if (tok == NULL)
+                        break;
+
+                    sprintf(dirn, "%s/%s", tok, last_space);
                 }
-                j += strlen(buf + j) + 1;
+
+                char *last_slash = strrchr(dirn, '/');
+                if (last_slash != NULL)
+                {
+                    strcpy(curpart, last_slash + 1);
+                    last_slash[1] = 0;
+                }
+                else
+                {
+                    if (dirn[0] == '(')
+                        continue;
+                    strcpy(curpart, dirn);
+                    strcpy(dirn, ".");
+                }
+
+                int dir = create_pipe(dirn, O_RDONLY);
+                if (dir < 0)
+                    continue;
+
+                char buf[pipe_get_flag(dir, F_PRESSURE)];
+                stream_recv(dir, buf, sizeof(buf), 0);
+                destroy_pipe(dir, 0);
+
+                size_t j = 0;
+                size_t this_len = strlen(curpart);
+
+                while (buf[j] && (j < sizeof(buf)))
+                {
+                    if (!strncmp(buf + j, curpart, this_len))
+                    {
+                        size_t all_fitting_off = all_fitting_sz;
+
+                        all_fitting_sz += strlen(buf + j) + 1;
+                        all_fitting = realloc(all_fitting, all_fitting_sz);
+
+                        strcpy(all_fitting + all_fitting_off, buf + j);
+
+                        char full_name[strlen(dirn) + 1 + strlen(buf + j) + 1];
+                        sprintf(full_name, "%s/%s", dirn, buf + j);
+
+                        int fd = create_pipe(full_name, O_JUST_STAT);
+
+                        if (fd >= 0)
+                        {
+                            if (pipe_implements(fd, I_STATABLE))
+                            {
+                                if (S_ISDIR(pipe_get_flag(fd, F_MODE)))
+                                    is_dir  = true;
+                                else
+                                    is_file = true;
+                            }
+                            else
+                                is_dir = is_file = true;
+
+                            destroy_pipe(fd, 0);
+                        }
+                        else
+                            is_dir = is_file = true;
+
+
+                        if (!got_count++)
+                            strcpy(ggt, buf + j + this_len);
+                        else
+                        {
+                            size_t k = 0;
+                            do
+                            {
+                                if (ggt[k] != buf[j + this_len + k])
+                                {
+                                    ggt[k] = 0;
+                                    break;
+                                }
+                            }
+                            while (ggt[k++]);
+                        }
+                    }
+                    j += strlen(buf + j) + 1;
+                }
             }
+            while (complete_from_path);
 
             if (ggt[0])
             {
@@ -144,41 +209,36 @@ static char *my_fgets(char *s, int size, int stream)
                     putchar(ggt[k]);
                     s[i++] = ggt[k];
                 }
-
-                int fd = create_pipe(last_space, O_JUST_STAT);
-
-                if (fd >= 0)
-                {
-                    if (pipe_implements(fd, I_STATABLE))
-                    {
-                        char chr = S_ISDIR(pipe_get_flag(fd, F_MODE)) ? '/' : ' ';
-
-                        if (i < size)
-                        {
-                            putchar(chr);
-                            s[i++] = chr;
-                        }
-                    }
-
-                    destroy_pipe(fd, 0);
-                }
-
-                continue;
             }
 
             if (got_count < 2)
+            {
+                if (is_dir ^ is_file)
+                {
+                    char chr = is_dir ? '/' : ' ';
+
+                    if (i < size)
+                    {
+                        putchar(chr);
+                        s[i++] = chr;
+                    }
+                }
+            }
+
+            if ((got_count < 2) || ggt[0])
                 continue;
 
-            j = 0;
+            int j = 0;
 
             putchar('\n');
-            while (buf[j] && (j < sizeof(buf)))
+            while (j < (int)all_fitting_sz)
             {
-                if (!strncmp(buf + j, curpart, this_len))
-                    printf("%s ", buf + j);
-                j += strlen(buf + j) + 1;
+                printf("%s ", all_fitting + j);
+                j += strlen(all_fitting + j) + 1;
             }
             printf("\n%s$ %s", getenv("PWD"), s);
+
+            free(all_fitting);
 
             continue;
         }
