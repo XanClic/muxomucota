@@ -1,0 +1,5 @@
+{
+    cc: {
+        flags: "'-I${pwd}/include' -Wno-unused-parameter -Wno-switch-enum -Wno-unsafe-loop-optimizations -Wno-shadow"
+    }
+}
