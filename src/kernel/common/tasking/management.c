@@ -51,6 +51,8 @@ process_t *create_empty_process(const char *name)
 
     p->handles_irqs = false;
 
+    p->schedule_tick = 0;
+
 
     initialize_orphan_process_arch(p);
 
@@ -224,6 +226,8 @@ void make_idle_process(void)
 
     idle_process->handles_irqs = false;
 
+    idle_process->schedule_tick = 0;
+
 
     initialize_orphan_process_arch(idle_process);
 
@@ -253,6 +257,8 @@ process_t *create_kernel_thread(const char *name, void (*function)(void), void *
     p->popup_stack_index = -1;
 
     p->handles_irqs = false;
+
+    p->schedule_tick = 0;
 
 
     initialize_orphan_process_arch(p);
@@ -830,6 +836,8 @@ pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer
     pop->popup_stack_index = stack_index;
 
     pop->handles_irqs = false;
+
+    pop->schedule_tick = 0;
 
 
     initialize_child_process_arch(pop, proc);
