@@ -239,7 +239,7 @@ void make_idle_process(void)
 }
 
 
-process_t *create_kernel_thread(const char *name, void (*function)(void), void *stack, size_t stacksz)
+process_t *create_kernel_thread(const char *name, void (*function)(void))
 {
     process_t *p = kmalloc(sizeof(*p));
 
@@ -263,7 +263,7 @@ process_t *create_kernel_thread(const char *name, void (*function)(void), void *
 
     initialize_orphan_process_arch(p);
 
-    alloc_cpu_state_on_stack(p, stack, stacksz);
+    alloc_cpu_state(p);
 
 
     p->vmmc = &kernel_context;
@@ -271,6 +271,52 @@ process_t *create_kernel_thread(const char *name, void (*function)(void), void *
 
 
     initialize_kernel_thread_cpu_state(p, p->cpu_state, function);
+
+
+    return p;
+}
+
+
+process_t *create_user_thread(void (*function)(void *), void *stack_top, void *arg)
+{
+    process_t *p = kmalloc(sizeof(*p));
+
+    p->status = PROCESS_COMA;
+
+    p->pid = get_new_pid();
+    p->ppid = p->pgid = current_process->pgid;
+
+    p->tls = NULL;
+
+    strncpy(p->name, current_process->name, sizeof(p->name) - 1);
+    p->name[sizeof(p->name) - 1] = 0;
+
+    p->popup_stack_mask = current_process->popup_stack_mask;
+    p->popup_stack_index = -1;
+
+    if (p->popup_stack_mask != NULL)
+        p->popup_stack_mask->refcount++;
+
+    p->handles_irqs = false;
+
+    p->schedule_tick = 0;
+
+
+    initialize_orphan_process_arch(p);
+
+    alloc_cpu_state(p);
+
+
+    p->vmmc = current_process->vmmc;
+    use_vmm_context(p->vmmc);
+
+
+    make_process_entry(p, p->cpu_state, (void (*)(void))function, stack_top);
+
+    add_process_func_param(p, p->cpu_state, (uintptr_t)arg);
+
+
+    run_process(p);
 
 
     return p;
@@ -494,15 +540,21 @@ void set_process_popup_entry(process_t *proc, void (*entry)(void))
 {
     proc->popup_entry = entry;
 
-    proc->popup_stack_mask = kmalloc(POPUP_STACKS / 8);
+    if (proc->popup_stack_mask == NULL)
+    {
+        proc->popup_stack_mask = kmalloc(sizeof(*proc->popup_stack_mask));
+        proc->popup_stack_mask->refcount = 1;
 
-    memset(proc->popup_stack_mask, 0, POPUP_STACKS / 8);
+        memset(proc->popup_stack_mask->mask, 0, sizeof(proc->popup_stack_mask->mask));
+    }
 }
 
 
 void destroy_process_struct(process_t *proc)
 {
-    kfree(proc->popup_stack_mask);
+    if (proc->popup_stack_mask != NULL)
+        if (__sync_sub_and_fetch(&proc->popup_stack_mask->refcount, 1))
+            kfree(proc->popup_stack_mask);
 
     destroy_process_arch_struct(proc);
 
@@ -556,7 +608,7 @@ void destroy_this_popup_thread(uintmax_t exit_info)
 
     kassert(pg != NULL);
 
-    pg->popup_stack_mask[psi / LONG_BIT] &= ~(1 << (psi % LONG_BIT));
+    pg->popup_stack_mask->mask[psi / LONG_BIT] &= ~(1 << (psi % LONG_BIT));
 
 
     // TODO: Userstack freigeben
@@ -784,13 +836,13 @@ pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer
 
     for (int i = 0; i < POPUP_STACKS; i++)
     {
-        if (proc->popup_stack_mask[i] != ULONG_MAX)
+        if (proc->popup_stack_mask->mask[i] != ULONG_MAX)
         {
-            int bit = ffsl(~proc->popup_stack_mask[i]);
+            int bit = ffsl(~proc->popup_stack_mask->mask[i]);
 
             // FIXME: Atomic
             stack_top = USER_STACK_BASE + bit * POPUP_STACK_SIZE;
-            proc->popup_stack_mask[i] |= 1 << (bit - 1);
+            proc->popup_stack_mask->mask[i] |= 1 << (bit - 1);
 
             stack_index = (i * LONG_BIT) + (bit - 1);
 

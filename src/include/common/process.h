@@ -3,6 +3,7 @@
 
 #include <arch-process.h>
 #include <cpu-state.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -31,6 +32,13 @@ typedef enum process_status
 
 #define POPUP_STACKS       256
 #define POPUP_STACK_SIZE 16384
+
+
+typedef struct
+{
+    int refcount;
+    unsigned long mask[POPUP_STACKS / LONG_BIT];
+} popup_stack_mask_t;
 
 
 typedef struct process
@@ -62,7 +70,7 @@ typedef struct process
 
     // TODO: Ein paar Unions
     void (*popup_entry)(void);
-    uint_fast32_t *popup_stack_mask;
+    popup_stack_mask_t *popup_stack_mask;
 
     int popup_stack_index;
 
@@ -89,7 +97,8 @@ process_t *schedule(pid_t schedule_to);
 
 
 process_t *create_empty_process(const char *name);
-process_t *create_kernel_thread(const char *name, void (*function)(void), void *stack, size_t stacksz);
+process_t *create_kernel_thread(const char *name, void (*function)(void));
+process_t *create_user_thread(void (*function)(void *), void *stack_top, void *arg);
 
 void make_idle_process(void);
 

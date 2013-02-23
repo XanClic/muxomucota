@@ -358,12 +358,25 @@ static void flush_input_queue(void)
 }
 
 
+static void irq_thread(void *arg)
+{
+    (void)arg;
+
+    register_irq_handler(1, &irq, NULL);
+
+    daemonize("ps2-irq");
+}
+
+
 int main(void)
 {
     fifo_init();
 
 
     iopl(3);
+
+
+    create_thread(irq_thread, (void *)((uintptr_t)malloc(4096) + 4096), NULL);
 
 
     // Tastatur deaktivieren
@@ -386,9 +399,6 @@ int main(void)
     kbd_send_command(0xF4, -1);
 
     set_leds(0, 0, 0);
-
-
-    register_irq_handler(1, &irq, NULL);
 
 
     daemonize("kbd");

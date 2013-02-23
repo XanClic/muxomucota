@@ -26,7 +26,7 @@ static void reaper(void)
 
 void enter_idle_process(void)
 {
-    run_process(create_kernel_thread("reaper", reaper, kmalloc(1024), 1024));
+    run_process(create_kernel_thread("reaper", reaper));
 
 
     make_idle_process();
