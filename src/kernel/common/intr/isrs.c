@@ -119,7 +119,7 @@ void common_irq_handler(int irq, struct cpu_state *state)
             make_process_entry(isr->process, isr->process->cpu_state, (void (*)(void))isr->process_handler, (void *)(USER_STACK_TOP - sizeof(struct tls)));
 
             add_process_func_param(isr->process, isr->process->cpu_state, (uintptr_t)isr->info);
-            process_stack_alloc(isr->process->cpu_state, sizeof(void (*)(void))); // „Funktionsaufruf“
+            process_simulate_func_call(isr->process->cpu_state);
 
             isr->process->status = PROCESS_ACTIVE;
         }

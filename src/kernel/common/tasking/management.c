@@ -314,6 +314,7 @@ process_t *create_user_thread(void (*function)(void *), void *stack_top, void *a
     make_process_entry(p, p->cpu_state, (void (*)(void))function, stack_top);
 
     add_process_func_param(p, p->cpu_state, (uintptr_t)arg);
+    process_simulate_func_call(p->cpu_state);
 
 
     run_process(p);

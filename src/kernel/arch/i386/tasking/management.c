@@ -114,6 +114,12 @@ void add_process_func_param(process_t *proc, struct cpu_state *state, uintptr_t 
 }
 
 
+void process_simulate_func_call(struct cpu_state *state)
+{
+    state->esp -= sizeof(void (*)(void));
+}
+
+
 void process_set_initial_params(process_t *proc, struct cpu_state *state, int argc, const char *const *argv, const char *const *envp)
 {
     uintptr_t initial = proc->cpu_state->esp;
@@ -141,8 +147,7 @@ void process_set_initial_params(process_t *proc, struct cpu_state *state, int ar
 
     kernel_unmap(mapped_stack, sizeof(argc) + sizeof(argv) + sizeof(envp));
 
-    // Ein Funktionsaufruf, ein simulierter. Was denn sonst?
-    state->esp -= sizeof(void (*)(void));
+    process_simulate_func_call(state);
 }
 
 
