@@ -249,3 +249,69 @@ bool pmm_is_cow(uintptr_t paddr)
 
     return !!(bitmap[index] & BITMAP_COW_FLAG);
 }
+
+
+uintptr_t pmm_alloc_advanced(size_t length, uintptr_t max_addr, int alignment)
+{
+    if (!length)
+        return 0;
+
+    int frames = (length + PAGE_SIZE - 1) >> PAGE_SHIFT;
+
+    int end = (max_addr >> PAGE_SHIFT) - frames;
+
+
+    if (mem_entries < end)
+        end = mem_entries;
+
+
+    uintptr_t real_alignment = (1U << alignment) - 1;
+
+
+    for (int i = look_from_here; i < end; i++)
+    {
+        uintptr_t base = mem_base + ((uintptr_t)i << PAGE_SHIFT);
+
+        // TODO: Optimieren
+        if (base & real_alignment)
+            continue;
+
+        if (!bitmap[i])
+        {
+            bool is_free = true;
+
+            for (int j = 1; j < frames; j++)
+            {
+                if (bitmap[i + j])
+                {
+                    is_free = false;
+                    break;
+                }
+            }
+
+            if (!is_free)
+                continue;
+
+            for (int j = 0; j < frames; j++)
+            {
+                if (__sync_fetch_and_add(&bitmap[i + j], 1))
+                {
+                    for (int k = 0; k <= j; k++)
+                        bitmap[i + k]--;
+
+                    is_free = false;
+
+                    break;
+                }
+            }
+
+            if (!is_free)
+                continue;
+
+            return base;
+        }
+    }
+
+
+    return 0;
+}

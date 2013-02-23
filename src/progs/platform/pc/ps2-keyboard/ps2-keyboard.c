@@ -184,8 +184,10 @@ static int kbd_b[128] =
 };
 
 
-static void irq(void)
+static void irq(void *info)
 {
+    (void)info;
+
     flush_input_queue();
 
     irq_handler_exit();
@@ -386,7 +388,7 @@ int main(void)
     set_leds(0, 0, 0);
 
 
-    register_irq_handler(1, &irq);
+    register_irq_handler(1, &irq, NULL);
 
 
     daemonize("kbd");

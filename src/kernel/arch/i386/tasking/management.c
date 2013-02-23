@@ -97,6 +97,23 @@ void *process_stack_alloc(struct cpu_state *state, size_t size)
 }
 
 
+void add_process_func_param(process_t *proc, struct cpu_state *state, uintptr_t param)
+{
+    void *base = process_stack_alloc(state, sizeof(param));
+
+    vmmc_do_lazy_map(proc->vmmc, base);
+
+    uintptr_t paddr;
+    kassert_exec(vmmc_address_mapped(proc->vmmc, base, &paddr));
+
+    uintptr_t *mapped = kernel_map(paddr, sizeof(param));
+
+    *mapped = param;
+
+    kernel_unmap(mapped, sizeof(param));
+}
+
+
 void process_set_initial_params(process_t *proc, struct cpu_state *state, int argc, const char *const *argv, const char *const *envp)
 {
     uintptr_t initial = proc->cpu_state->esp;
