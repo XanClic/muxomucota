@@ -12,7 +12,7 @@
 
 
 #ifdef KERNEL
-#define COOPERATIVE
+// #define COOPERATIVE
 #endif
 
 

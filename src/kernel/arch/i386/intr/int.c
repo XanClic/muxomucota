@@ -137,14 +137,14 @@ void init_interrupts(void)
 }
 
 
-struct cpu_state *i386_common_isr(struct cpu_state *state);
+void i386_common_isr(struct cpu_state *state);
 
-struct cpu_state *i386_common_isr(struct cpu_state *state)
+void i386_common_isr(struct cpu_state *state)
 {
     if (state->int_vector < 0x20)
     {
         if ((state->int_vector == 0x0E) && handle_pagefault(state))
-            return state;
+            return;
 
         __asm__ __volatile__ ("cli");
 
@@ -189,7 +189,7 @@ struct cpu_state *i386_common_isr(struct cpu_state *state)
                     out8(0x20, 0x20);
                 }
 
-                return state;
+                return;
             }
         }
 
@@ -202,9 +202,6 @@ struct cpu_state *i386_common_isr(struct cpu_state *state)
         // IRQ hier behandeln
         common_irq_handler(irq);
     }
-
-
-    return state;
 }
 
 
