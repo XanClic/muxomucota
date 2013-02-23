@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <drivers.h>
 #include <ipc.h>
 #include <stdint.h>
@@ -39,6 +40,9 @@ static void raw_irq_handler(void *info)
 }
 
 
+static volatile int registered = 0;
+
+
 static void irq_thread(void *arg)
 {
     struct irq_info *ii = arg;
@@ -57,7 +61,11 @@ void cdi_register_irq(uint8_t irq, void (*handler)(struct cdi_device *), struct 
     info->dev = device;
     info->handler = handler;
 
-    create_thread(irq_thread, (void *)((uintptr_t)malloc(CDI_IRQ_STACK_SIZE) + CDI_IRQ_STACK_SIZE), info);
+    yield_to(create_thread(irq_thread, (void *)((uintptr_t)malloc(CDI_IRQ_STACK_SIZE) + CDI_IRQ_STACK_SIZE), info));
+
+    // FIXME: Das yield_to() reicht zwar hoffentlich aus, um den Handler
+    // wirklich registriert zu haben, aber nicht unbedingt. Unbedingt wär
+    // besser.
 }
 
 
