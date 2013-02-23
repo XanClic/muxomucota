@@ -82,6 +82,9 @@ static void serve_device(struct cdi_driver *drv, const char *devname, struct pci
 
             res->length = ~(mask & 0xfffffffc) + 0x1;
 
+            pipe_set_flag(fd, F_POSITION, offsetof(struct pci_config_space, hdr0.bar[i]));
+            stream_send(fd, &val, sizeof(val), O_BLOCKING);
+
             cdi_list_push(cdi_pci_dev->resources, res);
         }
         else
@@ -106,14 +109,19 @@ static void serve_device(struct cdi_driver *drv, const char *devname, struct pci
 
                 res->length = ~(mask & 0xfffffff0) + 0x1;
 
+                pipe_set_flag(fd, F_POSITION, offsetof(struct pci_config_space, hdr0.bar[i]));
+                stream_send(fd, &val, sizeof(val), O_BLOCKING);
+
                 cdi_list_push(cdi_pci_dev->resources, res);
             }
             else if ((type == 2) && (i < 5))
             {
                 struct cdi_pci_resource *res = malloc(sizeof(*res));
 
+                uint64_t val64 = val | ((uint64_t)conf_space->hdr0.bar[i + 1] << 32);
+
                 res->type    = CDI_PCI_MEMORY;
-                res->start   = (val & ~0xf) | ((uint64_t)conf_space->hdr0.bar[i + 1] << 32);
+                res->start   = val64 & ~UINT64_C(0xf);
                 res->index   = i;
                 res->address = NULL;
 
@@ -125,6 +133,9 @@ static void serve_device(struct cdi_driver *drv, const char *devname, struct pci
                 stream_recv(fd, &mask, sizeof(mask), O_BLOCKING);
 
                 res->length = ~(mask & UINT64_C(0xfffffffffffffff0)) + 0x1;
+
+                pipe_set_flag(fd, F_POSITION, offsetof(struct pci_config_space, hdr0.bar[i]));
+                stream_send(fd, &val64, sizeof(val64), O_BLOCKING);
 
                 cdi_list_push(cdi_pci_dev->resources, res);
             }

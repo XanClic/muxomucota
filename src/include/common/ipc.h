@@ -59,6 +59,6 @@ static inline void yield(void) { yield_to(-1); }
 void msleep(int ms);
 
 
-int create_thread(void (*entry)(void *), void *stack_top, void *arg);
+pid_t create_thread(void (*entry)(void *), void *stack_top, void *arg);
 
 #endif

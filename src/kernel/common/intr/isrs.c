@@ -103,8 +103,10 @@ void unregister_isr_process(process_t *process)
 extern lock_t runqueue_lock;
 
 
-void common_irq_handler(int irq, struct cpu_state *state)
+int common_irq_handler(int irq, struct cpu_state *state)
 {
+    int spawned_proc_count = 0;
+
     plz_dont_free = true;
 
     for (struct isr *isr = handlers[irq]; isr != NULL; isr = isr->next)
@@ -113,6 +115,8 @@ void common_irq_handler(int irq, struct cpu_state *state)
             isr->kernel_handler(state);
         else if (likely(__sync_bool_compare_and_swap(&isr->process->status, PROCESS_DAEMON, PROCESS_COMA)))
         {
+            isr->process->currently_handled_irq = irq;
+
             // Das funktioniert ohne jegliche Race Conditions, weil der Prozess
             // ein Daemon war, der sich nicht in der Runqueue befindet. Somit
             // gibt es auch keinen State, den man hier kaputtmachen könnte.
@@ -122,8 +126,12 @@ void common_irq_handler(int irq, struct cpu_state *state)
             process_simulate_func_call(isr->process->cpu_state);
 
             isr->process->status = PROCESS_ACTIVE;
+
+            spawned_proc_count++;
         }
     }
 
     plz_dont_free = false;
+
+    return spawned_proc_count;
 }

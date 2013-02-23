@@ -84,6 +84,7 @@ typedef struct process
 
 
     bool handles_irqs;
+    int currently_handled_irq;
 } process_t;
 
 

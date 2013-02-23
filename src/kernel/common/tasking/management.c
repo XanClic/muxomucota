@@ -50,6 +50,7 @@ process_t *create_empty_process(const char *name)
     p->popup_stack_index = -1;
 
     p->handles_irqs = false;
+    p->currently_handled_irq = -1;
 
     p->schedule_tick = 0;
 
@@ -225,6 +226,7 @@ void make_idle_process(void)
     idle_process->next    = idle_process;
 
     idle_process->handles_irqs = false;
+    idle_process->currently_handled_irq = -1;
 
     idle_process->schedule_tick = 0;
 
@@ -257,6 +259,7 @@ process_t *create_kernel_thread(const char *name, void (*function)(void))
     p->popup_stack_index = -1;
 
     p->handles_irqs = false;
+    p->currently_handled_irq = -1;
 
     p->schedule_tick = 0;
 
@@ -298,6 +301,7 @@ process_t *create_user_thread(void (*function)(void *), void *stack_top, void *a
         p->popup_stack_mask->refcount++;
 
     p->handles_irqs = false;
+    p->currently_handled_irq = -1;
 
     p->schedule_tick = 0;
 
@@ -570,7 +574,13 @@ void destroy_process_struct(process_t *proc)
 
 void destroy_process(process_t *proc, uintmax_t exit_info)
 {
-    unregister_isr_process(proc);
+    if (proc->handles_irqs)
+    {
+        if (proc->currently_handled_irq >= 0)
+            irq_settled(proc->currently_handled_irq);
+
+        unregister_isr_process(proc);
+    }
 
 
     lock(&runqueue_lock);
@@ -813,6 +823,12 @@ void daemonize_process(process_t *proc, const char *name)
 
 void daemonize_from_irq_handler(process_t *proc)
 {
+    kassert(proc->handles_irqs);
+    kassert(proc->currently_handled_irq >= 0);
+
+    irq_settled(proc->currently_handled_irq);
+    proc->currently_handled_irq = -1;
+
     proc->status = PROCESS_DAEMON;
 
     if (proc == current_process)

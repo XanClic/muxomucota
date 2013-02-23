@@ -3,6 +3,7 @@
 #include <cpu.h>
 #include <cpu-state.h>
 #include <isr.h>
+#include <kassert.h>
 #include <panic.h>
 #include <port-io.h>
 #include <process.h>
@@ -59,6 +60,16 @@ extern const void int_stub_0xA2;
 #define IDT_SYS_INTR_ENTRY(num) idt[num] = ((uint64_t)((uintptr_t)&int_stub_##num >> 16) << 48) | ((uintptr_t)&int_stub_##num & 0xFFFF) | (SEG_SYS_CS << 16) | (UINT64_C(0x8E) << 40);
 #define IDT_SYS_TRAP_ENTRY(num) idt[num] = ((uint64_t)((uintptr_t)&int_stub_##num >> 16) << 48) | ((uintptr_t)&int_stub_##num & 0xFFFF) | (SEG_SYS_CS << 16) | (UINT64_C(0x8F) << 40);
 #define IDT_USR_TRAP_ENTRY(num) idt[num] = ((uint64_t)((uintptr_t)&int_stub_##num >> 16) << 48) | ((uintptr_t)&int_stub_##num & 0xFFFF) | (SEG_SYS_CS << 16) | (UINT64_C(0xEF) << 40);
+
+
+static void enable_irq(int irq, bool status)
+{
+    static uint8_t disabled_status[2] = { 0, 0 };
+
+    disabled_status[irq >> 3] = (disabled_status[irq >> 3] & ~(1 << (irq & 7))) | (!status << (irq & 7));
+
+    out8((irq >> 3) ? 0xa1 : 0x21, disabled_status[irq >> 3]);
+}
 
 
 static void init_pic(uint16_t iobase, uint8_t irq0_vector, uint8_t icw3)
@@ -137,6 +148,9 @@ void init_interrupts(void)
 }
 
 
+static int unsettled_procs[16];
+
+
 void i386_common_isr(struct cpu_state *state);
 
 void i386_common_isr(struct cpu_state *state)
@@ -194,14 +208,28 @@ void i386_common_isr(struct cpu_state *state)
         }
 
 
+        kassert(!unsettled_procs[irq]);
+
+
+        unsettled_procs[irq] = common_irq_handler(irq, state);
+
+
+        if (unsettled_procs[irq])
+            enable_irq(irq, false);
+
         if (irq & 8)
-            out8(0xA0, 0x20);
+            out8(0xa0, 0x20);
         out8(0x20, 0x20);
-
-
-        // IRQ hier behandeln
-        common_irq_handler(irq, state);
     }
+}
+
+
+void irq_settled(int irq)
+{
+    kassert(unsettled_procs[irq]);
+
+    if (!__sync_sub_and_fetch(&unsettled_procs[irq], 1))
+        enable_irq(irq, true);
 }
 
 
