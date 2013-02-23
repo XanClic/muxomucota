@@ -51,7 +51,7 @@ puts('STRIP')
 
 Find.find('root').select { |f| File.file?(f) }.each do |f|
     system("cp #{f} root-unstripped")
-    system("strip -s '#{f}' 2> /dev/null") unless f == 'root/kernel/kernel' # Kernel wegen Backtraces nicht strippen
+    system("strip -s '#{f}' 2> /dev/null") unless f == 'root/boot/kernel' # Kernel wegen Backtraces nicht strippen
 end
 
 
