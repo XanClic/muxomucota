@@ -80,11 +80,15 @@ void unregister_isr_process(process_t *process)
             if (!(*isr)->is_kernel && ((*isr)->process == process))
             {
                 struct isr *this_isr = *isr;
-                *isr = (*isr)->next;
+                *isr = this_isr->next;
 
                 while (unlikely(plz_dont_free));
 
                 kfree(this_isr);
+
+                // Versteh ich nicht. Egal.
+                if (*isr == NULL)
+                    break;
             }
         }
     }

@@ -11,6 +11,8 @@
 extern struct cdi_driver *__start_cdi_drivers, *__stop_cdi_drivers;
 
 
+extern void cdi_osdep_pci_collect(struct cdi_driver *drv);
+
 int main(void)
 {
     if (&__start_cdi_drivers + 1 < &__stop_cdi_drivers)
@@ -25,6 +27,9 @@ int main(void)
 
     switch ((int)__start_cdi_drivers->type)
     {
+        case CDI_NETWORK:
+            cdi_osdep_pci_collect(__start_cdi_drivers);
+            break;
         case CDI_FILESYSTEM:
             cdi_fs_driver_register((struct cdi_fs_driver *)__start_cdi_drivers);
             break;
