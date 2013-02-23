@@ -244,6 +244,15 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
         case SYS_SLEEP:
             sleep(p0);
             return 0;
+
+        case SYS_CREATE_THREAD:
+            if (IS_KERNEL(p0) || IS_KERNEL(p1))
+            {
+                current_process->tls->errno = EFAULT;
+                return (uintptr_t)-EFAULT;
+            }
+            create_user_thread((void (*)(void *))p0, (void *)p1, (void *)p2);
+            return 0;
     }
 
     current_process->tls->errno = ENOSYS;
