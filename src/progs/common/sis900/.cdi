@@ -1,0 +1,5 @@
+{
+    cc: {
+        flags: "-Wno-unused-parameter -Wno-switch-enum -Wno-unsafe-loop-optimizations -Wno-shadow -Wno-sign-compare"
+    }
+}
