@@ -81,10 +81,11 @@ mov   es,ax
 
 push  esp
 call  i386_common_isr
-mov   esp,eax
 
 mov   ax,0x33
 mov   fs,ax
+
+add   esp,4
 
 pop   ebp
 pop   edi
@@ -130,7 +131,14 @@ call  i386_syscall
 push  dword 0x33
 pop   fs
 
-add   esp,32
+add   esp,4
+
+pop   ebp
+pop   edi
+pop   esi
+add   esp,8
+pop   ebx
+add   esp,4
 
 pop   es
 pop   ds
