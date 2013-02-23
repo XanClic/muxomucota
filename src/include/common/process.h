@@ -49,6 +49,9 @@ typedef struct process
 
     struct process_arch_info arch;
 
+    unsigned schedule_tick;
+
+
     char name[32]; // FIXME
 
     struct tls *tls;

@@ -1,4 +1,5 @@
 #include <compiler.h>
+#include <kassert.h>
 #include <lock.h>
 #include <process.h>
 #include <stddef.h>
@@ -11,7 +12,10 @@ extern process_t *runqueue, *dead, *idle_process;
 
 process_t *schedule(pid_t switch_to)
 {
-    if (IS_LOCKED(runqueue_lock))
+    static unsigned schedule_tick = 0;
+
+
+    if (!trylock(&runqueue_lock))
         return current_process;
 
 
@@ -20,8 +24,14 @@ process_t *schedule(pid_t switch_to)
         if (idle_process != NULL)
             current_process = idle_process;
         else
+        {
+            unlock(&runqueue_lock);
             return NULL;
+        }
     }
+
+
+    current_process->schedule_tick = schedule_tick++;
 
 
     if ((current_process == idle_process) || (current_process->status != PROCESS_ACTIVE))
@@ -29,29 +39,51 @@ process_t *schedule(pid_t switch_to)
 
 
     if (current_process == NULL)
+    {
+        unlock(&runqueue_lock);
         return idle_process;
-
-
-    if (switch_to > 0)
-    {
-        process_t *target = find_process(switch_to);
-
-        if ((target != NULL) && (target->status == PROCESS_ACTIVE))
-            return (current_process = target);
     }
 
 
-    process_t *initial = current_process;
+    process_t *switch_target = NULL;
 
-    do
+    unsigned max_sched_diff = 0;
+    process_t *eldest = NULL;
+
+
+    for (process_t *proc = current_process->rq_next; proc != current_process; proc = proc->rq_next)
     {
-        current_process = current_process->rq_next;
+        if (proc->status != PROCESS_ACTIVE)
+            continue;
 
-        if ((current_process->status != PROCESS_ACTIVE) && (current_process == initial))
-            current_process = idle_process;
+        if (proc->pid == switch_to)
+            switch_target = proc;
+
+        if (schedule_tick - proc->schedule_tick > max_sched_diff)
+        {
+            max_sched_diff = schedule_tick - proc->schedule_tick;
+            eldest = proc;
+        }
     }
-    while (current_process->status != PROCESS_ACTIVE);
 
+
+    if (eldest == NULL)
+    {
+        current_process = idle_process;
+
+        unlock(&runqueue_lock);
+
+        return current_process;
+    }
+
+
+    current_process = eldest;
+
+    if ((switch_target != NULL) && (max_sched_diff < 42))
+        current_process = switch_target;
+
+
+    unlock(&runqueue_lock);
 
     return current_process;
 }
