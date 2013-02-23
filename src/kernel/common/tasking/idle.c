@@ -33,7 +33,6 @@ void enter_idle_process(void)
 
     for (;;)
     {
-#ifdef COOPERATIVE
         bool runqueue_empty = true;
 
         lock(&runqueue_lock);
@@ -59,8 +58,5 @@ void enter_idle_process(void)
             cpu_halt();
         else
             yield();
-#else
-        cpu_halt();
-#endif
     }
 }

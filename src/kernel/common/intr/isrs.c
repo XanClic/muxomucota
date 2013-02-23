@@ -14,7 +14,7 @@ struct isr
     bool is_kernel;
     union
     {
-        void (*kernel_handler)(void);
+        void (*kernel_handler)(struct cpu_state *state);
         struct
         {
             process_t *process;
@@ -41,7 +41,7 @@ static void register_isr(int irq, struct isr *isr)
     while (unlikely(!__sync_bool_compare_and_swap(&handlers[irq], first, isr)));
 }
 
-void register_kernel_isr(int irq, void (*isr)(void))
+void register_kernel_isr(int irq, void (*isr)(struct cpu_state *state))
 {
     struct isr *nisr = kmalloc(sizeof(*nisr));
 
@@ -103,14 +103,14 @@ void unregister_isr_process(process_t *process)
 extern lock_t runqueue_lock;
 
 
-void common_irq_handler(int irq)
+void common_irq_handler(int irq, struct cpu_state *state)
 {
     plz_dont_free = true;
 
     for (struct isr *isr = handlers[irq]; isr != NULL; isr = isr->next)
     {
         if (isr->is_kernel)
-            isr->kernel_handler();
+            isr->kernel_handler(state);
         else if (likely(__sync_bool_compare_and_swap(&isr->process->status, PROCESS_DAEMON, PROCESS_COMA)))
         {
             // Das funktioniert ohne jegliche Race Conditions, weil der Prozess
