@@ -1,5 +1,7 @@
 #include <ipc.h>
+#include <stdint.h>
 #include <stdlib.h>
+#include <syscall.h>
 #include <cdi.h>
 #include <cdi/lists.h>
 #include <cdi/misc.h>
@@ -34,6 +36,12 @@ void cdi_register_irq(uint8_t irq, void (*handler)(struct cdi_device *), struct 
     info->handler = handler;
 
     register_irq_handler(irq, &raw_irq_handler, info);
+}
+
+
+void cdi_sleep_ms(uint32_t ms)
+{
+    syscall1(SYS_SLEEP, ms);
 }
 
 
