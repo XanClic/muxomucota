@@ -35,7 +35,8 @@ enum syscall_number
     SYS_IRQ_HANDLER_EXIT,
     SYS_IOPL,
     SYS_PHYS_ALLOC,
-    SYS_PHYS_FREE // 18
+    SYS_PHYS_FREE, // 18
+    SYS_SLEEP
 };
 
 

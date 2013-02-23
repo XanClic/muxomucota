@@ -198,9 +198,6 @@ struct cpu_state *i386_common_isr(struct cpu_state *state)
             out8(0xA0, 0x20);
         out8(0x20, 0x20);
 
-        if (!irq)
-            return state;
-
 
         // IRQ hier behandeln
         common_irq_handler(irq);

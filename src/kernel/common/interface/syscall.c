@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <syscall.h>
+#include <system-timer.h>
 #include <unistd.h>
 #include <vmem.h>
 
@@ -238,6 +239,10 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
         case SYS_PHYS_FREE:
             for (uintptr_t phys = p0; phys < p0 + p1; phys += PAGE_SIZE)
                 pmm_free(phys);
+            return 0;
+
+        case SYS_SLEEP:
+            sleep(p0);
             return 0;
     }
 

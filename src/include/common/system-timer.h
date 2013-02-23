@@ -6,4 +6,6 @@
 
 void init_system_timer(void);
 
+void sleep(int ms);
+
 #endif
