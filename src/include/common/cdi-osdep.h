@@ -11,6 +11,7 @@
 #ifndef _CDI_OSDEP_H_
 #define _CDI_OSDEP_H_
 
+#include <stdbool.h>
 #include <vfs.h>
 
 
@@ -48,7 +49,7 @@
  * OS-specific PCI data.
  * \endenglish
  */
-typedef int cdi_pci_device_osdep;
+typedef char *cdi_pci_device_osdep;
 
 /**
  * \german
@@ -68,11 +69,7 @@ typedef int cdi_dma_osdep;
  * OS-specific data for memory areas.
  * \endenglish
  */
-typedef struct
-{
-    int flags;
-    int count;
-} cdi_mem_osdep;
+typedef int cdi_mem_osdep;
 
 /**
  * \german

@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <ipc.h>
 #include <isr.h>
+#include <pmm.h>
 #include <process.h>
 #include <stdint.h>
 #include <string.h>
@@ -230,6 +231,14 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
             current_process->tls->errno = ENOSYS;
             return (uintptr_t)-ENOSYS;
 #endif
+
+        case SYS_PHYS_ALLOC:
+            return pmm_alloc_advanced(p0, p1, p2);
+
+        case SYS_PHYS_FREE:
+            for (uintptr_t phys = p0; phys < p0 + p1; phys += PAGE_SIZE)
+                pmm_free(phys);
+            return 0;
     }
 
     current_process->tls->errno = ENOSYS;
