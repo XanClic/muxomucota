@@ -16,16 +16,7 @@ struct cpu_state *dispatch(struct cpu_state *state, pid_t switch_to)
         return state;
 
     if (likely(current_process != NULL))
-    {
-        // Eine lustige Konstellation, die dazu führen könnte, dass zwei Prozesse den gleichen Kernelthread haben. Besser nicht ausprobieren.
-        if (((uintptr_t)state < current_process->arch.kernel_stack) || ((uintptr_t)state >= current_process->arch.kernel_stack_top))
-        {
-            unlock(&dispatch_lock);
-            return state;
-        }
-
         current_process->cpu_state = state;
-    }
     else if (likely(idle_process != NULL))
         idle_process->cpu_state = state;
 

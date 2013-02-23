@@ -200,7 +200,7 @@ void i386_common_isr(struct cpu_state *state)
 
 
         // IRQ hier behandeln
-        common_irq_handler(irq);
+        common_irq_handler(irq, state);
     }
 }
 

@@ -1,3 +1,4 @@
+#include <cpu-state.h>
 #include <ipc.h>
 #include <isr.h>
 #include <kassert.h>
@@ -9,7 +10,7 @@
 static volatile int tick_count = 0;
 
 
-static void timer_isr(void);
+static void timer_isr(struct cpu_state *state);
 
 
 void init_system_timer(void)
@@ -24,12 +25,16 @@ void init_system_timer(void)
 }
 
 
-static void timer_isr(void)
+static void timer_isr(struct cpu_state *state)
 {
     tick_count += 1000 / SYSTEM_TIMER_FREQUENCY;
 
-#ifndef COOPERATIVE
-    yield();
+#ifdef COOPERATIVE
+    (void)state;
+#else
+    // Den Kernelspace müssen wir nicht präemptieren. Hoffentlich.
+    if (state->cs & 3)
+        yield();
 #endif
 }
 
