@@ -1,11 +1,13 @@
 #include <cdi.h>
 #include <drivers.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <cdi.h>
 #include <cdi/fs.h>
 #include <cdi/lists.h>
 #include <cdi/net.h>
+#include <drivers/ports.h>
 
 
 extern struct cdi_driver *__start_cdi_drivers, *__stop_cdi_drivers;
@@ -13,8 +15,17 @@ extern struct cdi_driver *__start_cdi_drivers, *__stop_cdi_drivers;
 
 extern void cdi_osdep_pci_collect(struct cdi_driver *drv);
 
+extern void cdi_net_driver_register(struct cdi_net_driver *driver);
+
+
 int main(void)
 {
+    // Kann nicht so wirklich schaden. Wenn ein Treiber einen IRQ reserviert,
+    // bevor die I/O-Ports reserviert werden, wird iopl() sonst erst aufgerufen,
+    // nachdem der IRQ-Thread schon erstellt wurde, der dann noch IOPL=0 hat.
+    iopl(3);
+
+
     if (&__start_cdi_drivers + 1 < &__stop_cdi_drivers)
     {
         fprintf(stderr, "Warning: Only one driver supported per binary. Ignoring the following:\n");
@@ -25,20 +36,26 @@ int main(void)
         fprintf(stderr, "Running %s only.\n", __start_cdi_drivers->name);
     }
 
+    bool vfs = false;
+
     switch ((int)__start_cdi_drivers->type)
     {
         case CDI_NETWORK:
+            cdi_net_driver_register((struct cdi_net_driver *)__start_cdi_drivers);
             cdi_osdep_pci_collect(__start_cdi_drivers);
             break;
+
         case CDI_FILESYSTEM:
             cdi_fs_driver_register((struct cdi_fs_driver *)__start_cdi_drivers);
+            vfs = true;
             break;
+
         default:
             fprintf(stderr, "Unknown driver type %i for %s.\n", __start_cdi_drivers->type, __start_cdi_drivers->name);
             return 1;
     }
 
-    daemonize(__start_cdi_drivers->name);
+    daemonize(__start_cdi_drivers->name, vfs);
 }
 
 

@@ -364,7 +364,7 @@ static void irq_thread(void *arg)
 
     register_irq_handler(1, &irq, NULL);
 
-    daemonize("ps2-irq");
+    daemonize("ps2-irq", false);
 }
 
 
@@ -401,7 +401,7 @@ int main(void)
     set_leds(0, 0, 0);
 
 
-    daemonize("kbd");
+    daemonize("kbd", true);
 }
 
 

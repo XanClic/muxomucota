@@ -306,7 +306,7 @@ process_t *create_user_thread(void (*function)(void *), void *stack_top, void *a
     p->schedule_tick = 0;
 
 
-    initialize_orphan_process_arch(p);
+    initialize_child_process_arch(p, current_process);
 
     alloc_cpu_state(p);
 

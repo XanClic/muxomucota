@@ -206,5 +206,5 @@ int main(int argc, char *argv[])
     *nxtptr = NULL;
 
 
-    daemonize("mboot");
+    daemonize("mboot", true);
 }

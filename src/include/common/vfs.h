@@ -28,6 +28,7 @@
 enum
 {
     I_DEVICE_CONTACT,
+    I_ETHERNET,
     I_FILE,
     I_FS,
     I_STATABLE,
@@ -43,6 +44,7 @@ enum
     F_FLUSH,
 
 #include <vfs/flags/device-contact.h>
+#include <vfs/flags/ethernet.h>
 #include <vfs/flags/file.h>
 #include <vfs/flags/fs.h>
 #include <vfs/flags/statable.h>

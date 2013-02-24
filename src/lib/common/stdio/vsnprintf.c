@@ -310,9 +310,7 @@ int vsnprintf(char *buffer, size_t n, const char *format, va_list argptr)
     int field_width;  //Breite des Ausgabefelds
     int precision;    //Dezimalstellen (Original: "min. # of digits for integers; max number of chars for from string")
     int qualifier;    //'h', 'l', oder 'L' für Integer
-    size_t osize = 0;
-
-    n--; //Platz fürs Nullzeichen
+    size_t osize = 1; // Nullzeichen
 
     if (format == NULL)
         format = "<NULL>";
@@ -536,6 +534,9 @@ int vsnprintf(char *buffer, size_t n, const char *format, va_list argptr)
 
         str = float_number(str, fnum, precision, flags, &osize, n);
     }
-    *str = '\0';
+
+    if (--osize <= n)
+        *str = '\0';
+
     return osize;
 }
