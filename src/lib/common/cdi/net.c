@@ -1,6 +1,8 @@
 #include <assert.h>
+#include <compiler.h>
 #include <ipc.h>
 #include <shm.h>
+#include <unistd.h>
 #include <vfs.h>
 #include <cdi.h>
 #include <cdi/lists.h>
@@ -12,13 +14,19 @@ static struct cdi_net_driver *net_driver;
 
 static uintmax_t send_packet(uintptr_t shmid);
 
+void cdi_net_driver_register(struct cdi_net_driver *driver);
+
 
 void cdi_net_driver_init(struct cdi_net_driver *driver)
 {
-    net_driver = driver;
-
     driver->drv.type = CDI_NETWORK;
     cdi_driver_init((struct cdi_driver *)driver);
+}
+
+
+void cdi_net_driver_register(struct cdi_net_driver *driver)
+{
+    net_driver = driver;
 
     popup_shm_handler(STREAM_SEND, send_packet);
 }
@@ -39,7 +47,20 @@ void cdi_net_device_init(struct cdi_net_device *device)
 
     assert(fd >= 0);
 
-    stream_send(fd, &device, sizeof(device), O_BLOCKING);
+    struct
+    {
+        uintptr_t id;
+        uint8_t mac[6];
+    } cc_packed reg_info = {
+        .id = (uintptr_t)device
+    };
+
+    uint64_t mac = device->mac;
+
+    for (int i = 0; i < 6; i++)
+        reg_info.mac[i] = (mac >> ((5 - i) * 8)) & 0xff; // Big Endian
+
+    stream_send(fd, &reg_info, sizeof(reg_info), O_BLOCKING);
 
     destroy_pipe(fd, 0);
 }

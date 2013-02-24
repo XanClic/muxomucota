@@ -496,5 +496,5 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
 
 int main(void)
 {
-    daemonize("tar");
+    daemonize("tar", true);
 }

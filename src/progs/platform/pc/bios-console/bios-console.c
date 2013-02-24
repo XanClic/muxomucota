@@ -499,5 +499,5 @@ int main(void)
         text_mem[i] = 0x0700;
 
 
-    daemonize("tty");
+    daemonize("tty", true);
 }

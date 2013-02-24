@@ -26,5 +26,5 @@ int main(int argc, char *argv[])
 
     basepath = argv[1];
 
-    daemonize("root");
+    daemonize("root", true);
 }

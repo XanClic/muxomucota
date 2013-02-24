@@ -49,7 +49,7 @@ static void irq_thread(void *arg)
 
     register_irq_handler(ii->irq, raw_irq_handler, ii);
 
-    daemonize("cdi-irq");
+    daemonize("cdi-irq", false);
 }
 
 

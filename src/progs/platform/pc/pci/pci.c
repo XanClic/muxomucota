@@ -451,5 +451,5 @@ int main(void)
 
     enumerate_bus(0);
 
-    daemonize("pci");
+    daemonize("pci", true);
 }
