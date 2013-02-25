@@ -120,13 +120,15 @@ void *aligned_alloc(size_t align, size_t size)
                 {
                     struct free_block *onext = (*fb)->next;
 
-                    (*fb)->next = (struct free_block *)((uintptr_t)t + size);
+                    (*fb)->next = (struct free_block *)((uintptr_t)t + 16 + size);
                     (*fb)->next->size = osize - align_space - size - 16;
                     (*fb)->next->next = onext;
                 }
             }
 
             unlock(&__heap_lock);
+
+            // TODO: join_memory aufrufen
 
             return (void *)((uintptr_t)t + 16);
         }
@@ -135,8 +137,7 @@ void *aligned_alloc(size_t align, size_t size)
     }
 
     // Genug Platz für Alignment
-    // FIXME: Wirklich? Vor allem wegen der if-Bedingung gleich.
-    struct free_block *t = sbrk(size + 32 + align);
+    struct free_block *t = sbrk(size + 48 + align);
 
     size_t align_space = align - ((uintptr_t)t & (align - 1));
 
@@ -148,7 +149,7 @@ void *aligned_alloc(size_t align, size_t size)
         t->size = size;
 
         *fb = (struct free_block *)((uintptr_t)t + size + 16);
-        (*fb)->size = 16 + align;
+        (*fb)->size = 32 + align;
         (*fb)->next = NULL;
 
         unlock(&__heap_lock);
@@ -174,9 +175,14 @@ void *aligned_alloc(size_t align, size_t size)
             (*fb)->next = NULL;
         }
         else
+        {
             *fb = NULL;
+            t->size += align + 48 - align_space;
+        }
 
         unlock(&__heap_lock);
+
+        // TODO: join_memory aufrufen
 
         return (void *)((uintptr_t)t + 16);
     }
