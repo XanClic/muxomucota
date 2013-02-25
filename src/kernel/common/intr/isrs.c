@@ -117,10 +117,12 @@ int common_irq_handler(int irq, struct cpu_state *state)
         {
             isr->process->currently_handled_irq = irq;
 
+            kassert(isr->process->pid != isr->process->pgid);
+
             // Das funktioniert ohne jegliche Race Conditions, weil der Prozess
             // ein Daemon war, der sich nicht in der Runqueue befindet. Somit
             // gibt es auch keinen State, den man hier kaputtmachen könnte.
-            make_process_entry(isr->process, isr->process->cpu_state, (void (*)(void))isr->process_handler, (void *)(USER_STACK_TOP - sizeof(struct tls)));
+            make_process_entry(isr->process, isr->process->cpu_state, (void (*)(void))isr->process_handler, isr->process->irq_stack_top);
 
             add_process_func_param(isr->process, isr->process->cpu_state, (uintptr_t)isr->info);
             process_simulate_func_call(isr->process->cpu_state);

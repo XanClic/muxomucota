@@ -51,6 +51,7 @@ process_t *create_empty_process(const char *name)
 
     p->handles_irqs = false;
     p->currently_handled_irq = -1;
+    p->irq_stack_top = NULL;
 
     p->schedule_tick = 0;
 
@@ -94,8 +95,11 @@ void make_process_entry(process_t *proc, struct cpu_state *state, void (*address
 
         kernel_unmap(tls, sizeof(*tls));
 
-        process_stack_alloc(state, sizeof(struct tls));
+        stack = process_stack_alloc(state, sizeof(struct tls));
     }
+
+    if (proc->irq_stack_top == NULL)
+        proc->irq_stack_top = stack;
 }
 
 
@@ -227,6 +231,7 @@ void make_idle_process(void)
 
     idle_process->handles_irqs = false;
     idle_process->currently_handled_irq = -1;
+    idle_process->irq_stack_top = NULL;
 
     idle_process->schedule_tick = 0;
 
@@ -260,6 +265,7 @@ process_t *create_kernel_thread(const char *name, void (*function)(void))
 
     p->handles_irqs = false;
     p->currently_handled_irq = -1;
+    p->irq_stack_top = NULL;
 
     p->schedule_tick = 0;
 
@@ -302,6 +308,7 @@ process_t *create_user_thread(void (*function)(void *), void *stack_top, void *a
 
     p->handles_irqs = false;
     p->currently_handled_irq = -1;
+    p->irq_stack_top = NULL;
 
     p->schedule_tick = 0;
 
@@ -905,6 +912,8 @@ pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer
     pop->popup_stack_index = stack_index;
 
     pop->handles_irqs = false;
+    pop->currently_handled_irq = -1;
+    pop->irq_stack_top = NULL;
 
     pop->schedule_tick = 0;
 
@@ -954,6 +963,7 @@ pid_t fork(struct cpu_state *current_state)
         set_process_popup_entry(child, current_process->popup_entry);
 
     child->tls = current_process->tls;
+    child->irq_stack_top = current_process->irq_stack_top;
 
 
     vmmc_clone(child->vmmc, current_process->vmmc);
@@ -1029,6 +1039,7 @@ int exec(struct cpu_state *state, const void *file, size_t file_length, char *co
     vmmc_set_heap_top(current_process->vmmc, heap_start);
 
     current_process->tls = NULL;
+    current_process->irq_stack_top = NULL;
 
     make_process_entry(current_process, state, entry, (void *)USER_STACK_TOP);
 

@@ -12,6 +12,8 @@
 
 extern struct cdi_driver *__start_cdi_drivers, *__stop_cdi_drivers;
 
+extern cdi_list_t cdi_osdep_devices;
+
 
 extern void cdi_osdep_pci_collect(struct cdi_driver *drv);
 
@@ -54,6 +56,10 @@ int main(void)
             fprintf(stderr, "Unknown driver type %i for %s.\n", __start_cdi_drivers->type, __start_cdi_drivers->name);
             return 1;
     }
+
+
+    if ((__start_cdi_drivers->type != CDI_FILESYSTEM) && ((cdi_osdep_devices == NULL) || !cdi_list_size(cdi_osdep_devices)))
+        return 1;
 
     daemonize(__start_cdi_drivers->name, vfs);
 }
