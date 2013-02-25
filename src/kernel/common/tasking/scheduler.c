@@ -85,5 +85,8 @@ process_t *schedule(pid_t switch_to)
 
     unlock(&runqueue_lock);
 
+    if (current_process->pid != current_process->pgid)
+        kassert((current_process->cpu_state->esp < 0xef000000) || !(current_process->cpu_state->cs & 3));
+
     return current_process;
 }

@@ -1,5 +1,4 @@
 #include <compiler.h>
-#include <kassert.h>
 #include <lock.h>
 #include <process.h>
 #include <vmem.h>
