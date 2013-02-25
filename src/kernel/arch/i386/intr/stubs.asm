@@ -136,7 +136,8 @@ add   esp,4
 pop   ebp
 pop   edi
 pop   esi
-add   esp,8
+pop   edx
+pop   ecx
 pop   ebx
 add   esp,4
 

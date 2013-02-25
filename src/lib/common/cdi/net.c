@@ -57,8 +57,8 @@ void cdi_net_device_init(struct cdi_net_device *device)
 
     uint64_t mac = device->mac;
 
-    for (int i = 0; i < 6; i++)
-        reg_info.mac[i] = (mac >> ((5 - i) * 8)) & 0xff; // Big Endian
+    for (int i = 0; i < 6; i++, mac >>= 8)
+        reg_info.mac[i] = mac & 0xff;
 
     stream_send(fd, &reg_info, sizeof(reg_info), O_BLOCKING);
 

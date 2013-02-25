@@ -25,6 +25,45 @@ struct network_packet
     size_t length;
 };
 
+
+struct vfs_file
+{
+    enum
+    {
+        TYPE_REGISTER,
+        TYPE_RECEIVE,
+        TYPE_DIR,
+        TYPE_CARD
+    } type;
+
+    union
+    {
+        struct
+        {
+            pid_t pid;
+            struct network_card *card;
+            uint8_t dest[6];
+            int packet_type;
+
+            struct vfs_file *next;
+
+            struct network_packet *inqueue;
+            lock_t inqueue_lock;
+
+            pid_t owner;
+            bool signal;
+        };
+
+        struct
+        {
+            off_t pos;
+            char *data;
+            size_t sz;
+        };
+    };
+};
+
+
 struct network_card
 {
     struct network_card *next;
@@ -37,8 +76,8 @@ struct network_card
     pid_t process;
     uintptr_t id;
 
-    struct network_packet *inqueue;
-    lock_t inqueue_lock;
+    struct vfs_file *listeners;
+    lock_t listener_lock;
 };
 
 static struct network_card *cards = NULL;
@@ -65,67 +104,59 @@ static bool eth_receive(struct network_card *card, const void *data, size_t leng
 
     const struct ethernet_frame *frame = data;
 
-    if (memcmp(frame->dest, (uint8_t[6]){ 0xff, 0xff, 0xff, 0xff, 0xff, 0xff }, sizeof(frame->dest)) ||
+    if (memcmp(frame->dest, (uint8_t[6]){ 0xff, 0xff, 0xff, 0xff, 0xff, 0xff }, sizeof(frame->dest)) &&
         memcmp(frame->dest, card->mac, sizeof(frame->dest)))
     {
         return false;
     }
 
 
-    struct network_packet *nnp = malloc(sizeof(*nnp));
-    nnp->next = NULL;
+    lock(&card->listener_lock);
 
-    memcpy(nnp->src, frame->src, sizeof(nnp->src));
+    for (struct vfs_file *f = card->listeners; f != NULL; f = f->next)
+    {
+        struct network_packet *nnp = malloc(sizeof(*nnp));
+        nnp->next = NULL;
 
-    nnp->length = length - sizeof(*frame);
-    nnp->type   = ntohs(frame->type);
+        memcpy(nnp->src, frame->src, sizeof(nnp->src));
 
-    nnp->data = malloc(nnp->length);
-    memcpy(nnp->data, frame->data, nnp->length);
+        nnp->length = length - sizeof(*frame);
+        nnp->type   = ntohs(frame->type);
+
+        nnp->data = malloc(nnp->length);
+        memcpy(nnp->data, frame->data, nnp->length);
 
 
-    lock(&card->inqueue_lock);
+        lock(&f->inqueue_lock);
 
-    struct network_packet **np;
-    for (np = &card->inqueue; *np != NULL; np = &(*np)->next);
+        struct network_packet **np;
+        for (np = &f->inqueue; *np != NULL; np = &(*np)->next);
 
-    *np = nnp;
+        *np = nnp;
 
-    unlock(&card->inqueue_lock);
+        unlock(&f->inqueue_lock);
+
+
+        if (f->signal)
+        {
+            struct
+            {
+                pid_t pid;
+                uintptr_t id;
+            } msg = {
+                .pid = getpgid(0),
+                .id = (uintptr_t)f
+            };
+
+            ipc_message(f->owner, IPC_SIGNAL, &msg, sizeof(msg));
+        }
+    }
+
+    unlock(&card->listener_lock);
 
 
     return true;
 }
-
-
-struct vfs_file
-{
-    enum
-    {
-        TYPE_REGISTER,
-        TYPE_RECEIVE,
-        TYPE_DIR,
-        TYPE_CARD
-    } type;
-
-    union
-    {
-        struct
-        {
-            pid_t pid;
-            struct network_card *card;
-            uint8_t dest[6];
-            int packet_type;
-        };
-
-        struct
-        {
-            off_t pos;
-            char *data;
-            size_t sz;
-        };
-    };
-};
 
 
 static int get_number(void)
@@ -174,12 +205,12 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
 
         struct network_card *c = malloc(sizeof(*c));
         c->nr      = get_number();
-        c->process = getppid();
+        c->process = getpgid(getppid());
         c->id      = 0;
 
-        c->inqueue = NULL;
+        c->listeners = NULL;
 
-        lock_init(&c->inqueue_lock);
+        lock_init(&c->listener_lock);
 
         asprintf(&c->name, "eth%i", c->nr);
 
@@ -196,7 +227,7 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
 
         struct vfs_file *f = malloc(sizeof(*f));
         f->type = TYPE_RECEIVE;
-        f->pid  = getppid();
+        f->pid  = getpgid(getppid());
         f->card = NULL;
 
         return (uintptr_t)f;
@@ -219,6 +250,18 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
         memset(f->dest, 0, sizeof(f->dest));
 
         f->packet_type = 0x0800;
+
+        f->signal = false;
+
+        f->inqueue = NULL;
+        lock_init(&f->inqueue_lock);
+
+        lock(&c->listener_lock);
+
+        f->next = c->listeners;
+        c->listeners = f;
+
+        unlock(&c->listener_lock);
 
         return (uintptr_t)f;
     }
@@ -264,6 +307,18 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
 
         f->packet_type = 0x0800;
 
+        f->signal = false;
+
+        f->inqueue = NULL;
+        lock_init(&f->inqueue_lock);
+
+        lock(&c->listener_lock);
+
+        f->next = c->listeners;
+        c->listeners = f;
+
+        unlock(&c->listener_lock);
+
         return (uintptr_t)f;
     }
 
@@ -282,6 +337,36 @@ uintptr_t service_duplicate_pipe(uintptr_t id)
         nf->data = malloc(nf->sz);
         memcpy(nf->data, f->data, nf->sz);
     }
+    else if (f->type == TYPE_CARD)
+    {
+        lock(&nf->card->listener_lock);
+
+        nf->next = nf->card->listeners;
+        nf->card->listeners = nf;
+
+        unlock(&nf->card->listener_lock);
+
+        lock(&f->inqueue_lock);
+
+        lock_init(&nf->inqueue_lock);
+
+        struct network_packet **endp = &nf->inqueue;
+
+        for (struct network_packet *i = f->inqueue; i != NULL; i = i->next)
+        {
+            *endp = malloc(sizeof(*i));
+            memcpy(*endp, i, sizeof(*i));
+
+            (*endp)->data = malloc(i->length);
+            memcpy((*endp)->data, i->data, i->length);
+
+            endp = &(*endp)->next;
+        }
+
+        *endp = NULL;
+
+        unlock(&f->inqueue_lock);
+    }
 
     return (uintptr_t)nf;
 }
@@ -295,6 +380,31 @@ void service_destroy_pipe(uintptr_t id, int flags)
 
     if (f->type == TYPE_DIR)
         free(f->data);
+    else if (f->type == TYPE_CARD)
+    {
+        lock(&f->card->listener_lock);
+
+        struct vfs_file **fp;
+        for (fp = &f->card->listeners; (*fp != NULL) && (*fp != f); fp = &(*fp)->next);
+
+        if (*fp != NULL)
+            *fp = f->next;
+
+        unlock(&f->card->listener_lock);
+
+
+        struct network_packet *np = f->inqueue;
+
+        while (np != NULL)
+        {
+            struct network_packet *nnp = np->next;
+
+            free(np->data);
+            free(np);
+
+            np = nnp;
+        }
+    }
 
     free(f);
 }
@@ -395,25 +505,22 @@ big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int fl
 
         case TYPE_CARD:
         {
-            if (size < 6)
-                return 0;
+            lock(&f->inqueue_lock);
 
-            lock(&f->card->inqueue_lock);
-
-            struct network_packet *np = f->card->inqueue;
+            struct network_packet *np = f->inqueue;
             if (np != NULL)
-                f->card->inqueue = np->next;
+                f->inqueue = np->next;
 
-            unlock(&f->card->inqueue_lock);
+            unlock(&f->inqueue_lock);
 
-            memcpy(data, np->src, sizeof(np->src));
 
-            size_t copy_sz = (np->length < size - 6) ? np->length : (size - 6);
+            size_t copy_sz = (np->length < size) ? np->length : size;
 
-            memcpy((char *)data + sizeof(np->src), np->data, copy_sz);
+            memcpy(data, np->data, copy_sz);
 
             free(np->data);
             free(np);
+
 
             return copy_sz;
         }
@@ -436,6 +543,7 @@ bool service_pipe_implements(uintptr_t id, int interface)
         case I_DEVICE_CONTACT:
             return (f->type == TYPE_RECEIVE);
         case I_ETHERNET:
+        case I_SIGNAL:
             return (f->type == TYPE_CARD);
     }
 
@@ -468,6 +576,20 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
             return 0;
 
         case F_FLUSH:
+            if ((f->type != TYPE_CARD) || (value != 1))
+                return 0;
+
+            lock(&f->inqueue_lock);
+
+            struct network_packet *np = f->inqueue;
+            if (np != NULL)
+                f->inqueue = np->next;
+
+            unlock(&f->inqueue_lock);
+
+            free(np->data);
+            free(np);
+
             return 0;
 
         case F_POSITION:
@@ -482,8 +604,8 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
             if (f->type != TYPE_CARD)
                 return -EINVAL;
 
-            for (int i = 0; i < 6; i++)
-                f->dest[i] = (value >> ((5 - i) * 8)) & 0xff; // Big Endian
+            for (int i = 0; i < 6; i++, value >>= 8)
+                f->dest[i] = value & 0xff;
 
             return 0;
 
@@ -492,6 +614,15 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
                 return -EINVAL;
 
             f->packet_type = value;
+
+            return 0;
+
+        case F_IPC_SIGNAL:
+            if (f->type != TYPE_CARD)
+                return -EINVAL;
+
+            f->owner  = getpgid(getppid());
+            f->signal = (bool)value;
 
             return 0;
     }
@@ -510,7 +641,7 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
             if (f->type == TYPE_DIR)
                 return f->sz - f->pos;
             else if (f->type == TYPE_CARD)
-                return (f->card->inqueue != NULL) ? (f->card->inqueue->length + 6) : 0;
+                return (f->inqueue != NULL) ? f->inqueue->length : 0;
             else
                 return 0;
 
@@ -518,7 +649,7 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
             if (f->type == TYPE_DIR)
                 return (f->sz > f->pos);
             else if (f->type == TYPE_CARD)
-                return (f->card->inqueue != NULL);
+                return (f->inqueue != NULL);
             else
                 return false;
 
@@ -532,24 +663,23 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
             return 0;
         case F_MODE:
             if (f->type == TYPE_DIR)
-                return S_IFDIR | S_IFODEV | S_IRWXU | S_IRWXG | S_IRWXO;
+                return S_IFDIR | S_IFODEV | 0777;
             else if (f->type == TYPE_CARD)
-                return S_IFODEV | S_IRWXU | S_IRWXG | S_IRWXO;
+                return S_IFODEV | 0666;
             else
                 return 0;
 
         case F_NLINK:
+        case F_BLOCK_SIZE:
             return 1;
+
         case F_UID:
         case F_GID:
         case F_ATIME:
         case F_MTIME:
         case F_CTIME:
-            return 0;
-        case F_BLOCK_SIZE:
-            return 1;
         case F_BLOCK_COUNT:
-            return (f->type == TYPE_DIR) ? f->sz : 0;
+            return 0;
 
         case F_DEST_MAC:
         {
@@ -559,7 +689,20 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
             uint64_t mac = 0;
 
             for (int i = 0; i < 6; i++)
-                mac |= (uint64_t)f->dest[i] << ((5 - i) * 8); // Big Endian
+                mac |= (uint64_t)f->dest[i] << (i * 8);
+
+            return mac;
+        }
+
+        case F_SRC_MAC:
+        {
+            if ((f->type != TYPE_CARD) || (f->inqueue == NULL))
+                return 0;
+
+            uint64_t mac = 0;
+
+            for (int i = 0; i < 6; i++)
+                mac |= (uint64_t)f->inqueue->src[i] << (i * 8);
 
             return mac;
         }
@@ -572,13 +715,16 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
             uint64_t mac = 0;
 
             for (int i = 0; i < 6; i++)
-                mac |= (uint64_t)f->card->mac[i] << ((5 - i) * 8); // Big Endian
+                mac |= (uint64_t)f->card->mac[i] << (i * 8);
 
             return mac;
         }
 
         case F_ETH_PACKET_TYPE:
-            return (f->type == TYPE_CARD) ? f->packet_type : 0;
+            return ((f->type == TYPE_CARD) && (f->inqueue != NULL)) ? f->inqueue->type : 0;
+
+        case F_IPC_SIGNAL:
+            return (f->type == TYPE_CARD) ? f->signal : false;
     }
 
     return 0;
