@@ -45,7 +45,7 @@ process_t *schedule(pid_t switch_to)
     }
 
 
-    process_t *switch_target = NULL;
+    process_t *switch_target = NULL, *irq_process = NULL;
 
     unsigned max_sched_diff = 0;
     process_t *eldest = NULL;
@@ -58,6 +58,9 @@ process_t *schedule(pid_t switch_to)
 
         if (proc->pid == switch_to)
             switch_target = proc;
+
+        if (proc->handles_irqs && (proc->currently_handled_irq >= 0))
+            irq_process = proc;
 
         if (schedule_tick - proc->schedule_tick > max_sched_diff)
         {
@@ -81,6 +84,9 @@ process_t *schedule(pid_t switch_to)
 
     if ((switch_target != NULL) && (max_sched_diff < 42))
         current_process = switch_target;
+
+    if (irq_process != NULL)
+        current_process = irq_process;
 
 
     unlock(&runqueue_lock);
