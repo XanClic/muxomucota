@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <compiler.h>
 #include <lock.h>
 #include <stddef.h>
@@ -54,6 +55,15 @@ void free(void *ptr)
         return;
 
     struct free_block *t = (struct free_block *)((uintptr_t)ptr - 16);
+
+#ifndef NDEBUG
+    struct free_block *dfc;
+    for (dfc = __first_free; (dfc != NULL) && (dfc != t); dfc = dfc->next);
+
+    // Assert tut dann lustigerweise nicht mehr.
+    if (dfc != NULL)
+        *(volatile void **)NULL = ptr;
+#endif
 
     lock(&__heap_lock);
 

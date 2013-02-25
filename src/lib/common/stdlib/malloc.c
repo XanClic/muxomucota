@@ -65,6 +65,7 @@ void *malloc(size_t sz)
 }
 
 
+// TODO: Neu schreiben. Das ist hässlich wie die Nacht.
 void *aligned_alloc(size_t align, size_t size)
 {
     // TODO: Überprüfen, ob align eine Zweierpotenz ist
@@ -93,6 +94,8 @@ void *aligned_alloc(size_t align, size_t size)
         {
             size_t osize = t->size;
 
+            struct free_block *rf = NULL;
+
             if (align_space == 16)
             {
                 // Erster Block: Alignter Block
@@ -101,9 +104,8 @@ void *aligned_alloc(size_t align, size_t size)
                     t->size = size;
 
                     // Zweiter Block: freier Platz am Ende
-                    *fb = (struct free_block *)((uintptr_t)t + size + 16);
-                    (*fb)->size = osize - (size + 16);
-                    (*fb)->next = t->next;
+                    rf = (struct free_block *)((uintptr_t)t + size + 16);
+                    rf->size = osize - (size + 16);
                 }
             }
             else
@@ -118,17 +120,15 @@ void *aligned_alloc(size_t align, size_t size)
                 // Dritter Block: Evtl. freier Platz am Ende
                 if (osize - align_space - size >= 32)
                 {
-                    struct free_block *onext = (*fb)->next;
-
-                    (*fb)->next = (struct free_block *)((uintptr_t)t + 16 + size);
-                    (*fb)->next->size = osize - align_space - size - 16;
-                    (*fb)->next->next = onext;
+                    rf = (struct free_block *)((uintptr_t)t + 16 + size);
+                    rf->size = osize - align_space - size - 16;
                 }
             }
 
             unlock(&__heap_lock);
 
-            // TODO: join_memory aufrufen
+            if (rf != NULL)
+                free((void *)((uintptr_t)rf + 16));
 
             return (void *)((uintptr_t)t + 16);
         }
@@ -148,21 +148,19 @@ void *aligned_alloc(size_t align, size_t size)
     {
         t->size = size;
 
-        *fb = (struct free_block *)((uintptr_t)t + size + 16);
-        (*fb)->size = 32 + align;
-        (*fb)->next = NULL;
+        struct free_block *rf = (struct free_block *)((uintptr_t)t + size + 16);
+        rf->size = 32 + align;
 
         unlock(&__heap_lock);
+
+        free((void *)((uintptr_t)rf + 16));
 
         return (void *)((uintptr_t)t + 16);
     }
     else
     {
-        *fb = t;
-
-        t->size = align_space - 32;
-
-        fb = &t->next;
+        struct free_block *rf1 = t, *rf2 = NULL;
+        rf1->size = align_space - 32;
 
         t = (struct free_block *)((uintptr_t)t + align_space - 16);
         t->size = size;
@@ -170,19 +168,18 @@ void *aligned_alloc(size_t align, size_t size)
         // Freier Platz am Ende
         if (align + 16 >= align_space)
         {
-            *fb = (struct free_block *)((uintptr_t)t + size + 16);
-            (*fb)->size = align + 16 - align_space;
-            (*fb)->next = NULL;
+            rf2 = (struct free_block *)((uintptr_t)t + size + 16);
+            rf2->size = align + 16 - align_space;
         }
         else
-        {
-            *fb = NULL;
             t->size += align + 48 - align_space;
-        }
 
         unlock(&__heap_lock);
 
-        // TODO: join_memory aufrufen
+        free((void *)((uintptr_t)rf1 + 16));
+
+        if (rf2 != NULL)
+            free((void *)((uintptr_t)rf2 + 16));
 
         return (void *)((uintptr_t)t + 16);
     }

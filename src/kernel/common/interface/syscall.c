@@ -252,6 +252,17 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
                 return (uintptr_t)-EFAULT;
             }
             return create_user_thread((void (*)(void *))p0, (void *)p1, (void *)p2)->pid;
+
+        case SYS_GETPGID:
+        {
+            process_t *p = find_process(p0);
+            if (p == NULL)
+            {
+                current_process->tls->errno = ESRCH;
+                return (uintptr_t)-1;
+            }
+            return p->pgid;
+        }
     }
 
     current_process->tls->errno = ENOSYS;

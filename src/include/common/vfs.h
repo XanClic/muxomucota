@@ -21,9 +21,18 @@
 #define O_NOFOLLOW    (1 << 6)
 
 // stream_send/stream_recv-Flags
-#define O_NONBLOCK    (1 << 0)
+#define O_TRANS_NC    0xffff
+#define O_NONBLOCK    (1 << 16)
 #define O_BLOCKING    !O_NONBLOCK
 
+
+// Nicht kombinierbare stream_(send/recv)-Flags
+enum
+{
+    O_NONE = 0,
+
+#include <vfs/trans-flags/fs.h>
+};
 
 enum
 {
@@ -31,8 +40,11 @@ enum
     I_ETHERNET,
     I_FILE,
     I_FS,
+    I_IP,
+    I_SIGNAL,
     I_STATABLE,
-    I_TTY
+    I_TTY,
+    I_UDP
 };
 
 // pipe_(g/s)et_flag()-Standardflags
@@ -46,9 +58,11 @@ enum
 #include <vfs/flags/device-contact.h>
 #include <vfs/flags/ethernet.h>
 #include <vfs/flags/file.h>
-#include <vfs/flags/fs.h>
+#include <vfs/flags/ip.h>
+#include <vfs/flags/signal.h>
 #include <vfs/flags/statable.h>
 #include <vfs/flags/tty.h>
+#include <vfs/flags/udp.h>
 };
 
 
@@ -66,7 +80,9 @@ typedef enum
 
     PIPE_IMPLEMENTS,
 
-    IS_SYMLINK
+    IS_SYMLINK,
+
+#include <vfs/ipc-funcs/signal.h>
 } vfs_function_t;
 
 
@@ -132,6 +148,7 @@ struct ipc_pipe_implements
 
 
 int create_pipe(const char *path, int flags);
+int find_pipe(pid_t pid, uintptr_t id);
 void destroy_pipe(int pipe, int flags);
 
 int duplicate_pipe(int pipe, int dest);

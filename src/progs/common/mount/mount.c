@@ -10,7 +10,7 @@ int main(int argc, char *argv[])
 {
     if (argc != 3)
     {
-        fprintf(stderr, "Usage: mount <file> <directory>\n");
+        fprintf(stderr, "Usage: mount <file> <mountpoint>\n");
         return 1;
     }
 

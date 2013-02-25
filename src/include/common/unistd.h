@@ -7,6 +7,8 @@
 
 #ifdef KERNEL
 #include <cpu-state.h>
+#else
+#include <syscall.h>
 #endif
 #include <sys/types.h>
 
@@ -37,10 +39,7 @@ static inline pid_t getpgid(pid_t pid)
     if (!pid || (pid == getpid()))
         return __tls()->pgid;
     else
-    {
-        errno = EPERM;
-        return -1;
-    }
+        return syscall1(SYS_GETPGID, pid);
 }
 #endif
 
