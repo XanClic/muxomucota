@@ -15,9 +15,9 @@ static void print_ip(uint32_t ip)
 
 static void print_mac(uint64_t mac)
 {
-    for (int i = 0; i < 6; i++, mac <<= 8)
+    for (int i = 0; i < 6; i++, mac >>= 8)
     {
-        printf("%02x", (int)(mac >> 40) & 0xff);
+        printf("%02x", (int)(mac & 0xff));
         if (i < 5)
             putchar(':');
     }
