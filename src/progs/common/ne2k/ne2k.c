@@ -41,7 +41,7 @@
 #include "ethernet.h"
 
 //Hier koennen die Debug-Nachrichten aktiviert werden
-// #define DEBUG_MSG(s) printf("[ne2k] debug: %s() '%s'\n", __FUNCTION__, s)
+//#define DEBUG_MSG(s) printf("[ne2k] debug: %s() '%s'\n", __FUNCTION__, s)
 #define DEBUG_MSG(s) //
 
 static void ne2k_handle_interrupt(struct cdi_device* device);
@@ -333,22 +333,18 @@ static void ne2k_handle_interrupt(struct cdi_device* device)
     // Packet received?
     if(isr & 0x05) {
         DEBUG_MSG("ne2k: received packet");
-        if(!(isr & 0x04)) {
-            write_register_byte(netcard, NE_IMR, 0x3A);
-            isr &= ~1;
-            receive_ok_handler(netcard);
-            write_register_byte(netcard, NE_IMR, 0x3F);
-        }
-        else {
+        write_register_byte(netcard, NE_IMR, 0x3A);
+        isr &= ~1;
+        receive_ok_handler(netcard);
+        write_register_byte(netcard, NE_IMR, 0x3F);
+        if(isr & 0x04) {
             DEBUG_MSG("ne2k: receive failed");
         }
     }
 
     // Packet transmitted?
     if(isr & 0x0A) {
-        if(!(isr & 0x8)) {
-            transmit_ok_handler(netcard);
-        }
+        transmit_ok_handler(netcard);
     }
 
     // Overflows
