@@ -172,6 +172,7 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
             i = malloc(sizeof(*i));
             i->name = strdup(relpath + 1);
             i->fd   = -1;
+            i->ip   = 0;
 
             lock_init(&i->lock);
 
