@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <vfs.h>
 
 
@@ -24,47 +25,46 @@ static void print_mac(uint64_t mac)
 }
 
 
-int main(int argc, char *argv[])
+static void print_if_info(const char *name)
 {
-    if (argc < 2)
-    {
-        fprintf(stderr, "Usage: ifconfig <interface>\n\n");
-        fprintf(stderr, "The interface must be a file present in (eth) and (ip).\n");
-
-        return 1;
-    }
-
-
     char *ethname, *ipname;
 
-    asprintf(&ethname, "(eth)/%s", argv[1]);
-    asprintf( &ipname,  "(ip)/%s", argv[1]);
+    asprintf(&ethname, "(eth)/%s", name);
+    asprintf( &ipname,  "(ip)/%s", name);
 
     int ethfd = create_pipe(ethname, O_RDONLY), ipfd = create_pipe(ipname, O_RDONLY);
 
     if (ethfd < 0)
     {
         perror(ethname);
-        return 1;
+        return;
     }
 
     if (ipfd < 0)
     {
+        destroy_pipe(ethfd, 0);
+
         perror(ipname);
-        return 1;
+        return;
     }
 
 
     if (!pipe_implements(ethfd, I_ETHERNET))
     {
+        destroy_pipe(ethfd, 0);
+        destroy_pipe( ipfd, 0);
+
         fprintf(stderr, "%s: Is not an ethernet interface.\n", ethname);
-        return 1;
+        return;
     }
 
     if (!pipe_implements(ipfd, I_IP))
     {
+        destroy_pipe(ethfd, 0);
+        destroy_pipe( ipfd, 0);
+
         fprintf(stderr, "%s: Is not an IP interface.\n", ipname);
-        return 1;
+        return;
     }
 
 
@@ -72,12 +72,45 @@ int main(int argc, char *argv[])
     uint32_t ip  = pipe_get_flag(ipfd,  F_MY_IP);
 
 
-    printf("%s: inet ", argv[1]);
+    destroy_pipe(ethfd, 0);
+    destroy_pipe( ipfd, 0);
+
+
+    printf("%s: inet ", name);
     print_ip(ip);
     printf("  ether ");
     print_mac(mac);
     printf("\n");
+}
 
+
+int main(int argc, char *argv[])
+{
+    if (argc > 1)
+        print_if_info(argv[1]);
+    else
+    {
+        int fd = create_pipe("(eth)", O_RDONLY);
+
+        if (fd < 0)
+        {
+            perror("(eth)");
+            return 1;
+        }
+
+        size_t ifs_sz = pipe_get_flag(fd, F_PRESSURE);
+        char ifs[ifs_sz];
+
+        stream_recv(fd, ifs, ifs_sz, O_BLOCKING);
+
+        destroy_pipe(fd, 0);
+
+        for (int i = 0; ifs[i]; i += strlen(&ifs[i]) + 1)
+        {
+            print_if_info(&ifs[i]);
+            putchar('\n');
+        }
+    }
 
     return 0;
 }
