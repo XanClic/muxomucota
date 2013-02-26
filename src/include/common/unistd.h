@@ -25,6 +25,7 @@ pid_t fork(void);
 #endif
 
 int execvp(const char *file, char *const argv[]);
+int execlp(const char *file, const char *arg, ...);
 
 int chdir(const char *path);
 char *getcwd(char *buf, size_t size);
