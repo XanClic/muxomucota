@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <vfs.h>
 
@@ -25,6 +26,24 @@ static void print_mac(uint64_t mac)
 }
 
 
+static int64_t get_ip(char *s)
+{
+    uint32_t ip = 0;
+
+    for (int i = 0; i < 4; i++)
+    {
+        int val = strtol(s, &s, 10);
+        if ((val < 0) || (val > 255) || ((*s != '.') && (i < 3)) || (*s && (i == 3)))
+            return -1;
+
+        ip = (ip << 8) | val;
+        s++;
+    }
+
+    return ip;
+}
+
+
 static void print_if_info(const char *name)
 {
     char *ethname, *ipname;
@@ -34,8 +53,14 @@ static void print_if_info(const char *name)
 
     int ethfd = create_pipe(ethname, O_RDONLY), ipfd = create_pipe(ipname, O_RDONLY);
 
+    free(ethname);
+    free(ipname);
+
     if (ethfd < 0)
     {
+        if (ipfd >= 0)
+            destroy_pipe(ipfd, 0);
+
         perror(ethname);
         return;
     }
@@ -87,7 +112,44 @@ static void print_if_info(const char *name)
 int main(int argc, char *argv[])
 {
     if (argc > 1)
-        print_if_info(argv[1]);
+    {
+        if (argc == 2)
+            print_if_info(argv[1]);
+        else
+        {
+            int64_t ip = get_ip(argv[2]);
+
+            if (ip < 0)
+            {
+                fprintf(stderr, "%s is not a valid IP address.\n", argv[2]);
+                return 1;
+            }
+
+
+            char *ipname;
+            asprintf(&ipname, "(ip)/%s", argv[1]);
+
+            int ipfd = create_pipe(ipname, O_RDWR);
+
+            free(ipname);
+
+            if (ipfd < 0)
+            {
+                perror(ipname);
+                return 1;
+            }
+
+            if (!pipe_implements(ipfd, I_IP))
+            {
+                fprintf(stderr, "%s: Is not an IP interface.\n", ipname);
+                return 1;
+            }
+
+            pipe_set_flag(ipfd, F_MY_IP, ip);
+
+            destroy_pipe(ipfd, 0);
+        }
+    }
     else
     {
         int fd = create_pipe("(eth)", O_RDONLY);
