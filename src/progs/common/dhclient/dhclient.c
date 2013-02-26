@@ -8,6 +8,16 @@
 #include <arpa/inet.h>
 
 
+struct routing_entry
+{
+    void *rsvd;
+
+    uint32_t dest, mask, gw;
+
+    char iface[];
+};
+
+
 static void print_ip(const char *s, uint32_t ip)
 {
     printf("%15s: ", s);
@@ -315,7 +325,37 @@ int main(int argc, char *argv[])
 
     pipe_set_flag(ipfd, F_MY_IP, my_addr);
 
-    // TODO: Routing
+
+    pid_t pid = find_daemon_by_name("route");
+
+    if (pid < 0)
+    {
+        fprintf(stderr, "Could not find routing service.\n");
+        return 1;
+    }
+
+
+    size_t resz = sizeof(struct routing_entry) + strlen(argv[1]) + 1;
+    struct routing_entry *re = malloc(resz);
+    strcpy(re->iface, argv[1]);
+
+    if (subnet)
+    {
+        re->dest = my_addr & subnet;
+        re->mask = subnet;
+        re->gw   = 0;
+
+        ipc_message_synced(pid, 0, re, resz);
+    }
+
+    if (router_addr)
+    {
+        re->dest = 0;
+        re->mask = 0;
+        re->gw   = router_addr;
+
+        ipc_message_synced(pid, 0, re, resz);
+    }
 
 
     return 0;
