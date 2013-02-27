@@ -7,7 +7,7 @@
 #include <system-timer.h>
 
 
-static volatile int tick_count = 0;
+volatile int elapsed_ms = 0;
 
 
 static void timer_isr(struct cpu_state *state);
@@ -27,7 +27,7 @@ void init_system_timer(void)
 
 static void timer_isr(struct cpu_state *state)
 {
-    tick_count += 1000 / SYSTEM_TIMER_FREQUENCY;
+    elapsed_ms += 1000 / SYSTEM_TIMER_FREQUENCY;
 
 #ifdef COOPERATIVE
     (void)state;
@@ -41,8 +41,8 @@ static void timer_isr(struct cpu_state *state)
 
 void sleep(int ms)
 {
-    int end = tick_count + ms;
+    int end = elapsed_ms + ms;
 
-    while (tick_count < end)
+    while (elapsed_ms < end)
         yield();
 }
