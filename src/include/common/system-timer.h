@@ -8,4 +8,8 @@ void init_system_timer(void);
 
 void sleep(int ms);
 
+#ifndef KERNEL
+int elapsed_ms(void);
+#endif
+
 #endif

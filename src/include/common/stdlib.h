@@ -55,6 +55,8 @@ long long atoq(const char *nptr);
 long long strtoll(const char *s, char **endptr, int base);
 long strtol(const char *s, char **endptr, int base);
 long double strtold(const char *nptr, char **endptr);
+double strtod(const char *nptr, char **endptr);
+float strtof(const char *nptr, char **endptr);
 
 int mbtowc(wchar_t *pwc, const char *s, size_t n);
 int mblen(const char *s, size_t n);

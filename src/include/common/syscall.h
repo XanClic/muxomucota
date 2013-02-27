@@ -38,7 +38,8 @@ enum syscall_number
     SYS_PHYS_FREE, // 18
     SYS_SLEEP,
     SYS_CREATE_THREAD,
-    SYS_GETPGID
+    SYS_GETPGID,
+    SYS_ELAPSED_MS
 };
 
 
