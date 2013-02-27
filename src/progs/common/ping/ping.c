@@ -189,7 +189,7 @@ int main(int argc, char **argv)
 
         int ens = elapsed_ms();
 
-        stream_send(fd, &icmp, sizeof(icmp), O_NONBLOCK);
+        stream_send(fd, &icmp, sizeof(icmp), O_BLOCKING);
 
         for (;;)
         {

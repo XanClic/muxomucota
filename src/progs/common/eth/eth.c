@@ -466,12 +466,12 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
 
             big_size_t sent_size = sizeof(*frame) + frame_len;
 
+            shm_close(shmid, frame, false);
+
             if (flags & O_NONBLOCK)
                 ipc_shm_message(f->card->process, STREAM_SEND, shmid, &f->card->id, sizeof(f->card->id));
             else
                 sent_size = ipc_shm_message_synced(f->card->process, STREAM_SEND, shmid, &f->card->id, sizeof(f->card->id));
-
-            shm_close(shmid, frame);
 
             return sent_size;
         }

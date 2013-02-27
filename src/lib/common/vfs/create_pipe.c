@@ -198,12 +198,12 @@ int create_pipe(const char *path, int flags)
                         // FIXME: ELOOP
                         int fd = create_pipe(npath, flags);
 
-                        shm_close(shmid, npath);
+                        shm_close(shmid, npath, true);
 
                         return fd;
                     }
 
-                    shm_close(shmid, npath);
+                    shm_close(shmid, npath, true);
                 }
 
                 errno = ENOENT; // FIXME

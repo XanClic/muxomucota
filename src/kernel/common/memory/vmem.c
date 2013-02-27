@@ -2,6 +2,7 @@
 #include <kassert.h>
 #include <kmalloc.h>
 #include <pmm.h>
+#include <stdbool.h>
 #include <vmem.h>
 
 #include <arch-vmem.h>
@@ -48,6 +49,7 @@ struct shm_sg
     size_t size;
     int users;
     ptrdiff_t offset;
+    bool kept_alive;
     uintptr_t phys[];
 };
 
@@ -61,6 +63,7 @@ uintptr_t vmmc_create_shm(size_t sz)
     sg->size = sz;
     sg->users = 0;
     sg->offset = 0;
+    sg->kept_alive = false;
 
     return (uintptr_t)sg;
 }
@@ -84,6 +87,7 @@ uintptr_t vmmc_make_shm(vmm_context_t *context, int count, void **vaddr_list, in
     sg->size = pages * PAGE_SIZE;
     sg->users = 1;
     sg->offset = offset;
+    sg->kept_alive = false;
 
     int k = 0;
 
@@ -121,12 +125,20 @@ void *vmmc_open_shm(vmm_context_t *context, uintptr_t shm_id, unsigned flags)
 
     int pages = (sg->size + PAGE_SIZE - 1) / PAGE_SIZE;
 
-    if (sg->users)
-        for (int i = 0; i < pages; i++)
-            pmm_use(sg->phys[i]);
+    if (sg->kept_alive)
+    {
+        sg->kept_alive = false;
+        sg->users++;
+    }
     else
-        for (int i = 0; i < pages; i++)
-            sg->phys[i] = pmm_alloc();
+    {
+        if (sg->users)
+            for (int i = 0; i < pages; i++)
+                pmm_use(sg->phys[i]);
+        else
+            for (int i = 0; i < pages; i++)
+                sg->phys[i] = pmm_alloc();
+    }
 
     sg->users++;
 
@@ -134,19 +146,26 @@ void *vmmc_open_shm(vmm_context_t *context, uintptr_t shm_id, unsigned flags)
 }
 
 
-void vmmc_close_shm(vmm_context_t *context, uintptr_t shm_id, void *virt)
+void vmmc_close_shm(vmm_context_t *context, uintptr_t shm_id, void *virt, bool destroy)
 {
     struct shm_sg *sg = (struct shm_sg *)shm_id;
 
-    int pages = (sg->size + PAGE_SIZE - 1) / PAGE_SIZE;
+    bool last = !__sync_sub_and_fetch(&sg->users, 1);
 
-    for (int i = 0; i < pages; i++)
-        pmm_free(sg->phys[i]);
+    int pages = (sg->size + PAGE_SIZE - 1) / PAGE_SIZE;
 
     vmmc_user_unmap(context, (void *)((uintptr_t)virt - sg->offset), sg->size);
 
-    if (!--sg->users)
-        kfree(sg);
+    if (last && !destroy)
+        sg->kept_alive = true;
+    else
+    {
+        for (int i = 0; i < pages; i++)
+            pmm_free(sg->phys[i]);
+
+        if (last)
+            kfree(sg);
+    }
 }
 
 
@@ -154,7 +173,15 @@ void vmmc_unmake_shm(uintptr_t shm_id)
 {
     struct shm_sg *sg = (struct shm_sg *)shm_id;
 
-    if (!--sg->users)
+    if (sg->kept_alive)
+    {
+        int pages = (sg->size + PAGE_SIZE - 1) / PAGE_SIZE;
+
+        for (int i = 0; i < pages; i++)
+            pmm_free(sg->phys[i]);
+    }
+
+    if (sg->kept_alive || !__sync_sub_and_fetch(&sg->users, 1))
         kfree(sg);
 }
 

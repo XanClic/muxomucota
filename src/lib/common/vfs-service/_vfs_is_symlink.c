@@ -20,7 +20,7 @@ uintmax_t _vfs_is_symlink(uintptr_t shmid)
 
     bool is_link = service_is_symlink(path, dst);
 
-    shm_close(shmid, dst);
+    shm_close(shmid, dst, true);
 
 
     return is_link;
