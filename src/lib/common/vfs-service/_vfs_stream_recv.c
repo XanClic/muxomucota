@@ -20,7 +20,7 @@ uintmax_t _vfs_stream_recv(uintptr_t shmid)
 
     uintmax_t rsz = service_stream_recv(ipc_sr.id, dst, ipc_sr.size, ipc_sr.flags);
 
-    shm_close(shmid, dst);
+    shm_close(shmid, dst, true);
 
 
     return rsz;

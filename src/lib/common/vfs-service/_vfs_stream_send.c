@@ -20,7 +20,7 @@ uintmax_t _vfs_stream_send(uintptr_t shmid)
 
     uintmax_t ssz = service_stream_send(ipc_ss.id, src, ipc_ss.size, ipc_ss.flags);
 
-    shm_close(shmid, src);
+    shm_close(shmid, src, true);
 
 
     return ssz;

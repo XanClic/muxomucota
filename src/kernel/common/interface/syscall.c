@@ -160,7 +160,7 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
             }
             // FIXME: p0 (shm_id) noch besser testen; außerdem p1 testen
             // (oder besser: gar nicht vom Benutzer nehmen)
-            vmmc_close_shm(current_process->vmmc, p0, (void *)p1);
+            vmmc_close_shm(current_process->vmmc, p0, (void *)p1, p2);
             return 0;
 
         case SYS_SHM_UNMAKE:

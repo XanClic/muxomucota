@@ -3,7 +3,7 @@
 #include <syscall.h>
 
 
-void shm_close(uintptr_t shmid, const void *ptr)
+void shm_close(uintptr_t shmid, const void *ptr, bool destroy)
 {
-    syscall2(SYS_SHM_CLOSE, shmid, (uintptr_t)ptr);
+    syscall3(SYS_SHM_CLOSE, shmid, (uintptr_t)ptr, destroy);
 }
