@@ -83,6 +83,8 @@ typedef enum
     IS_SYMLINK,
 
 #include <vfs/ipc-funcs/signal.h>
+
+    FIRST_NON_VFS_IPC_FUNC
 } vfs_function_t;
 
 

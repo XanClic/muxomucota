@@ -14,6 +14,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include "routing.h"
+
 
 struct ip_header
 {
@@ -759,6 +761,8 @@ static uintmax_t incoming(void)
 int main(void)
 {
     popup_message_handler(IPC_SIGNAL, incoming);
+
+    register_routing_ipc();
 
     daemonize("ip", true);
 }
