@@ -326,13 +326,7 @@ int main(int argc, char *argv[])
     pipe_set_flag(ipfd, F_MY_IP, my_addr);
 
 
-    pid_t pid = find_daemon_by_name("route");
-
-    if (pid < 0)
-    {
-        fprintf(stderr, "Could not find routing service.\n");
-        return 1;
-    }
+    pid_t pid = find_daemon_by_name("ip");
 
 
     size_t resz = sizeof(struct routing_entry) + strlen(argv[1]) + 1;
@@ -345,7 +339,7 @@ int main(int argc, char *argv[])
         re->mask = subnet;
         re->gw   = 0;
 
-        ipc_message_synced(pid, 0, re, resz);
+        ipc_message_synced(pid, FIRST_NON_VFS_IPC_FUNC, re, resz);
     }
 
     if (router_addr)
@@ -354,7 +348,7 @@ int main(int argc, char *argv[])
         re->mask = 0;
         re->gw   = router_addr;
 
-        ipc_message_synced(pid, 0, re, resz);
+        ipc_message_synced(pid, FIRST_NON_VFS_IPC_FUNC, re, resz);
     }
 
 
