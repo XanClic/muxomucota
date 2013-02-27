@@ -9,7 +9,7 @@ void lock(volatile lock_t *v)
 {
     pid_t mypid = getpid(), owner;
 
-    while ((owner = __sync_val_compare_and_swap(v, 0, mypid)) > 0)
+    while ((owner = __sync_val_compare_and_swap(v, 0, mypid)) != 0)
         yield_to(owner);
 }
 
