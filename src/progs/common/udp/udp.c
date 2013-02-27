@@ -383,13 +383,25 @@ big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int fl
 
         case TYPE_IFC:
         {
-            lock(&f->inqueue_lock);
+            struct packet *p;
 
-            struct packet *p = f->inqueue;
-            if (p != NULL)
-                f->inqueue = p->next;
+            do
+            {
+                lock(&f->inqueue_lock);
 
-            unlock(&f->inqueue_lock);
+                p = f->inqueue;
+                if (p != NULL)
+                    f->inqueue = p->next;
+
+                unlock(&f->inqueue_lock);
+
+                if ((p == NULL) && !(flags & O_NONBLOCK))
+                    yield();
+            }
+            while ((p == NULL) && !(flags & O_NONBLOCK));
+
+            if (p == NULL)
+                return 0;
 
 
             size_t copy_sz = (p->length < size) ? p->length : size;

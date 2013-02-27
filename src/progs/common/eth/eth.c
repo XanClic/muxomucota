@@ -483,8 +483,6 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
 
 big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int flags)
 {
-    (void)flags;
-
     struct vfs_file *f = (struct vfs_file *)id;
 
     switch (f->type)
@@ -505,13 +503,25 @@ big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int fl
 
         case TYPE_CARD:
         {
-            lock(&f->inqueue_lock);
+            struct network_packet *np;
 
-            struct network_packet *np = f->inqueue;
-            if (np != NULL)
-                f->inqueue = np->next;
+            do
+            {
+                lock(&f->inqueue_lock);
 
-            unlock(&f->inqueue_lock);
+                np = f->inqueue;
+                if (np != NULL)
+                    f->inqueue = np->next;
+
+                unlock(&f->inqueue_lock);
+
+                if ((np == NULL) && !(flags & O_NONBLOCK))
+                    yield();
+            }
+            while ((np == NULL) && !(flags & O_NONBLOCK));
+
+            if (np == NULL)
+                return 0;
 
 
             size_t copy_sz = (np->length < size) ? np->length : size;
