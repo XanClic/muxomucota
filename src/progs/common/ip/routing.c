@@ -50,6 +50,9 @@ bool find_route(uint32_t ip, struct interface **ifc, uint64_t *mac, struct inter
     else
         *mac = arp_lookup(i, best_match->gw ? best_match->gw : ip);
 
+    if (!*mac)
+        return false;
+
     return true;
 }
 
