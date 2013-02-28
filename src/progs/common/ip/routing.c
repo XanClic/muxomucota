@@ -1,17 +1,57 @@
 #include <ipc.h>
 #include <lock.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <vfs.h>
 #include <sys/types.h>
 
+#include "arp.h"
+#include "interfaces.h"
 #include "routing.h"
 
 
 struct routing_table_entry *routing_table = NULL;
 
-lock_t routing_table_lock = LOCK_INITIALIZER;
+rw_lock_t routing_table_lock = RW_LOCK_INITIALIZER;
+
+
+bool find_route(uint32_t ip, struct interface **ifc, uint64_t *mac, struct interface *on_ifc)
+{
+    rwl_lock_r(&routing_table_lock);
+
+    struct routing_table_entry *best_match = NULL;
+
+    for (struct routing_table_entry *rte = routing_table; rte != NULL; rte = rte->next)
+    {
+        if (((rte->dest & rte->mask) == (ip & rte->mask)) &&
+            ((on_ifc == NULL) || (locate_interface(rte->iface) == on_ifc)) &&
+            ((best_match == NULL) || (__builtin_popcount(rte->mask) > __builtin_popcount(best_match->mask))))
+        {
+            best_match = rte;
+        }
+    }
+
+    rwl_unlock_r(&routing_table_lock);
+
+    if (best_match == NULL)
+        return false;
+
+    struct interface *i = locate_interface(best_match->iface);
+    if (i == NULL)
+        return false;
+
+    *ifc = i;
+
+    if (!~(ip & ~best_match->mask))
+        *mac = UINT64_C(0xffffffffffff);
+    else
+        *mac = arp_lookup(i, best_match->gw ? best_match->gw : ip);
+
+    return true;
+}
 
 
 static uintmax_t add_route(void)
@@ -32,7 +72,7 @@ static uintmax_t add_route(void)
     }
 
 
-    lock(&routing_table_lock);
+    rwl_lock_r(&routing_table_lock);
 
     struct routing_table_entry *rtep;
     for (rtep = routing_table; rtep != NULL; rtep = rtep->next)
@@ -43,16 +83,18 @@ static uintmax_t add_route(void)
 
             free(rte);
 
-            unlock(&routing_table_lock);
+            rwl_unlock_r(&routing_table_lock);
 
             return 1;
         }
     }
 
+    rwl_require_w(&routing_table_lock);
+
     rte->next = routing_table;
     routing_table = rte;
 
-    unlock(&routing_table_lock);
+    rwl_unlock_w(&routing_table_lock);
 
 
     return 1;
@@ -77,26 +119,29 @@ static uintmax_t del_route(void)
     }
 
 
-    lock(&routing_table_lock);
+    rwl_lock_r(&routing_table_lock);
 
     struct routing_table_entry **rtep;
     for (rtep = &routing_table; *rtep != NULL; rtep = &(*rtep)->next)
     {
-        if (((*rtep)->dest == rte->dest) && ((*rtep)->mask == rte->mask) && !strcmp((*rtep)->iface, rte->iface))
+        if (!strcmp((*rtep)->iface, rte->iface) && ((!rte->dest && !rte->gw && !rte->mask) || (((*rtep)->dest == rte->dest) && ((*rtep)->mask == rte->mask))))
         {
             struct routing_table_entry *trte = *rtep;
+
+            rwl_require_w(&routing_table_lock);
+
             *rtep = trte->next;
+
+            rwl_drop_w(&routing_table_lock);
+
             free(trte);
 
-            free(rte);
-
-            unlock(&routing_table_lock);
-
-            return 1;
+            if (*rtep == NULL)
+                break;
         }
     }
 
-    unlock(&routing_table_lock);
+    rwl_unlock_r(&routing_table_lock);
 
     free(rte);
 
@@ -109,12 +154,12 @@ static uintmax_t list_routes(void)
 {
     pid_t pid = getppid();
 
-    lock(&routing_table_lock);
+    rwl_lock_r(&routing_table_lock);
 
     for (struct routing_table_entry *rte = routing_table; rte != NULL; rte = rte->next)
         ipc_message_synced(pid, 0, rte, sizeof(*rte) + strlen(rte->iface) + 1);
 
-    unlock(&routing_table_lock);
+    rwl_unlock_r(&routing_table_lock);
 
     return 0;
 }

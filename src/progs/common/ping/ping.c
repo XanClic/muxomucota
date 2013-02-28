@@ -23,6 +23,26 @@ struct icmp_pkt
     uint16_t seqnum;
 } cc_packed;
 
+static int64_t get_ip(const char *s)
+{
+    uint32_t ip = 0;
+
+    for (int i = 0; i < 4; i++)
+    {
+        char *end;
+        int val = strtol(s, &end, 10);
+        s = end;
+
+        if ((val < 0) || (val > 255) || ((*s != '.') && (i < 3)) || (*s && (i == 3)))
+            return -1;
+
+        ip = (ip << 8) | val;
+        s++;
+    }
+
+    return ip;
+}
+
 static int calculate_network_checksum(const void *buffer, size_t size)
 {
     uint_fast32_t sum = 0;
@@ -142,23 +162,32 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    char *fname;
+    int64_t dipv = get_ip(dip);
+
+    if (dipv < 0)
+    {
+        fprintf(stderr, "%s: %s is not a valid IP address.\n", argv[0], dip);
+        return 1;
+    }
+
+    const char *fname;
     int fd;
 
     if (ifc != NULL)
     {
         fname = malloc(22 + strlen(ifc));
-        sprintf(fname, "(ip)/%s/%s", ifc, dip);
+        sprintf((char *)fname, "(ip)/%s", ifc);
         fd = create_pipe(fname, O_RDWR);
     }
     else
     {
-        fname = malloc(30);
-        sprintf(fname, "(ip)/%s", dip);
-        fd = create_pipe(fname, O_RDWR);
+        fname = "(ip)";
+        fd = create_pipe("(ip)", O_RDWR);
 
         ifc = "routed";
     }
+
+    pipe_set_flag(fd, F_DEST_IP, dipv);
 
     printf("Pinging %s via %s interface (file \"%s\")\n", dip, ifc, fname);
 

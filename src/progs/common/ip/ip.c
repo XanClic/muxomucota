@@ -14,6 +14,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include "arp.h"
+#include "interfaces.h"
 #include "routing.h"
 
 
@@ -44,59 +46,27 @@ struct packet
 };
 
 
-struct vfs_file
+static struct vfs_file
 {
-    enum
-    {
-        TYPE_DIR,
-        TYPE_IFC
-    } type;
+    bool ifc_fixed;
 
-    union
-    {
-        struct
-        {
-            struct interface *ifc;
+    struct interface *ifc;
+    uint64_t mac;
 
-            uint32_t dest;
-            int protocol;
-            int ttl;
+    uint32_t dest;
+    int protocol;
+    int ttl;
 
-            pid_t owner;
-            bool signal;
+    pid_t owner;
+    bool signal;
 
-            struct vfs_file *next;
+    struct vfs_file *next;
 
-            struct packet *inqueue;
-            lock_t inqueue_lock;
-        };
+    struct packet *inqueue;
+    lock_t inqueue_lock;
+} *connections;
 
-        struct
-        {
-            off_t pos;
-            char *data;
-            size_t sz;
-        };
-    };
-};
-
-
-static struct interface
-{
-    struct interface *next;
-
-    lock_t lock;
-
-    char *name;
-    int fd;
-
-    uint32_t ip;
-
-    struct vfs_file *listeners;
-    lock_t listener_lock;
-} *interfaces = NULL;
-
-static lock_t interface_lock = LOCK_INITIALIZER;
+static lock_t connection_lock = LOCK_INITIALIZER;
 
 
 static uint16_t calculate_network_checksum(void *buffer, int size)
@@ -123,128 +93,83 @@ static uint16_t calculate_network_checksum(void *buffer, int size)
 }
 
 
-uintptr_t service_create_pipe(const char *relpath, int flags)
+static int64_t get_ip(const char *s)
 {
-    if (!*relpath)
+    uint32_t ip = 0;
+
+    for (int i = 0; i < 4; i++)
     {
-        if (flags & O_WRONLY)
-            return 0;
+        char *end;
+        int val = strtol(s, &end, 10);
+        s = end;
 
-        struct vfs_file *f = malloc(sizeof(*f));
-        f->type = TYPE_DIR;
-        f->pos  = 0;
+        if ((val < 0) || (val > 255) || ((*s != '.') && (i < 3)) || (*s && (i == 3)))
+            return -1;
 
-        f->sz = 1;
-
-        lock(&interface_lock);
-
-        for (struct interface *i = interfaces; i != NULL; i = i->next)
-            f->sz += strlen(i->name) + 1;
-
-        char *d = f->data = malloc(f->sz);
-
-        for (struct interface *i = interfaces; i != NULL; i = i->next)
-        {
-            strcpy(d, i->name);
-            d += strlen(i->name) + 1;
-        }
-
-        unlock(&interface_lock);
-
-        *d = 0;
-
-        return (uintptr_t)f;
+        ip = (ip << 8) | val;
+        s++;
     }
 
+    return ip;
+}
 
-    uint32_t dest = 0;
-    struct interface *i;
 
-    if (strchr(relpath + 1, '/') == NULL)
+uintptr_t service_create_pipe(const char *relpath, int flags)
+{
+    (void)flags;
+
+    struct vfs_file *f = malloc(sizeof(*f));
+
+    f->ifc_fixed = false;
+
+    uint32_t ip = 0;
+
+    if (*relpath)
     {
-        lock(&interface_lock);
-        for (i = interfaces; (i != NULL) && strcmp(i->name, relpath + 1); i = i->next);
-        unlock(&interface_lock);
+        int64_t rip = get_ip(relpath + 1);
 
-        if (i == NULL)
+        if (rip < 0)
         {
-            if (!(flags & O_CREAT))
+            struct interface *i = locate_interface(relpath + 1);
+
+            if (i == NULL)
                 return 0;
 
-            i = malloc(sizeof(*i));
-            i->name = strdup(relpath + 1);
-            i->fd   = -1;
-            i->ip   = 0;
+            f->ifc = i;
+            f->ifc_fixed = true;
 
-            lock_init(&i->lock);
-
-            i->listeners = NULL;
-            lock_init(&i->listener_lock);
-
-            lock(&interface_lock);
-
-            i->next = interfaces;
-            interfaces = i;
-
-            unlock(&interface_lock);
+            f->mac = 0;
+        }
+        else
+        {
+            ip = rip;
+            find_route(ip, &f->ifc, &f->mac, NULL);
         }
     }
     else
     {
-        char duped[strlen(relpath)];
-        strcpy(duped, relpath + 1);
-
-        char *ifc_name = strtok(duped, "/");
-
-        lock(&interface_lock);
-        for (i = interfaces; (i != NULL) && strcmp(i->name, ifc_name); i = i->next);
-        unlock(&interface_lock);
-
-        if (i == NULL)
-            return 0;
-
-        char *cptr = strtok(NULL, "/");
-
-        if (strtok(NULL, "/") != NULL)
-            return 0;
-
-        for (int j = 0; j < 4; j++)
-        {
-            int val = strtol(cptr, &cptr, 10);
-            if ((val < 0x00) || (val > 0xff) || ((*cptr != '.') && (j < 3)) || (*cptr && (j == 3)))
-                return 0;
-
-            cptr++;
-
-            dest |= (uint32_t)val << ((3 - j) * 8);
-        }
-
-        dest = htonl(dest);
+        f->ifc = NULL;
+        f->mac = 0;
     }
 
-
-    struct vfs_file *f = malloc(sizeof(*f));
-    f->type = TYPE_IFC;
-    f->ifc  = i;
-
-    f->dest     = dest;
+    f->dest = ip;
     f->protocol = 0x01;
-    f->ttl      = 128;
+    f->ttl = 128;
 
+    f->owner = -1;
     f->signal = false;
-    f->owner  = -1;
-
-    f->next = NULL;
 
     f->inqueue = NULL;
     lock_init(&f->inqueue_lock);
 
-    lock(&i->listener_lock);
 
-    f->next = i->listeners;
-    i->listeners = f;
+    lock(&connection_lock);
 
-    unlock(&i->listener_lock);
+    f->next = connections;
+    connections = f;
+
+    unlock(&connection_lock);
+
 
     return (uintptr_t)f;
 }
@@ -254,41 +179,37 @@ uintptr_t service_duplicate_pipe(uintptr_t id)
 {
     struct vfs_file *f = (struct vfs_file *)id, *nf = malloc(sizeof(*f));
 
-    memcpy(nf->data, f->data, f->sz);
+    memcpy(nf, f, sizeof(*nf));
 
-    if (f->type == TYPE_DIR)
+
+    lock_init(&nf->inqueue_lock);
+    lock(&f->inqueue_lock);
+
+    struct packet **endp = &nf->inqueue;
+
+    for (struct packet *i = f->inqueue; i != NULL; i = i->next)
     {
-        nf->data = malloc(f->sz);
-        memcpy(nf->data, f->data, f->sz);
+        *endp = malloc(sizeof(*i));
+        memcpy(*endp, i, sizeof(*i));
+
+        (*endp)->data = malloc(i->length);
+        memcpy((*endp)->data, i->data, i->length);
+
+        endp = &(*endp)->next;
     }
-    else if (f->type == TYPE_IFC)
-    {
-        lock(&nf->ifc->listener_lock);
 
-        nf->next = nf->ifc->listeners;
-        nf->ifc->listeners = nf;
+    *endp = NULL;
 
-        unlock(&nf->ifc->listener_lock);
+    unlock(&f->inqueue_lock);
 
-        lock_init(&nf->inqueue_lock);
 
-        struct packet **endp = &nf->inqueue;
+    lock(&connection_lock);
 
-        for (struct packet *i = f->inqueue; i != NULL; i = i->next)
-        {
-            *endp = malloc(sizeof(*i));
-            memcpy(*endp, i, sizeof(*i));
+    nf->next = connections;
+    connections = nf;
 
-            (*endp)->data = malloc(i->length);
-            memcpy((*endp)->data, i->data, i->length);
+    unlock(&connection_lock);
 
-            endp = &(*endp)->next;
-        }
-
-        *endp = NULL;
-
-        unlock(&f->inqueue_lock);
-    }
 
     return (uintptr_t)nf;
 }
@@ -300,33 +221,30 @@ void service_destroy_pipe(uintptr_t id, int flags)
 
     struct vfs_file *f = (struct vfs_file *)id;
 
-    if (f->type == TYPE_DIR)
-        free(f->data);
-    else if (f->type == TYPE_IFC)
+
+    struct packet *p = f->inqueue;
+
+    while (p != NULL)
     {
-        lock(&f->ifc->listener_lock);
+        struct packet *np = p->next;
 
-        struct vfs_file **fp;
-        for (fp = &f->ifc->listeners; (*fp != NULL) && (*fp != f); fp = &(*fp)->next);
+        free(p->data);
+        free(p);
 
-        if (*fp != NULL)
-            *fp = f->next;
-
-        unlock(&f->ifc->listener_lock);
-
-
-        struct packet *p = f->inqueue;
-
-        while (p != NULL)
-        {
-            struct packet *np = p->next;
-
-            free(p->data);
-            free(p);
-
-            p = np;
-        }
+        p = np;
     }
+
+
+    lock(&connection_lock);
+
+    struct vfs_file **fp;
+    for (fp = &connections; (*fp != NULL) && (*fp != f); fp = &(*fp)->next);
+
+    if (*fp != NULL)
+        *fp = (*fp)->next;
+
+    unlock(&connection_lock);
+
 
     free(f);
 }
@@ -336,55 +254,37 @@ big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int fl
 {
     struct vfs_file *f = (struct vfs_file *)id;
 
-    switch (f->type)
+
+    struct packet *p;
+
+    do
     {
-        case TYPE_DIR:
-        {
-            size_t copy_sz = (size < f->sz - (size_t)f->pos) ? size : (f->sz - (size_t)f->pos);
+        lock(&f->inqueue_lock);
 
-            memcpy(data, f->data + f->pos, copy_sz);
+        p = f->inqueue;
+        if (p != NULL)
+            f->inqueue = p->next;
 
-            f->pos += copy_sz;
+        unlock(&f->inqueue_lock);
 
-            return copy_sz;
-        }
-
-        case TYPE_IFC:
-        {
-            struct packet *p;
-
-            do
-            {
-                lock(&f->inqueue_lock);
-
-                p = f->inqueue;
-                if (p != NULL)
-                    f->inqueue = p->next;
-
-                unlock(&f->inqueue_lock);
-
-                if ((p == NULL) && !(flags & O_NONBLOCK))
-                    yield();
-            }
-            while ((p == NULL) && !(flags & O_NONBLOCK));
-
-            if (p == NULL)
-                return 0;
-
-
-            size_t copy_sz = (p->length < size) ? p->length : size;
-
-            memcpy(data, p->data, copy_sz);
-
-            free(p->data);
-            free(p);
-
-
-            return copy_sz;
-        }
+        if ((p == NULL) && !(flags & O_NONBLOCK))
+            yield();
     }
+    while ((p == NULL) && !(flags & O_NONBLOCK));
 
-    return 0;
+    if (p == NULL)
+        return 0;
+
+
+    size_t copy_sz = (p->length < size) ? p->length : size;
+
+    memcpy(data, p->data, copy_sz);
+
+    free(p->data);
+    free(p);
+
+
+    return copy_sz;
 }
 
 
@@ -392,90 +292,44 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
 {
     struct vfs_file *f = (struct vfs_file *)id;
 
-    switch (f->type)
-    {
-        case TYPE_DIR:
-            return 0;
-
-        case TYPE_IFC:
-        {
-            if ((flags & O_TRANS_NC) == F_MOUNT_FILE)
-            {
-                const char *name = data;
-
-                if (!size || name[size - 1])
-                    return 0;
-
-                int fd = create_pipe(name, O_RDWR);
-
-                if (fd < 0)
-                    return 0;
-
-                if (!pipe_implements(fd, I_ETHERNET))
-                {
-                    destroy_pipe(fd, 0);
-                    return 0;
-                }
+    if (f->ifc == NULL)
+        return 0;
 
 
-                lock(&f->ifc->lock);
+    struct ip_header *iph = malloc(sizeof(*iph) + size);
 
-                if (f->ifc->fd >= 0)
-                    destroy_pipe(f->ifc->fd, 0);
+    iph->hdrlen_version = 0x45;
+    iph->priority       = 0x00;
+    iph->length         = htons(sizeof(*iph) + size);
+    iph->id             = 0x0000;
+    iph->frag_ofs_flags = htons(0x4000);
+    iph->ttl            = f->ttl;
+    iph->proto_type     = f->protocol;
+    iph->checksum       = 0x0000;
+    iph->src_ip         = htonl(f->ifc->ip);
+    iph->dest_ip        = htonl(f->dest);
 
-                f->ifc->fd = fd;
+    iph->checksum = htons(calculate_network_checksum(iph, sizeof(*iph)));
 
-                pipe_set_flag(fd, F_IPC_SIGNAL, true);
-                pipe_set_flag(fd, F_ETH_PACKET_TYPE, 0x0800);
-
-                unlock(&f->ifc->lock);
-
-
-                return size;
-            }
-
-
-            struct ip_header *iph = malloc(sizeof(*iph) + size);
-
-            iph->hdrlen_version = 0x45;
-            iph->priority       = 0x00;
-            iph->length         = htons(sizeof(*iph) + size);
-            iph->id             = 0x0000;
-            iph->frag_ofs_flags = htons(0x4000);
-            iph->ttl            = f->ttl;
-            iph->proto_type     = f->protocol;
-            iph->checksum       = 0x0000;
-            iph->src_ip         = htonl(f->ifc->ip);
-            iph->dest_ip        = f->dest;
-
-            iph->checksum = htons(calculate_network_checksum(iph, sizeof(*iph)));
-
-            memcpy(iph + 1, data, size);
+    memcpy(iph + 1, data, size);
 
 
-            lock(&f->ifc->lock);
+    lock(&f->ifc->lock);
 
-            if (f->dest == 0xffffffff)
-                pipe_set_flag(f->ifc->fd, F_DEST_MAC, UINT64_C(0xffffffffffff));
-            else
-                assert(0); // TODO: ARP-Service
+    pipe_set_flag(f->ifc->fd, F_DEST_MAC, f->mac);
 
-            size_t sent = stream_send(f->ifc->fd, iph, sizeof(*iph) + size, flags);
+    size_t sent = stream_send(f->ifc->fd, iph, sizeof(*iph) + size, flags);
 
-            unlock(&f->ifc->lock);
+    unlock(&f->ifc->lock);
 
 
-            free(iph);
+    free(iph);
 
 
-            if (flags & O_NONBLOCK)
-                return size;
+    if (flags & O_NONBLOCK)
+        return size;
 
-            return (sent > sizeof(*iph)) ? (sent - sizeof(*iph)) : 0;
-        }
-    }
-
-    return 0;
+    return (sent > sizeof(*iph)) ? (sent - sizeof(*iph)) : 0;
 }
 
 
@@ -486,58 +340,31 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
     switch (flag)
     {
         case F_PRESSURE:
-            if (f->type == TYPE_DIR)
-                return f->sz - f->pos;
-            else if ((f->type == TYPE_IFC) && (f->inqueue != NULL))
-                return f->inqueue->length;
-            else
-                return 0;
+            return (f->inqueue != NULL) ? f->inqueue->length : 0;
 
         case F_READABLE:
-            return (f->type == TYPE_DIR) ? (f->sz > f->pos) : (f->inqueue != NULL);
+            return f->inqueue != NULL;
 
         case F_WRITABLE:
-            return (f->type == TYPE_IFC);
-
-        case F_FILESIZE:
-            return (f->type == TYPE_DIR) ? f->sz : 0;
-
-        case F_POSITION:
-            return (f->type == TYPE_DIR) ? f->pos : 0;
-
-        case F_INODE:
-        case F_UID:
-        case F_GID:
-        case F_ATIME:
-        case F_MTIME:
-        case F_CTIME:
-        case F_BLOCK_COUNT:
-            return 0;
-
-        case F_MODE:
-            return (f->type == TYPE_DIR) ? (S_IFDIR | S_IFODEV | 0777) : (S_IFODEV | 0666);
-
-        case F_NLINK:
-        case F_BLOCK_SIZE:
-            return 1;
+            return true;
 
         case F_IPC_SIGNAL:
-            return (f->type == TYPE_IFC) ? f->signal : false;
+            return f->signal;
 
         case F_DEST_IP:
-            return (f->type == TYPE_IFC) ? f->dest : 0;
+            return f->dest;
 
         case F_SRC_IP:
-            return ((f->type == TYPE_IFC) && (f->inqueue != NULL)) ? f->inqueue->src : 0;
+            return (f->inqueue != NULL) ? f->inqueue->src : 0;
 
         case F_MY_IP:
-            return (f->type == TYPE_IFC) ? f->ifc->ip : 0;
+            return (f->ifc != NULL) ? f->ifc->ip : 0;
 
         case F_IP_TTL:
-            return ((f->type == TYPE_IFC) && (f->inqueue != NULL)) ? f->inqueue->ttl : 0;
+            return (f->inqueue != NULL) ? f->inqueue->ttl : 0;
 
         case F_IP_PROTO_TYPE:
-            return ((f->type == TYPE_IFC) && (f->inqueue != NULL)) ? f->inqueue->protocol : 0;
+            return (f->inqueue != NULL) ? f->inqueue->protocol : 0;
     }
 
     return 0;
@@ -553,7 +380,7 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
     switch (flag)
     {
         case F_FLUSH:
-            if ((f->type != TYPE_IFC) || (value != 1))
+            if (value != 1)
                 return 0;
 
             lock(&f->inqueue_lock);
@@ -569,46 +396,27 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
 
             return 0;
 
-        case F_POSITION:
-            if (f->type != TYPE_DIR)
-                return -EINVAL;
-
-            f->pos = (value > f->sz) ? f->sz : value;
-            return 0;
-
         case F_IPC_SIGNAL:
-            if (f->type != TYPE_IFC)
-                return -EINVAL;
-
             f->owner  = getpgid(getppid());
             f->signal = (bool)value;
             return 0;
 
         case F_DEST_IP:
-            if (f->type != TYPE_IFC)
-                return -EINVAL;
-
             f->dest = value;
-            return 0;
+            return find_route(value, &f->ifc, &f->mac, f->ifc_fixed ? f->ifc : NULL) ? 0 : -EHOSTUNREACH;
 
         case F_MY_IP:
-            if (f->type != TYPE_IFC)
-                return -EINVAL;
+            if (f->ifc == NULL)
+                return -ENOTCONN;
 
             f->ifc->ip = value;
             return 0;
 
         case F_IP_TTL:
-            if (f->type != TYPE_IFC)
-                return -EINVAL;
-
             f->ttl = value;
             return 0;
 
         case F_IP_PROTO_TYPE:
-            if (f->type != TYPE_IFC)
-                return -EINVAL;
-
             f->protocol = value;
             return 0;
     }
@@ -619,23 +427,9 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
 
 bool service_pipe_implements(uintptr_t id, int interface)
 {
-    struct vfs_file *f = (struct vfs_file *)id;
+    (void)id;
 
-    switch (interface)
-    {
-        case I_FILE:
-            return (f->type == TYPE_DIR);
-
-        case I_STATABLE:
-            return true;
-
-        case I_FS:
-        case I_IP:
-        case I_SIGNAL:
-            return (f->type == TYPE_IFC);
-    }
-
-    return false;
+    return ((interface == I_FS) || (interface == I_IP) || (interface == I_SIGNAL));
 }
 
 
@@ -657,13 +451,7 @@ static uintmax_t incoming(void)
     assert(fd >= 0);
 
 
-    lock(&interface_lock);
-
-    struct interface *i;
-    for (i = interfaces; (i != NULL) && (i->fd != fd); i++);
-
-    unlock(&interface_lock);
-
+    struct interface *i = find_interface(fd);
 
     if (i == NULL)
         return 0;
@@ -674,9 +462,15 @@ static uintmax_t incoming(void)
 
     while (pipe_get_flag(fd, F_READABLE))
     {
-        if (pipe_get_flag(fd, F_ETH_PACKET_TYPE) != 0x0800)
+        int packet_type = pipe_get_flag(fd, F_ETH_PACKET_TYPE);
+
+        if (packet_type != 0x0800)
         {
-            pipe_set_flag(fd, F_FLUSH, 1);
+            if (packet_type == 0x0806)
+                arp_incoming(i);
+            else
+                pipe_set_flag(fd, F_FLUSH, 1);
+
             continue;
         }
 
@@ -701,10 +495,14 @@ static uintmax_t incoming(void)
         }
 
 
-        lock(&i->listener_lock);
+        lock(&connection_lock);
 
-        for (struct vfs_file *f = i->listeners; f != NULL; f = f->next)
+        for (struct vfs_file *f = connections; f != NULL; f = f->next)
         {
+            if ((f->dest != ntohl(iph->src_ip)) && (f->dest != 0xffffffff))
+                continue;
+
+
             struct packet *p = malloc(sizeof(*p));
 
             p->next     = NULL;
@@ -744,7 +542,7 @@ static uintmax_t incoming(void)
             }
         }
 
-        unlock(&i->listener_lock);
+        unlock(&connection_lock);
 
 
         free(iph);
