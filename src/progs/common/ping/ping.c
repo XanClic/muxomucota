@@ -187,7 +187,11 @@ int main(int argc, char **argv)
         ifc = "routed";
     }
 
-    pipe_set_flag(fd, F_DEST_IP, dipv);
+    if (pipe_set_flag(fd, F_DEST_IP, dipv) < 0)
+    {
+        fprintf(stderr, "%s: %s: %s\n", argv[0], dip, strerror(errno));
+        return 1;
+    }
 
     printf("Pinging %s via %s interface (file \"%s\")\n", dip, ifc, fname);
 

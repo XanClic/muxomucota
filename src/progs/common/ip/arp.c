@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <system-timer.h>
 #include <vfs.h>
 #include <arpa/inet.h>
 
@@ -67,6 +68,9 @@ uint64_t arp_lookup(struct interface *ifc, uint32_t ip)
 
 
     uint64_t mac = arp_resolve(ifc, ip);
+
+    if (!mac)
+        return 0;
 
 
     rwl_lock_r(&arp_cache_lock);
@@ -143,8 +147,16 @@ static uint64_t arp_resolve(struct interface *ifc, uint32_t ip)
     unlock(&ifc->lock);
 
 
-    while (reply_ip != ip)
+    int timeout = elapsed_ms() + 3000;
+
+    while ((reply_ip != ip) && (elapsed_ms() < timeout))
         yield();
+
+    if (reply_ip != ip)
+    {
+        unlock(&arp_lock);
+        return 0;
+    }
 
 
     unlock(&arp_lock);
