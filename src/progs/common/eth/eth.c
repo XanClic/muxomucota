@@ -48,7 +48,7 @@ struct vfs_file
             struct vfs_file *next;
 
             struct network_packet *inqueue;
-            lock_t inqueue_lock;
+            rw_lock_t inqueue_lock;
 
             pid_t owner;
             bool signal;
@@ -77,12 +77,12 @@ struct network_card
     uintptr_t id;
 
     struct vfs_file *listeners;
-    lock_t listener_lock;
+    rw_lock_t listener_lock;
 };
 
 static struct network_card *cards = NULL;
 
-static lock_t card_lock = LOCK_INITIALIZER;
+static rw_lock_t card_lock = RW_LOCK_INITIALIZER;
 
 
 struct ethernet_frame
@@ -111,7 +111,7 @@ static bool eth_receive(struct network_card *card, const void *data, size_t leng
     }
 
 
-    lock(&card->listener_lock);
+    rwl_lock_r(&card->listener_lock);
 
     for (struct vfs_file *f = card->listeners; f != NULL; f = f->next)
     {
@@ -127,14 +127,16 @@ static bool eth_receive(struct network_card *card, const void *data, size_t leng
         memcpy(nnp->data, frame->data, nnp->length);
 
 
-        lock(&f->inqueue_lock);
+        rwl_lock_r(&f->inqueue_lock);
 
         struct network_packet **np;
         for (np = &f->inqueue; *np != NULL; np = &(*np)->next);
 
+        rwl_require_w(&f->inqueue_lock);
+
         *np = nnp;
 
-        unlock(&f->inqueue_lock);
+        rwl_unlock_w(&f->inqueue_lock);
 
 
         if (f->signal)
@@ -152,7 +154,7 @@ static bool eth_receive(struct network_card *card, const void *data, size_t leng
         }
     }
 
-    unlock(&card->listener_lock);
+    rwl_unlock_r(&card->listener_lock);
 
 
     return true;
@@ -179,7 +181,7 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
 
         f->sz = 1;
 
-        lock(&card_lock);
+        rwl_lock_r(&card_lock);
 
         for (struct network_card *c = cards; c != NULL; c = c->next)
             f->sz += strlen(c->name) + 1;
@@ -194,7 +196,7 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
 
         *d = 0;
 
-        unlock(&card_lock);
+        rwl_unlock_r(&card_lock);
 
         return (uintptr_t)f;
     }
@@ -210,7 +212,7 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
 
         c->listeners = NULL;
 
-        lock_init(&c->listener_lock);
+        rwl_lock_init(&c->listener_lock);
 
         asprintf(&c->name, "eth%i", c->nr);
 
@@ -234,12 +236,12 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
     }
     else if (strchr(relpath + 1, '/') == NULL)
     {
-        lock(&card_lock);
+        rwl_lock_r(&card_lock);
 
         struct network_card *c;
         for (c = cards; (c != NULL) && strcmp(c->name, relpath + 1); c = c->next);
 
-        unlock(&card_lock);
+        rwl_unlock_r(&card_lock);
 
         if (c == NULL)
             return 0;
@@ -254,14 +256,14 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
         f->signal = false;
 
         f->inqueue = NULL;
-        lock_init(&f->inqueue_lock);
+        rwl_lock_init(&f->inqueue_lock);
 
-        lock(&c->listener_lock);
+        rwl_lock_w(&c->listener_lock);
 
         f->next = c->listeners;
         c->listeners = f;
 
-        unlock(&c->listener_lock);
+        rwl_unlock_w(&c->listener_lock);
 
         return (uintptr_t)f;
     }
@@ -272,12 +274,12 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
 
         char *card_name = strtok(duped, "/");
 
-        lock(&card_lock);
+        rwl_lock_r(&card_lock);
 
         struct network_card *c;
         for (c = cards; (c != NULL) && strcmp(c->name, card_name); c = c->next);
 
-        unlock(&card_lock);
+        rwl_unlock_r(&card_lock);
 
         if (c == NULL)
             return 0;
@@ -310,14 +312,14 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
         f->signal = false;
 
         f->inqueue = NULL;
-        lock_init(&f->inqueue_lock);
+        rwl_lock_init(&f->inqueue_lock);
 
-        lock(&c->listener_lock);
+        rwl_lock_w(&c->listener_lock);
 
         f->next = c->listeners;
         c->listeners = f;
 
-        unlock(&c->listener_lock);
+        rwl_unlock_w(&c->listener_lock);
 
         return (uintptr_t)f;
     }
@@ -339,16 +341,15 @@ uintptr_t service_duplicate_pipe(uintptr_t id)
     }
     else if (f->type == TYPE_CARD)
     {
-        lock(&nf->card->listener_lock);
+        rwl_lock_w(&nf->card->listener_lock);
 
         nf->next = nf->card->listeners;
         nf->card->listeners = nf;
 
-        unlock(&nf->card->listener_lock);
+        rwl_unlock_w(&nf->card->listener_lock);
 
-        lock(&f->inqueue_lock);
-
-        lock_init(&nf->inqueue_lock);
+        rwl_lock_init(&nf->inqueue_lock);
+        rwl_lock_r(&f->inqueue_lock);
 
         struct network_packet **endp = &nf->inqueue;
 
@@ -365,7 +366,7 @@ uintptr_t service_duplicate_pipe(uintptr_t id)
 
         *endp = NULL;
 
-        unlock(&f->inqueue_lock);
+        rwl_unlock_r(&f->inqueue_lock);
     }
 
     return (uintptr_t)nf;
@@ -382,15 +383,17 @@ void service_destroy_pipe(uintptr_t id, int flags)
         free(f->data);
     else if (f->type == TYPE_CARD)
     {
-        lock(&f->card->listener_lock);
+        rwl_lock_r(&f->card->listener_lock);
 
         struct vfs_file **fp;
         for (fp = &f->card->listeners; (*fp != NULL) && (*fp != f); fp = &(*fp)->next);
 
+        rwl_lock_w(&f->card->listener_lock);
+
         if (*fp != NULL)
             *fp = f->next;
 
-        unlock(&f->card->listener_lock);
+        rwl_unlock_w(&f->card->listener_lock);
 
 
         struct network_packet *np = f->inqueue;
@@ -426,12 +429,12 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
 
             memcpy(f->card->mac, (uintptr_t *)data + 1, sizeof(f->card->mac));
 
-            lock(&card_lock);
+            rwl_lock_w(&card_lock);
 
             f->card->next = cards;
             cards = f->card;
 
-            unlock(&card_lock);
+            rwl_unlock_w(&card_lock);
 
             return sizeof(uintptr_t);
 
@@ -507,13 +510,13 @@ big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int fl
 
             do
             {
-                lock(&f->inqueue_lock);
+                rwl_lock_w(&f->inqueue_lock);
 
                 np = f->inqueue;
                 if (np != NULL)
                     f->inqueue = np->next;
 
-                unlock(&f->inqueue_lock);
+                rwl_unlock_w(&f->inqueue_lock);
 
                 if ((np == NULL) && !(flags & O_NONBLOCK))
                     yield();
@@ -571,12 +574,12 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
             if (f->type != TYPE_RECEIVE)
                 return -EINVAL;
 
-            lock(&card_lock);
+            rwl_lock_r(&card_lock);
 
             struct network_card *c;
             for (c = cards; (c != NULL) && ((c->process != f->pid) || (c->id != value)); c = c->next);
 
-            unlock(&card_lock);
+            rwl_unlock_r(&card_lock);
 
             if (c == NULL)
                 return -ENXIO;
@@ -589,13 +592,13 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
             if ((f->type != TYPE_CARD) || (value != 1))
                 return 0;
 
-            lock(&f->inqueue_lock);
+            rwl_lock_w(&f->inqueue_lock);
 
             struct network_packet *np = f->inqueue;
             if (np != NULL)
                 f->inqueue = np->next;
 
-            unlock(&f->inqueue_lock);
+            rwl_unlock_w(&f->inqueue_lock);
 
             free(np->data);
             free(np);

@@ -63,10 +63,10 @@ static struct vfs_file
     struct vfs_file *next;
 
     struct packet *inqueue;
-    lock_t inqueue_lock;
+    rw_lock_t inqueue_lock;
 } *connections;
 
-static lock_t connection_lock = LOCK_INITIALIZER;
+static rw_lock_t connection_lock = RW_LOCK_INITIALIZER;
 
 
 static uint16_t calculate_network_checksum(void *buffer, int size)
@@ -160,15 +160,15 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
     f->signal = false;
 
     f->inqueue = NULL;
-    lock_init(&f->inqueue_lock);
+    rwl_lock_init(&f->inqueue_lock);
 
 
-    lock(&connection_lock);
+    rwl_lock_w(&connection_lock);
 
     f->next = connections;
     connections = f;
 
-    unlock(&connection_lock);
+    rwl_unlock_w(&connection_lock);
 
 
     return (uintptr_t)f;
@@ -182,8 +182,8 @@ uintptr_t service_duplicate_pipe(uintptr_t id)
     memcpy(nf, f, sizeof(*nf));
 
 
-    lock_init(&nf->inqueue_lock);
-    lock(&f->inqueue_lock);
+    rwl_lock_init(&nf->inqueue_lock);
+    rwl_lock_r(&f->inqueue_lock);
 
     struct packet **endp = &nf->inqueue;
 
@@ -200,15 +200,15 @@ uintptr_t service_duplicate_pipe(uintptr_t id)
 
     *endp = NULL;
 
-    unlock(&f->inqueue_lock);
+    rwl_unlock_r(&f->inqueue_lock);
 
 
-    lock(&connection_lock);
+    rwl_lock_w(&connection_lock);
 
     nf->next = connections;
     connections = nf;
 
-    unlock(&connection_lock);
+    rwl_unlock_w(&connection_lock);
 
 
     return (uintptr_t)nf;
@@ -235,15 +235,17 @@ void service_destroy_pipe(uintptr_t id, int flags)
     }
 
 
-    lock(&connection_lock);
+    rwl_lock_r(&connection_lock);
 
     struct vfs_file **fp;
     for (fp = &connections; (*fp != NULL) && (*fp != f); fp = &(*fp)->next);
 
+    rwl_require_w(&connection_lock);
+
     if (*fp != NULL)
         *fp = (*fp)->next;
 
-    unlock(&connection_lock);
+    rwl_unlock_w(&connection_lock);
 
 
     free(f);
@@ -259,13 +261,13 @@ big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int fl
 
     do
     {
-        lock(&f->inqueue_lock);
+        rwl_lock_w(&f->inqueue_lock);
 
         p = f->inqueue;
         if (p != NULL)
             f->inqueue = p->next;
 
-        unlock(&f->inqueue_lock);
+        rwl_unlock_w(&f->inqueue_lock);
 
         if ((p == NULL) && !(flags & O_NONBLOCK))
             yield();
@@ -383,13 +385,13 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
             if (value != 1)
                 return 0;
 
-            lock(&f->inqueue_lock);
+            rwl_lock_w(&f->inqueue_lock);
 
             struct packet *p = f->inqueue;
             if (p != NULL)
                 f->inqueue = p->next;
 
-            unlock(&f->inqueue_lock);
+            rwl_unlock_w(&f->inqueue_lock);
 
             free(p->data);
             free(p);
@@ -495,7 +497,7 @@ static uintmax_t incoming(void)
         }
 
 
-        lock(&connection_lock);
+        rwl_lock_r(&connection_lock);
 
         for (struct vfs_file *f = connections; f != NULL; f = f->next)
         {
@@ -517,14 +519,16 @@ static uintmax_t incoming(void)
             memcpy(p->data, (void *)((uintptr_t)iph + (iph->hdrlen_version & 0xf) * 4), p->length);
 
 
-            lock(&f->inqueue_lock);
+            rwl_lock_r(&f->inqueue_lock);
 
             struct packet **pp;
             for (pp = &f->inqueue; *pp != NULL; pp = &(*pp)->next);
 
+            rwl_require_w(&f->inqueue_lock);
+
             *pp = p;
 
-            unlock(&f->inqueue_lock);
+            rwl_unlock_w(&f->inqueue_lock);
 
 
             if (f->signal)
@@ -542,7 +546,7 @@ static uintmax_t incoming(void)
             }
         }
 
-        unlock(&connection_lock);
+        rwl_unlock_r(&connection_lock);
 
 
         free(iph);
