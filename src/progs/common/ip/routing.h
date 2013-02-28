@@ -4,6 +4,8 @@
 #include <lock.h>
 #include <stdint.h>
 
+#include "interfaces.h"
+
 
 struct routing_table_entry
 {
@@ -17,9 +19,11 @@ struct routing_table_entry
 
 
 extern struct routing_table_entry *routing_table;
-extern lock_t routing_table_lock;
+extern rw_lock_t routing_table_lock;
 
 
 void register_routing_ipc(void);
+
+bool find_route(uint32_t ip, struct interface **ifc, uint64_t *mac, struct interface *on_ifc);
 
 #endif

@@ -62,11 +62,12 @@ int main(int argc, char *argv[])
     }
 
 
-    char *ethname, *ipname, *udpname;
+    const char *ethname, *ipname, *udpname;
 
-    asprintf(&ethname, "(eth)/%s", argv[1]);
-    asprintf(&ipname,   "(ip)/%s", argv[1]);
-    asprintf(&udpname, "(udp)/%s", argv[1]);
+    asprintf((char **)&ethname, "(eth)/%s", argv[1]);
+    asprintf((char **)&ipname,   "(ip)/%s", argv[1]);
+
+    udpname = "(udp)";
 
 
     int ethfd = create_pipe(ethname, O_RDWR);
@@ -112,7 +113,29 @@ int main(int argc, char *argv[])
     }
 
 
+    printf("Bringing interface down...\n");
+
+
     pipe_set_flag(ipfd, F_MY_IP, 0x00000000);
+
+
+    size_t resz = sizeof(struct routing_entry) + strlen(argv[1]) + 1;
+    struct routing_entry *re = malloc(resz);
+    strcpy(re->iface, argv[1]);
+
+    pid_t ip_pid = find_daemon_by_name("ip");
+
+    re->dest = 0;
+    re->mask = 0;
+    re->gw   = 0;
+
+    ipc_message_synced(ip_pid, FIRST_NON_VFS_IPC_FUNC + 1, re, resz);
+
+    re->dest = 0;
+    re->mask = 0x00000000;
+    re->gw   = 0;
+
+    ipc_message_synced(ip_pid, FIRST_NON_VFS_IPC_FUNC, re, resz);
 
 
     struct dhcp_packet
@@ -326,12 +349,12 @@ int main(int argc, char *argv[])
     pipe_set_flag(ipfd, F_MY_IP, my_addr);
 
 
-    pid_t pid = find_daemon_by_name("ip");
+    re->dest = 0;
+    re->mask = 0;
+    re->gw   = 0;
 
+    ipc_message_synced(ip_pid, FIRST_NON_VFS_IPC_FUNC + 1, re, resz);
 
-    size_t resz = sizeof(struct routing_entry) + strlen(argv[1]) + 1;
-    struct routing_entry *re = malloc(resz);
-    strcpy(re->iface, argv[1]);
 
     if (subnet)
     {
@@ -339,7 +362,7 @@ int main(int argc, char *argv[])
         re->mask = subnet;
         re->gw   = 0;
 
-        ipc_message_synced(pid, FIRST_NON_VFS_IPC_FUNC, re, resz);
+        ipc_message_synced(ip_pid, FIRST_NON_VFS_IPC_FUNC, re, resz);
     }
 
     if (router_addr)
@@ -348,7 +371,7 @@ int main(int argc, char *argv[])
         re->mask = 0;
         re->gw   = router_addr;
 
-        ipc_message_synced(pid, FIRST_NON_VFS_IPC_FUNC, re, resz);
+        ipc_message_synced(ip_pid, FIRST_NON_VFS_IPC_FUNC, re, resz);
     }
 
 
