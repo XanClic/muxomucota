@@ -1,3 +1,4 @@
+#include <ipc.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,6 +43,16 @@ static int64_t get_ip(char *s)
 
     return ip;
 }
+
+
+struct routing_table_entry
+{
+    void *rsvd;
+
+    uint32_t dest, mask, gw;
+
+    char iface[];
+};
 
 
 static void print_if_info(const char *name)
@@ -148,6 +159,35 @@ int main(int argc, char *argv[])
             pipe_set_flag(ipfd, F_MY_IP, ip);
 
             destroy_pipe(ipfd, 0);
+
+
+            pid_t pid = find_daemon_by_name("ip");
+
+            size_t rte_sz = sizeof(struct routing_table_entry) + strlen(argv[1]) + 1;
+            struct routing_table_entry *rte = malloc(rte_sz);
+            strcpy(rte->iface, argv[1]);
+
+            rte->dest = 0;
+            rte->mask = 0;
+            rte->gw   = 0;
+
+            ipc_message_synced(pid, FIRST_NON_VFS_IPC_FUNC + 1, rte, rte_sz);
+
+
+            rte->dest = ip & 0xffffff00;
+            rte->mask = 0xffffff00;
+            rte->gw   = 0;
+
+            ipc_message_synced(pid, FIRST_NON_VFS_IPC_FUNC, rte, rte_sz);
+
+
+            rte->dest = 0;
+            rte->mask = 0;
+            rte->gw   = (ip & 0xffffff00) | 0x01;
+
+            ipc_message_synced(pid, FIRST_NON_VFS_IPC_FUNC, rte, rte_sz);
+
+            free(rte);
         }
     }
     else
