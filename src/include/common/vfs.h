@@ -37,12 +37,14 @@ enum
 enum
 {
     I_DEVICE_CONTACT,
+    I_DNS,
     I_ETHERNET,
     I_FILE,
     I_FS,
     I_IP,
     I_SIGNAL,
     I_STATABLE,
+    I_TCP,
     I_TTY,
     I_UDP
 };
@@ -56,11 +58,13 @@ enum
     F_FLUSH,
 
 #include <vfs/flags/device-contact.h>
+#include <vfs/flags/dns.h>
 #include <vfs/flags/ethernet.h>
 #include <vfs/flags/file.h>
 #include <vfs/flags/ip.h>
 #include <vfs/flags/signal.h>
 #include <vfs/flags/statable.h>
+#include <vfs/flags/tcp.h>
 #include <vfs/flags/tty.h>
 #include <vfs/flags/udp.h>
 };

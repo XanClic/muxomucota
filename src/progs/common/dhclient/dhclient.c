@@ -375,5 +375,18 @@ int main(int argc, char *argv[])
     }
 
 
+    printf("Setting DNS...\n");
+
+    int dnsfd = create_pipe("(dns)", 0);
+
+    if (dnsfd < 0)
+        perror("(dns)");
+    else
+    {
+        pipe_set_flag(dnsfd, F_DNS_DEFAULT_NSIP, dns_addr);
+        destroy_pipe(dnsfd, 0);
+    }
+
+
     return 0;
 }
