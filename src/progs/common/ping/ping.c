@@ -187,6 +187,12 @@ int main(int argc, char **argv)
         ifc = "routed";
     }
 
+    if (fd < 0)
+    {
+        fprintf(stderr, "%s: %s: %s\n", argv[0], fname, strerror(errno));
+        return 1;
+    }
+
     if (pipe_set_flag(fd, F_DEST_IP, dipv) < 0)
     {
         fprintf(stderr, "%s: %s: %s\n", argv[0], dip, strerror(errno));
