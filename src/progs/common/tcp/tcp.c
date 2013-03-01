@@ -251,9 +251,17 @@ static void tcp_send_packet(struct tcpcon *con, int flags, const void *data, siz
     pkt->seq = con->seq;
     con->seq += pkt->size;
 
+
+    lock(&ip_lock);
+    pipe_set_flag(ip_fd, F_DEST_IP, con->dest_ip);
+    uint32_t my_ip = pipe_get_flag(ip_fd, F_MY_IP);
+
+    unlock(&ip_lock);
+
+
     pkt->fhdr = (struct tcpfhdr){
         .psiphdr = {
-            .src_ip = htonl(pipe_get_flag(ip_fd, F_MY_IP)),
+            .src_ip = htonl(my_ip),
             .dst_ip = htonl(con->dest_ip),
             .prot_id = 0x06,
             .tcp_length = htons(sizeof(pkt->fhdr.tcphdr) + length)
@@ -660,6 +668,8 @@ big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int fl
 
 static uintmax_t incoming(void)
 {
+    static lock_t incoming_lock = LOCK_INITIALIZER;
+
     struct
     {
         pid_t pid;
@@ -676,7 +686,7 @@ static uintmax_t incoming(void)
     assert(fd >= 0);
 
 
-    lock(&ip_lock);
+    lock(&incoming_lock);
 
 
     while (pipe_get_flag(fd, F_READABLE))
@@ -755,14 +765,11 @@ static uintmax_t incoming(void)
                 uint32_t ack_num = ntohl(pkt->fhdr.tcphdr.ack);
 
                 struct tcppkt **outpkt = (struct tcppkt **)&tcpc->out_queue;
-                while (*outpkt != NULL)
+                while ((*outpkt != NULL) && ((*outpkt)->seq < ack_num)) // FIXME
                 {
-                    if ((*outpkt)->seq < ack_num) // FIXME
-                    {
-                        struct tcppkt *this = *outpkt;
-                        *outpkt = this->next;
-                        free(this);
-                    }
+                    struct tcppkt *this = *outpkt;
+                    *outpkt = this->next;
+                    free(this);
                 }
 
                 unlock(&tcpc->lock);
@@ -782,6 +789,8 @@ static uintmax_t incoming(void)
         if (!used)
             free(pkt);
     }
+
+    unlock(&incoming_lock);
 
 
     return 0;
