@@ -50,19 +50,16 @@ static int ip_fd;
 
 struct vfs_file
 {
-    struct
-    {
-        uint32_t dest_ip;
-        uint16_t port, dest_port;
+    uint32_t dest_ip;
+    uint16_t port, dest_port;
 
-        pid_t owner;
-        bool signal;
+    pid_t owner;
+    bool signal;
 
-        struct vfs_file *next;
+    struct vfs_file *next;
 
-        struct packet *inqueue;
-        rw_lock_t inqueue_lock;
-    };
+    struct packet *inqueue;
+    rw_lock_t inqueue_lock;
 };
 
 static struct vfs_file *connections;
@@ -126,7 +123,7 @@ static int64_t get_ip(const char *s, const char **endptr)
         int val = strtol(s, &end, 10);
         s = end;
 
-        if ((val < 0) || (val > 255) || ((*s != '.') && (i < 3)) || (*s && (*s != ':') && (i == 3)))
+        if ((val < 0) || (val > 255) || ((*s != '.') && (i < 3)) || ((*s != ':') && (i == 3)))
             return -1;
 
         ip = (ip << 8) | val;
@@ -155,17 +152,14 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
 
         dest_ip = htonl(ip);
 
-        if (*relpath == ':')
-        {
-            char *end;
-            int val = strtol(relpath, &end, 10);
-            relpath = end;
+        char *end;
+        int val = strtol(relpath, &end, 10);
+        relpath = end;
 
-            if ((val < 0x0000) || (val > 0xffff) || *relpath)
-                return 0;
+        if ((val < 0x0000) || (val > 0xffff) || *relpath)
+            return 0;
 
-            dest_port = val;
-        }
+        dest_port = val;
     }
 
 
@@ -199,12 +193,8 @@ uintptr_t service_duplicate_pipe(uintptr_t id)
 
     memcpy(nf, f, sizeof(*nf));
 
-    rwl_lock_w(&connection_lock);
-
-    nf->next = connections;
-    connections = nf;
-
-    rwl_unlock_w(&connection_lock);
+    nf->port = get_user_port();
+    nf->signal = false;
 
     rwl_lock_init(&nf->inqueue_lock);
     rwl_lock_r(&f->inqueue_lock);
@@ -225,6 +215,13 @@ uintptr_t service_duplicate_pipe(uintptr_t id)
     *endp = NULL;
 
     rwl_unlock_r(&f->inqueue_lock);
+
+    rwl_lock_w(&connection_lock);
+
+    nf->next = connections;
+    connections = nf;
+
+    rwl_unlock_w(&connection_lock);
 
     return (uintptr_t)nf;
 }
@@ -469,6 +466,7 @@ static uintmax_t incoming(void)
 
 
         uint32_t src_ip = pipe_get_flag(fd, F_SRC_IP);
+        uint32_t dest_ip = pipe_get_flag(fd, F_DEST_IP);
 
 
         size_t total_length = pipe_get_flag(fd, F_PRESSURE);
@@ -480,8 +478,15 @@ static uintmax_t incoming(void)
         size_t raw_data_size = ntohs(udph->udp.length) - sizeof(udph->udp);
 
 
+        udph->src_ip     = htonl(src_ip);
+        udph->dest_ip    = htonl(dest_ip);
+        udph->zero       = 0x00;
+        udph->proto_type = 0x11;
+        udph->udp_length = htons(total_length);
+
+
         // FIXME: Da hab ichs mir aber ein bisschen einfach gemacht (apropos 0xffff)
-        if (udph->udp.checksum && (udph->udp.checksum == 0xffff) && calculate_network_checksum(udph, raw_data_size + sizeof(*udph)))
+        if (udph->udp.checksum && (udph->udp.checksum != 0xffff) && calculate_network_checksum(udph, raw_data_size + sizeof(*udph)))
         {
             fprintf(stderr, "(udp) incoming checksum error, discarding packet\n");
             free(udph);
@@ -560,6 +565,12 @@ int main(void)
     if (ip_fd < 0)
     {
         fprintf(stderr, "Could not connect to IP service.\n");
+        return 1;
+    }
+
+    if (!pipe_implements(ip_fd, I_IP))
+    {
+        fprintf(stderr, "(ip) does not implement the IP interface.\n");
         return 1;
     }
 
