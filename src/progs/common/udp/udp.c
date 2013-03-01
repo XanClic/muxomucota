@@ -187,46 +187,6 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
 }
 
 
-uintptr_t service_duplicate_pipe(uintptr_t id)
-{
-    struct vfs_file *f = (struct vfs_file *)id, *nf = malloc(sizeof(*f));
-
-    memcpy(nf, f, sizeof(*nf));
-
-    nf->port = get_user_port();
-    nf->signal = false;
-
-    rwl_lock_init(&nf->inqueue_lock);
-    rwl_lock_r(&f->inqueue_lock);
-
-    struct packet **endp = &nf->inqueue;
-
-    for (struct packet *i = f->inqueue; i != NULL; i = i->next)
-    {
-        *endp = malloc(sizeof(*i));
-        memcpy(*endp, i, sizeof(*i));
-
-        (*endp)->data = malloc(i->length);
-        memcpy((*endp)->data, i->data, i->length);
-
-        endp = &(*endp)->next;
-    }
-
-    *endp = NULL;
-
-    rwl_unlock_r(&f->inqueue_lock);
-
-    rwl_lock_w(&connection_lock);
-
-    nf->next = connections;
-    connections = nf;
-
-    rwl_unlock_w(&connection_lock);
-
-    return (uintptr_t)nf;
-}
-
-
 void service_destroy_pipe(uintptr_t id, int flags)
 {
     (void)flags;
@@ -307,7 +267,14 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
 
     struct checksum_header *udph = malloc(sizeof(*udph) + size);
 
-    udph->src_ip     = htonl(pipe_get_flag(ip_fd, F_MY_IP));
+    lock(&ip_lock);
+
+    pipe_set_flag(ip_fd, F_DEST_IP, f->dest_ip);
+    uint32_t my_ip = pipe_get_flag(ip_fd, F_MY_IP);
+
+    unlock(&ip_lock);
+
+    udph->src_ip     = htonl(my_ip);
     udph->dest_ip    = htonl(f->dest_ip);
     udph->zero       = 0x00;
     udph->proto_type = 0x11;
