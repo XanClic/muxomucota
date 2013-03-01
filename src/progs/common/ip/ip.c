@@ -37,7 +37,7 @@ struct packet
 {
     struct packet *next;
 
-    uint32_t src;
+    uint32_t src, dest;
     int protocol;
     int ttl;
 
@@ -354,7 +354,7 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
             return f->signal;
 
         case F_DEST_IP:
-            return f->dest;
+            return (f->inqueue != NULL) ? f->inqueue->dest : 0;
 
         case F_SRC_IP:
             return (f->inqueue != NULL) ? f->inqueue->src : 0;
@@ -510,6 +510,7 @@ static uintmax_t incoming(void)
             p->next     = NULL;
 
             p->src      = ntohl(iph->src_ip);
+            p->dest     = ntohl(iph->dest_ip);
             p->protocol = iph->proto_type;
             p->ttl      = iph->ttl;
 

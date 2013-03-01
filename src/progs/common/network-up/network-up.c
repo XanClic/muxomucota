@@ -10,7 +10,7 @@ int main(void)
 {
     printf("Starting network stack...\n");
 
-    const char *init_cmds[] = { "eth", "ip", "udp", "dns" };
+    const char *init_cmds[] = { "eth", "ip", "udp", "tcp", "dns" };
 
     for (int i = 0; i < (int)(sizeof(init_cmds) / sizeof(init_cmds[0])); i++)
     {
