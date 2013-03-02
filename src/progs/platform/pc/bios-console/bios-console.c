@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <drivers.h>
 #include <drivers/memory.h>
 #include <drivers/ports.h>
@@ -244,6 +245,7 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
                         type = ANSI_UNKNOWN;
                         x = tp->sx;
                         y = tp->sy;
+                        output = &text_mem[y * 80 + x];
                         s++;
                         break;
                     default:
@@ -267,11 +269,12 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
                                 if ((*np != ';') || (ny < 0) || (ny >= 25))
                                     continue;
                                 nx = strtol(np + 1, (char **)&np, 10) - 1;
-                                if ((*np != 'f') || (nx < 0) || (nx >= 80))
+                                if (((*np != 'f') && (*np != 'H')) || (nx < 0) || (nx >= 80))
                                     continue;
                             }
                             x = nx;
                             y = ny;
+                            output = &text_mem[y * 80 + x];
                             break;
                         }
                     case ANSI_COLOR:
