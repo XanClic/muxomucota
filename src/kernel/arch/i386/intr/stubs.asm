@@ -108,7 +108,8 @@ public int_stub_0xA2
 int_stub_0xA2:
 cld
 
-sub   esp,8
+push  dword 0
+push  dword 0x2a
 
 push  ds
 push  es
