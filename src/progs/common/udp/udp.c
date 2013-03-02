@@ -193,12 +193,10 @@ void service_destroy_pipe(uintptr_t id, int flags)
 
     struct vfs_file *f = (struct vfs_file *)id;
 
-    rwl_lock_r(&connection_lock);
+    rwl_lock_w(&connection_lock);
 
     struct vfs_file **fp;
     for (fp = &connections; (*fp != NULL) && (*fp != f); fp = &(*fp)->next);
-
-    rwl_require_w(&connection_lock);
 
     if (*fp != NULL)
         *fp = f->next;
@@ -398,7 +396,7 @@ bool service_pipe_implements(uintptr_t id, int interface)
 {
     (void)id;
 
-    return ((interface == I_FS) || (interface == I_UDP) || (interface == I_SIGNAL));
+    return ((interface == I_UDP) || (interface == I_SIGNAL));
 }
 
 
@@ -482,12 +480,10 @@ static uintmax_t incoming(void)
             memcpy(p->data, udph + 1, p->length);
 
 
-            rwl_lock_r(&f->inqueue_lock);
+            rwl_lock_w(&f->inqueue_lock);
 
             struct packet **pp;
             for (pp = &f->inqueue; *pp != NULL; pp = &(*pp)->next);
-
-            rwl_require_w(&f->inqueue_lock);
 
             *pp = p;
 

@@ -1,79 +1,100 @@
-// FIXME: Der Code ist von 2010 und gehört dringend gefixt.
-
 #include <assert.h>
+#include <compiler.h>
 #include <drivers.h>
-#include <errno.h>
 #include <ipc.h>
 #include <lock.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <system-timer.h>
+#include <unistd.h>
 #include <vfs.h>
 #include <arpa/inet.h>
 
-#include "tcp.h"
 
-
+#define DEFAULT_WINDOW 16384U
+#define RTT 1000
 #define MSS 1300
 
-#define TCP_PKT_INV_DATA (1 << 0)
-#define TCP_PKT_SYN      (1 << 1)
-#define TCP_PKT_FIN      (1 << 2)
-#define TCP_PKT_RST      (1 << 3)
-#define TCP_PKT_SPC      (TCP_PKT_SYN | TCP_PKT_FIN | TCP_PKT_RST)
+#define TCP_FIN (1 << 0)
+#define TCP_SYN (1 << 1)
+#define TCP_RST (1 << 2)
+#define TCP_PSH (1 << 3)
+#define TCP_ACK (1 << 4)
+#define TCP_URG (1 << 5)
 
 
-struct tcppkt
+struct tcp_header
 {
-    struct tcppkt *next;
-    size_t size, position;
-    void *data;
+    uint16_t src_port, dest_port;
+    uint32_t seq, ack;
+    uint8_t hdrlen;
+    uint8_t flags;
+    uint16_t window;
+    uint16_t checksum;
+    uint16_t urgentptr;
+} cc_packed;
 
-    int pkt_type;
+struct pseudo_ip_header
+{
+    uint32_t src_ip, dest_ip;
+    uint8_t zero, proto_type;
+    uint16_t tcp_length;
+} cc_packed;
 
-    uint32_t seq;
 
-    struct tcpfhdr fhdr;
+enum tcp_status
+{
+    STATUS_CLOSED,
+    STATUS_LISTEN,
+    STATUS_SYN_RCVD,
+    STATUS_SYN_SENT,
+    STATUS_OPEN,
+    STATUS_FIN_RCVD,
+    STATUS_FIN_SENT
 };
 
-enum tcpstat
+
+struct packet
 {
-    TCP_CONNECTED = 0,
-    TCP_LOCAL_CLOSED,
-    TCP_REMOTE_CLOSED,
-    TCP_CLOSED,
-    TCP_CONNECT
+    struct packet *next;
+
+    int last_time_sent;
+
+    uint32_t seq_end;
+    size_t read_offset;
+
+    size_t size;
+    struct tcp_header *packet;
 };
 
-enum tcpclose
+
+struct tcp_connection
 {
-    TCP_SINGLE_FIN,
-    TCP_DOUBLE_FIN,
-    TCP_RESET
+    uint32_t ip, dest_ip;
+    uint16_t port, dest_port;
+
+    volatile enum tcp_status status;
+
+    uint32_t seq, ack;
+
+    pid_t owner;
+    bool signal;
+
+    size_t window;
+
+    struct tcp_connection *next;
+
+    struct packet *inqueue;
+    rw_lock_t inqueue_lock;
+
+    struct packet *outqueue;
+    rw_lock_t outqueue_lock;
 };
 
-struct tcpcon
-{
-    uint32_t dest_ip;
-    uint16_t dport, sport;
-
-    lock_t lock;
-
-    volatile struct tcppkt *queue_start;
-    volatile struct tcppkt *contiguous;
-    volatile struct tcppkt *out_queue;
-
-    volatile int got_fin_somewhere;
-
-    struct tcpcon *next;
-
-    volatile enum tcpstat status;
-    uint32_t seq, ack, recv_seq;
-};
-
-static struct tcpcon *connections = NULL;
+static struct tcp_connection *connections;
 static rw_lock_t connection_lock = RW_LOCK_INITIALIZER;
 
 
@@ -104,22 +125,21 @@ static uint16_t get_user_port(void)
 }
 
 
-static uint16_t calculate_network_checksum(void *buffer, int size)
+static uint32_t raw_checksum_calc(const uint8_t *buffer, size_t sz, uint32_t initial)
 {
-    if (size < 2)
-        return 0;
+    bool hi_byte = true;
 
-    bool odd = size & 1;
-    size &= ~1;
+    for (int i = 0; i < (int)sz; i++, hi_byte = !hi_byte)
+        initial += (buffer[i] << (hi_byte * 8)) & (0xff << (hi_byte * 8));
 
-    uint8_t *data = buffer;
+    return initial;
+}
 
-    uint32_t sum = 0;
-    for (int i = 0; i < size; i += 2)
-        sum += ((data[i] << 8) & 0xff00) + (data[i + 1] & 0xff);
 
-    if (odd)
-        sum += (data[size] << 8) & 0xff00;
+static uint16_t calculate_network_checksum(const struct pseudo_ip_header *psip, const struct tcp_header *tcph, size_t sz)
+{
+    uint32_t sum = raw_checksum_calc((const uint8_t *)psip, sizeof(*psip), 0);
+    sum = raw_checksum_calc((const uint8_t *)tcph, sz, sum);
 
     while (sum >> 16)
         sum = (sum & 0xffff) + (sum >> 16);
@@ -128,538 +148,625 @@ static uint16_t calculate_network_checksum(void *buffer, int size)
 }
 
 
-static void throw_packet(struct tcppkt *pkt, struct tcpcon *con)
+static int64_t get_ip(const char *s, const char **endptr)
 {
-    size_t size_to_send = sizeof(pkt->fhdr.tcphdr) + ((pkt->pkt_type & TCP_PKT_INV_DATA) ? 0 : pkt->size);
-    pkt->fhdr.tcphdr.ack = htonl(con->ack);
-    pkt->fhdr.tcphdr.checksum = 0;
-    pkt->fhdr.tcphdr.checksum = htons(calculate_network_checksum(&pkt->fhdr, sizeof(pkt->fhdr.psiphdr) + size_to_send));
+    uint32_t ip = 0;
 
+    for (int i = 0; i < 4; i++)
+    {
+        char *end;
+        int val = strtol(s, &end, 10);
+        s = end;
+
+        if ((val < 0) || (val > 255) || ((*s != '.') && (i < 3)) || ((*s != ':') && (i == 3)))
+            return -1;
+
+        ip = (ip << 8) | val;
+        s++;
+    }
+
+    *endptr = s - 1;
+
+    return ip;
+}
+
+
+static void throw_tcp_packet(struct tcp_connection *c, struct packet *p)
+{
     lock(&ip_lock);
 
-    pipe_set_flag(ip_fd, F_DEST_IP, con->dest_ip);
-
-    stream_send(ip_fd, &pkt->fhdr.tcphdr, size_to_send, O_NONBLOCK);
+    pipe_set_flag(ip_fd, F_DEST_IP, c->dest_ip);
+    stream_send(ip_fd, p->packet, p->size, O_NONBLOCK);
 
     unlock(&ip_lock);
 }
 
-static void do_tcp_queue(struct tcpcon *con)
+
+static void handle_outqueue(struct tcp_connection *c)
 {
-    lock(&con->lock);
+    rwl_lock_r(&c->outqueue_lock);
 
-    struct tcppkt *pkt = (struct tcppkt *)con->out_queue;
+    uint32_t seq_start = (c->outqueue != NULL) ? ntohl(c->outqueue->packet->seq) : 0;
 
-    while (pkt != NULL)
-    {
-        throw_packet(pkt, con);
-        pkt = pkt->next;
-    }
+    for (struct packet *p = c->outqueue; (p != NULL) && (p->seq_end - seq_start <= c->window); p = p->next)
+        if (elapsed_ms() - p->last_time_sent > RTT)
+            throw_tcp_packet(c, p);
 
-    unlock(&con->lock);
+    rwl_unlock_r(&c->outqueue_lock);
 }
 
-static void adapt_connection_state(struct tcpcon *con, int completed_first)
+
+static void tcp_acked(struct tcp_connection *c, uint32_t ack)
 {
-    lock(&con->lock);
+    rwl_lock_w(&c->outqueue_lock);
 
-    // Immer nur das erste Paket ansehen
-    if (con->contiguous != NULL)
+    struct packet *p = c->outqueue;
+    while ((p != NULL) && (ack - p->seq_end < 0x40000000U)) // p->seq_end <= ack
     {
-        if (con->contiguous->pkt_type & TCP_PKT_SYN)
-            con->status = TCP_CONNECTED;
-        else if ((con->contiguous->pkt_type & TCP_PKT_FIN) && ((con->contiguous->pkt_type & TCP_PKT_INV_DATA) || completed_first))
-            con->status |= TCP_REMOTE_CLOSED;
-        if (con->contiguous->pkt_type & TCP_PKT_RST)
-            con->status = TCP_CLOSED;
+        struct packet *np = p->next;
 
-        if ((con->contiguous->pkt_type & TCP_PKT_SPC) && (con->contiguous->pkt_type & TCP_PKT_INV_DATA))
+        free(p->packet);
+        free(p);
+
+        p = np;
+    }
+
+    c->outqueue = p;
+
+    rwl_unlock_w(&c->outqueue_lock);
+}
+
+
+static void flush_all_queues(struct tcp_connection *c);
+static void send_tcp_packet(struct tcp_connection *c, int flags, const void *data, size_t length);
+
+
+static void handle_inqueue(struct tcp_connection *c)
+{
+    rwl_lock_w(&c->inqueue_lock);
+
+    for (struct packet **pp = &c->inqueue; *pp != NULL; pp = &(*pp)->next)
+    {
+        struct packet *p = *pp;
+
+        uint32_t seq = ntohl(p->packet->seq);
+
+        if ((c->ack - seq < 0x40000000U) && // c->ack >= seq
+            (c->ack != p->seq_end) &&
+            (p->seq_end - c->ack < 0x40000000U)) // p->seq_end > c->ack
         {
-            struct tcppkt *f = (struct tcppkt *)con->contiguous;
-            con->contiguous = f->next;
-            free(f);
+            c->ack = p->seq_end;
 
-            unlock(&con->lock);
-            adapt_connection_state(con, 0); // FIXME: Stacküberlauf möglich
-            lock(&con->lock);
+            if (p->packet->flags & TCP_RST)
+            {
+                c->status = STATUS_CLOSED;
+                flush_all_queues(c);
+            }
+            else if (p->packet->flags & TCP_SYN)
+            {
+                if (c->status == STATUS_LISTEN)
+                {
+                    c->status = STATUS_SYN_RCVD;
+                    send_tcp_packet(c, TCP_SYN | TCP_ACK, NULL, 0);
+                }
+                else if (c->status == STATUS_CLOSED)
+                    send_tcp_packet(c, TCP_RST, NULL, 0);
+                else
+                    c->status = STATUS_OPEN;
+            }
+            else if (p->packet->flags & TCP_FIN)
+            {
+                if ((c->status == STATUS_FIN_SENT) || (c->status == STATUS_CLOSED))
+                    c->status = STATUS_CLOSED;
+                else
+                    c->status = STATUS_FIN_RCVD;
+            }
+
+            if (p->size == (p->packet->hdrlen >> 4) * 4)
+            {
+                *pp = p->next;
+
+                free(p->packet);
+                free(p);
+
+                if (*pp == NULL)
+                    break;
+            }
         }
+        else if (seq - c->ack < 0x40000000U) // seq >= c->ack (seq > c->ack)
+            break;
     }
 
-    unlock(&con->lock);
+    rwl_unlock_w(&c->inqueue_lock);
+
+
+    // TODO: Testen, ob am Ende der Queue schon ein ACK mit den richtigen Werten
+    // hängt
+    send_tcp_packet(c, TCP_ACK, NULL, 0);
 }
 
-static void tcp_send_packet(struct tcpcon *con, int flags, const void *data, size_t length, int queue);
 
-static void ack(struct tcpcon *con)
+static void send_tcp_packet(struct tcp_connection *c, int flags, const void *data, size_t length)
 {
-    tcp_send_packet(con, TCP_ACK, NULL, 0, 0);
-}
+    struct packet *p = malloc(sizeof(*p));
 
-static void do_input_queue(struct tcpcon *con)
-{
-    lock(&con->lock);
+    size_t seq_size = (!length && (flags & (TCP_SYN | TCP_FIN))) ? 1 : length;
 
-    struct tcppkt **pkt = (struct tcppkt **)&con->queue_start;
-    struct tcppkt **cont = (struct tcppkt **)&con->contiguous;
+    p->packet = malloc(sizeof(*p->packet) + length);
 
-    while (*cont != NULL)
-        cont = &(*cont)->next;
+    uint32_t seq = __sync_fetch_and_add(&c->seq, seq_size);
 
-    if ((*pkt != NULL) && ((*pkt)->pkt_type & TCP_PKT_SYN))
-        con->ack = (*pkt)->seq;
-
-    uint_fast32_t seq = con->ack;
-    int just_acks = 1;
-
-    while ((*pkt != NULL) && ((*pkt)->seq == seq))
-    {
-        if (((*pkt)->fhdr.tcphdr.flags & ~TCP_ACK) || (*pkt)->size)
-            just_acks = 0;
-
-        seq += (*pkt)->size;
-        *cont = *pkt;
-        cont = &(*cont)->next;
-        *pkt = NULL;
-    }
-
-    con->ack = seq;
-
-    unlock(&con->lock);
-
-    adapt_connection_state(con, 0);
-
-    if ((con->status != TCP_CLOSED) && !just_acks)
-        ack(con);
-}
-
-static void tcp_send_packet(struct tcpcon *con, int flags, const void *data, size_t length, int queue)
-{
-    struct tcppkt *pkt = calloc(1, sizeof(*pkt) + (length ? length : 1));
-
-    pkt->data = &pkt->fhdr + 1;
-
-    pkt->size = length;
-    if (((flags & TCP_SYN) || (flags & TCP_FIN)) && !length)
-    {
-        pkt->size = 1;
-        pkt->pkt_type |= TCP_PKT_INV_DATA;
-    }
-    pkt->pkt_type |= (flags & TCP_SYN) ? TCP_PKT_SYN : 0;
-    pkt->pkt_type |= (flags & TCP_FIN) ? TCP_PKT_FIN : 0;
-    pkt->pkt_type |= (flags & TCP_RST) ? TCP_PKT_RST : 0;
-
-    pkt->seq = con->seq;
-    con->seq += pkt->size;
-
-    pkt->fhdr = (struct tcpfhdr){
-        .psiphdr = {
-            .src_ip = htonl(pipe_get_flag(ip_fd, F_MY_IP)),
-            .dst_ip = htonl(con->dest_ip),
-            .prot_id = 0x06,
-            .tcp_length = htons(sizeof(pkt->fhdr.tcphdr) + length)
-        },
-        .tcphdr = {
-            .src_port = htons(con->sport),
-            .dst_port = htons(con->dport),
-            .seq = htonl(pkt->seq), // ACK wird direkt beim Senden gesetzt
-            .hdrlen = (sizeof(pkt->fhdr.tcphdr) / sizeof(uint32_t)) << 4,
-            .flags = flags,
-            .window = htons(MSS)
-        }
+    *p->packet = (struct tcp_header){
+        .src_port = htons(c->port),
+        .dest_port = htons(c->dest_port),
+        .seq = htonl(seq),
+        .ack = htonl(c->ack),
+        .hdrlen = (sizeof(struct tcp_header) / 4) << 4,
+        .flags = flags,
+        .window = htons(DEFAULT_WINDOW),
+        .checksum = 0x0000,
+        .urgentptr = 0x0000
     };
 
-    memcpy(pkt->data, data, length);
+    if (length)
+        memcpy(p->packet + 1, data, length);
 
-    if (queue)
-    {
-        lock(&con->lock);
+    p->seq_end = seq + seq_size;
 
-        struct tcppkt **last = (struct tcppkt **)&con->out_queue;
-        while (*last != NULL)
-            last = &(*last)->next;
-        *last = pkt;
+    p->size = sizeof(*p->packet) + length;
+    p->last_time_sent = 0;
 
-        unlock(&con->lock);
 
-        do_tcp_queue(con);
-    }
-    else
-    {
-        throw_packet(pkt, con);
-        free(pkt);
-    }
+    struct pseudo_ip_header psip = {
+        .src_ip = htonl(c->ip),
+        .dest_ip = htonl(c->dest_ip),
+        .zero = 0x00,
+        .proto_type = 0x06,
+        .tcp_length = htons(p->size)
+    };
+
+    p->packet->checksum = htons(calculate_network_checksum(&psip, p->packet, p->size));
+
+
+    rwl_lock_w(&c->outqueue_lock);
+
+    struct packet **oq;
+    for (oq = &c->outqueue; (*oq != NULL) && (ntohl((*oq)->packet->seq) <= seq); oq = &(*oq)->next);
+
+    p->next = *oq;
+    *oq = p;
+
+    rwl_unlock_w(&c->outqueue_lock);
+
+
+    handle_outqueue(c);
 }
 
-static void tcp_connect(struct tcpcon *con)
+
+static void tcp_connect(struct tcp_connection *c)
 {
-    con->status = TCP_CONNECT;
-    con->seq = 42;
-    tcp_send_packet(con, TCP_SYN, NULL, 0, 1);
+    lock(&ip_lock);
 
-    int timeout = elapsed_ms() + 1000;
-    while ((con->status == TCP_CONNECT) && (elapsed_ms() < timeout))
+    pipe_set_flag(ip_fd, F_DEST_IP, c->dest_ip);
+    c->ip = pipe_get_flag(ip_fd, F_MY_IP);
+
+    unlock(&ip_lock);
+
+
+    flush_all_queues(c);
+
+
+    c->seq = 0; // chosen by a fair dice roll (oder so)
+
+    c->status = STATUS_SYN_SENT;
+    send_tcp_packet(c, TCP_SYN, NULL, 0);
+
+    while (c->status == STATUS_SYN_SENT)
         yield();
-    if (con->status == TCP_CONNECT)
-        con->status = TCP_CLOSED;
 }
+
 
 uintptr_t service_create_pipe(const char *relpath, int flags)
 {
     (void)flags;
 
-    struct tcpcon *ntcpc = calloc(1, sizeof(*ntcpc));
-    ntcpc->sport = get_user_port();
-    ntcpc->status = TCP_CLOSED;
-
-    lock_init(&ntcpc->lock);
-
-    rwl_lock_r(&connection_lock);
-
-    struct tcpcon **last = &connections;
-    while (*last != NULL)
-        last = &(*last)->next;
-
-    rwl_require_w(&connection_lock);
-
-    *last = ntcpc;
-
-    rwl_unlock_w(&connection_lock);
+    uint32_t dest_ip = 0;
+    uint32_t dest_port = 0;
 
     if (*relpath)
     {
-        char *end = (char *)relpath + 1;
-        uint32_t ip = 0;
+        int64_t ip = get_ip(relpath + 1, &relpath);
 
-        for (int i = 0; i < 4; i++)
-        {
-            int ipa = strtol(end, &end, 10);
-            if (ipa & ~0xFF)
-            {
-                service_destroy_pipe((uintptr_t)ntcpc, 0);
-                errno = ENOENT;
-                return 0;
-            }
-            if (((i < 3) && (*end != '.')) || ((i == 3) && (*end != ':')))
-            {
-                service_destroy_pipe((uintptr_t)ntcpc, 0);
-                errno = ENOENT;
-                return 0;
-            }
-            ip |= ipa << ((3 - i) * 8);
-            end++;
-        }
-
-        int port = strtol(end, &end, 10);
-        if (port & ~0xFFFF)
-        {
-            service_destroy_pipe((uintptr_t)ntcpc, 0);
-            errno = ENOENT;
+        if (ip < 0)
             return 0;
-        }
 
-        ntcpc->dest_ip = ip;
-        ntcpc->dport = port;
+        dest_ip = ip;
 
-        tcp_connect(ntcpc);
+        char *end;
+        int val = strtol(relpath + 1, &end, 10);
+        relpath = end;
 
-        if (ntcpc->status != TCP_CONNECTED)
-        {
-            service_destroy_pipe((uintptr_t)ntcpc, 0);
-            errno = ECONNREFUSED;
+        if ((val < 0x0000) || (val > 0xffff) || *relpath)
             return 0;
-        }
+
+        dest_port = val;
     }
 
-    return (uintptr_t)ntcpc;
-}
 
-static void closeconn(struct tcpcon *con, enum tcpclose status)
-{
-    switch (status)
-    {
-        case TCP_SINGLE_FIN:
-            if (con->status & TCP_LOCAL_CLOSED)
-                return;
+    struct tcp_connection *f = malloc(sizeof(*f));
+    f->port      = get_user_port();
+    f->dest_ip   = dest_ip;
+    f->dest_port = dest_port;
 
-            tcp_send_packet(con, TCP_FIN | TCP_ACK, NULL, 0, 1);
-            con->status |= TCP_LOCAL_CLOSED;
-            break;
+    f->signal = false;
+    f->owner  = -1;
 
-        case TCP_DOUBLE_FIN:
-            if (con->status & TCP_CLOSED)
-                return;
+    f->seq = f->ack = 0;
 
-            con->got_fin_somewhere = 0;
-            tcp_send_packet(con, TCP_FIN | TCP_ACK, NULL, 0, 1);
-            con->status |= TCP_LOCAL_CLOSED;
-            if (con->status == TCP_CLOSED)
-                return;
-            int timeout = elapsed_ms() + 1000;
-            while ((elapsed_ms() < timeout) && !con->got_fin_somewhere)
-                yield();
-            if (con->got_fin_somewhere)
-                con->status = TCP_CLOSED;
-            break;
+    f->window = DEFAULT_WINDOW;
 
-        case TCP_RESET:
-            if (con->status & TCP_CLOSED)
-                return;
+    f->next = NULL;
 
-            tcp_send_packet(con, TCP_RST, NULL, 0, 1);
-            con->status = TCP_CLOSED;
-    }
-}
+    f->inqueue = NULL;
+    rwl_lock_init(&f->inqueue_lock);
 
-static void flush_all_queues(struct tcpcon *con)
-{
-    lock(&con->lock);
+    f->outqueue = NULL;
+    rwl_lock_init(&f->outqueue_lock);
 
-    struct tcppkt *pkt = (struct tcppkt *)con->queue_start;
-    while (pkt != NULL)
-    {
-        struct tcppkt *next = pkt->next;
-        free(pkt);
-        pkt = next;
-    }
+    rwl_lock_w(&connection_lock);
 
-    pkt = (struct tcppkt *)con->contiguous;
-    while (pkt != NULL)
-    {
-        struct tcppkt *next = pkt->next;
-        free(pkt);
-        pkt = next;
-    }
-
-    pkt = (struct tcppkt *)con->out_queue;
-    while (pkt != NULL)
-    {
-        struct tcppkt *next = pkt->next;
-        free(pkt);
-        pkt = next;
-    }
-
-    con->queue_start = con->contiguous = con->out_queue = NULL;
-
-    unlock(&con->lock);
-}
-
-void service_destroy_pipe(uintptr_t id, int flags)
-{
-    struct tcpcon *tcpc = (struct tcpcon *)id;
-
-    if (tcpc->status != TCP_CLOSED)
-    {
-        if (!flags)
-            closeconn(tcpc, TCP_DOUBLE_FIN);
-        if (tcpc->status != TCP_CLOSED)
-            closeconn(tcpc, TCP_RESET);
-    }
-
-    rwl_lock_r(&connection_lock);
-
-    struct tcpcon **prev = &connections;
-    while ((*prev != NULL) && (*prev != tcpc))
-        prev = &(*prev)->next;
-
-    rwl_require_w(&connection_lock);
-
-    if (*prev != NULL)
-        *prev = tcpc->next;
+    f->next = connections;
+    connections = f;
 
     rwl_unlock_w(&connection_lock);
 
-    flush_all_queues(tcpc);
 
-    free(tcpc);
-}
-
-int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
-{
-    static int has_both = 0;
-    struct tcpcon *con = (struct tcpcon *)(uintptr_t)id;
-
-    if (flag == F_DEST_PORT)
-        has_both |= 1;
-    else if (flag == F_DEST_IP)
-        has_both |= 2;
-
-    if (has_both == 3)
+    if (!dest_ip)
+        f->status = STATUS_CLOSED;
+    else
     {
-        closeconn(con, TCP_DOUBLE_FIN);
-        if (con->status != TCP_CLOSED)
-            closeconn(con, TCP_RESET);
+        tcp_connect(f);
 
-        flush_all_queues(con);
-    }
-
-    switch (flag)
-    {
-        case F_DEST_PORT:
-            if (value & ~0xFFFF)
-                return -EINVAL;
-
-            con->dport = value;
-            break;
-
-        case F_DEST_IP:
-            if (value & ~0xFFFFFFFFULL)
-                return -EINVAL;
-
-            con->dest_ip = value;
-            break;
-
-        case F_CONNECTION_STATUS:
-            if (!value)
-            {
-                closeconn(con, TCP_DOUBLE_FIN);
-                if (con->status != TCP_CLOSED)
-                    closeconn(con, TCP_RESET);
-
-                flush_all_queues(con);
-            }
-            break;
-    }
-
-    if (has_both == 3)
-    {
-        has_both = 0;
-
-        tcp_connect(con);
-
-        if (con->status != TCP_CONNECTED)
-            return -ECONNREFUSED;
-
-        return 0;
-    }
-
-    return -EINVAL;
-}
-
-uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
-{
-    struct tcpcon *con = (struct tcpcon *)id;
-
-    switch (flag)
-    {
-        case F_PRESSURE:
+        if (f->status != STATUS_OPEN)
         {
-            lock(&con->lock);
-
-            size_t size = 0;
-
-            struct tcppkt *pkt = (struct tcppkt *)con->contiguous;
-            while (pkt != NULL)
-            {
-                if (!(pkt->pkt_type & TCP_PKT_INV_DATA))
-                    size += pkt->size;
-                pkt = pkt->next;
-            }
-
-            unlock(&con->lock);
-
-            return size;
+            service_destroy_pipe((uintptr_t)f, 0);
+            return 0;
         }
-
-        case F_READABLE:
-            return (((con->status == TCP_CONNECTED) || (con->status == TCP_LOCAL_CLOSED)) && service_pipe_get_flag(id, F_PRESSURE));
-
-        case F_WRITABLE:
-            return ((con->status == TCP_CONNECTED) || (con->status == TCP_REMOTE_CLOSED));
-
-        case F_DEST_PORT:
-            return con->dport;
-
-        case F_DEST_IP:
-            return con->dest_ip;
     }
 
-    errno = EINVAL;
 
-    return 0;
+    return (uintptr_t)f;
 }
+
+
+static void flush_all_queues(struct tcp_connection *c)
+{
+    rwl_lock_w(&c->inqueue_lock);
+
+    struct packet *p = c->inqueue;
+
+    while (p != NULL)
+    {
+        struct packet *np = p->next;
+
+        free(p->packet);
+        free(p);
+
+        p = np;
+    }
+
+    rwl_unlock_w(&c->inqueue_lock);
+
+
+    rwl_lock_w(&c->outqueue_lock);
+
+    p = c->inqueue;
+
+    while (p != NULL)
+    {
+        struct packet *np = p->next;
+
+        free(p->packet);
+        free(p);
+
+        p = np;
+    }
+
+    rwl_unlock_w(&c->outqueue_lock);
+}
+
+
+static void tcp_disconnect(struct tcp_connection *c)
+{
+    flush_all_queues(c);
+
+    if ((c->status != STATUS_CLOSED) && (c->status != STATUS_LISTEN))
+    {
+        if ((c->status == STATUS_SYN_SENT) || (c->status == STATUS_SYN_RCVD))
+        {
+            send_tcp_packet(c, TCP_RST, NULL, 0);
+            c->status = STATUS_CLOSED;
+        }
+        else
+        {
+            if (c->status == STATUS_OPEN)
+                c->status = STATUS_FIN_SENT;
+            else if (c->status == STATUS_FIN_RCVD)
+                c->status = STATUS_CLOSED;
+
+            send_tcp_packet(c, TCP_FIN | TCP_ACK, NULL, 0);
+
+            int timeout = elapsed_ms() + RTT;
+            while ((c->status != STATUS_CLOSED) && (elapsed_ms() < timeout))
+                yield();
+
+            if (c->status != STATUS_CLOSED)
+            {
+                send_tcp_packet(c, TCP_RST, NULL, 0);
+                c->status = STATUS_CLOSED;
+            }
+        }
+    }
+}
+
+
+void service_destroy_pipe(uintptr_t id, int flags)
+{
+    (void)flags;
+
+    struct tcp_connection *f = (struct tcp_connection *)id;
+
+
+    tcp_disconnect(f);
+
+
+    rwl_lock_r(&connection_lock);
+
+    struct tcp_connection **fp;
+    for (fp = &connections; (*fp != NULL) && (*fp != f); fp = &(*fp)->next);
+
+    rwl_require_w(&connection_lock);
+
+    if (*fp != NULL)
+        *fp = f->next;
+
+    rwl_unlock_w(&connection_lock);
+
+
+    flush_all_queues(f);
+
+
+    free(f);
+}
+
 
 big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, int flags)
 {
     (void)flags;
 
-    struct tcpcon *con = (struct tcpcon *)id;
-    size_t swas = size;
+    struct tcp_connection *c = (struct tcp_connection *)id;
 
-    // TODO: O_BLOCKING
-    while (size)
+    if ((c->status != STATUS_OPEN) && (c->status != STATUS_FIN_RCVD))
+        return 0;
+
+    for (size_t i = 0; i < size; i += MSS)
     {
-        size_t this_len = (size > MSS) ? MSS : size;
+        size_t copy_sz = (size - i > MSS) ? MSS : (size - i);
 
-        tcp_send_packet(con, ((size > this_len) ? 0 : TCP_PSH) | TCP_ACK, data, this_len, 1);
-
-        size -= this_len;
-        data = (const void *)((uintptr_t)data + this_len);
+        send_tcp_packet(c, TCP_ACK | ((i + MSS >= size) ? TCP_PSH : 0), (const char *)data + i, copy_sz);
     }
 
-    return swas;
+    return size;
 }
+
+
+static size_t tcp_receive(struct tcp_connection *c, void *data, size_t size)
+{
+    size_t orig_sz = size;
+    char *out = data;
+
+    rwl_lock_w(&c->inqueue_lock);
+
+    uint32_t last_seq_end = (c->inqueue != NULL) ? ntohl(c->inqueue->packet->seq) : 0;
+
+    for (struct packet **pp = &c->inqueue; *pp != NULL; pp = &(*pp)->next)
+    {
+        struct packet *p = *pp;
+
+        if ((p->seq_end != c->ack) && (p->seq_end - c->ack < 0x40000000U)) // p->seq_end > c->ack
+            break;
+
+        uint32_t next_seq_end = p->seq_end;
+
+        size_t data_size = p->size - (p->packet->hdrlen >> 4) * 4;
+        if (data_size)
+        {
+            size_t remaining = data_size - p->read_offset - (last_seq_end - ntohl(p->packet->seq));
+            size_t copy_sz = (remaining > size) ? size : remaining;
+
+            if (copy_sz)
+            {
+                memcpy(out, (char *)p->packet + (p->packet->hdrlen >> 4) * 4, copy_sz);
+                out += copy_sz;
+                p->read_offset += copy_sz;
+                size -= copy_sz;
+            }
+
+            if (data_size == p->read_offset + last_seq_end - ntohl(p->packet->seq))
+            {
+                *pp = p->next;
+
+                free(p->packet);
+                free(p);
+
+                if (*pp == NULL)
+                    break;
+            }
+        }
+
+        last_seq_end = next_seq_end;
+    }
+
+    rwl_unlock_w(&c->inqueue_lock);
+
+
+    return orig_sz - size;
+}
+
 
 big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int flags)
 {
-    struct tcpcon *con = (struct tcpcon *)(uintptr_t)id;
-    size_t reced = 0;
+    struct tcp_connection *c = (struct tcp_connection *)id;
 
-    adapt_connection_state(con, 0);
-
-    struct tcppkt *pkt = (struct tcppkt *)con->contiguous;
-
-    if ((pkt == NULL) && !(flags & O_NONBLOCK) && size)
+    if (flags & O_NONBLOCK)
+        return tcp_receive(c, data, size);
+    else
     {
-        while (con->contiguous == NULL)
-            yield();
-        pkt = (struct tcppkt *)con->contiguous;
-    }
-
-    while (pkt != NULL)
-    {
-        int complete = 1;
-        size_t this_len = pkt->size - pkt->position;
-
-        if (this_len > size)
+        big_size_t recvd = 0;
+        do
         {
-            complete = 0;
-            this_len = size;
-        }
+            recvd += tcp_receive(c, data, size);
 
-        memcpy(data, (const void *)((uintptr_t)pkt->data + pkt->position), this_len);
-        reced += this_len;
-        size -= this_len;
-
-        if (!complete)
-        {
-            pkt->position += this_len;
-            break;
-        }
-        else
-        {
-            adapt_connection_state(con, 1);
-            struct tcppkt *next = pkt->next;
-            con->contiguous = next;
-            free(pkt);
-
-            data = (void *)((uintptr_t)data + this_len);
-        }
-
-        pkt = (struct tcppkt *)con->contiguous;
-
-        if ((pkt == NULL) && !(flags & O_NONBLOCK) && size)
-        {
-            while (con->contiguous == NULL)
+            if ((recvd < size) && ((c->status == STATUS_OPEN) || (c->status == STATUS_FIN_SENT)))
                 yield();
-            pkt = (struct tcppkt *)con->contiguous;
         }
+        while ((recvd < size) && ((c->status == STATUS_OPEN) || (c->status == STATUS_FIN_SENT)));
+
+        return recvd;
+    }
+}
+
+
+bool service_pipe_implements(uintptr_t id, int interface)
+{
+    (void)id;
+
+    return ((interface == I_TCP) || (interface == I_SIGNAL));
+}
+
+
+uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
+{
+    struct tcp_connection *c = (struct tcp_connection *)id;
+
+    switch (flag)
+    {
+        case F_PRESSURE:
+        {
+            size_t press = 0;
+
+            rwl_lock_r(&c->inqueue_lock);
+
+            uint32_t last_seq_end = (c->inqueue != NULL) ? ntohl(c->inqueue->packet->seq) : 0;
+
+            for (struct packet *p = c->inqueue; p != NULL; p = p->next)
+            {
+                if ((p->seq_end != c->ack) && (p->seq_end - c->ack < 0x40000000U)) // p->seq_end > c->ack
+                    break;
+
+                if (p->size > (p->packet->hdrlen >> 4) * 4)
+                    press += p->seq_end - last_seq_end;
+
+                last_seq_end = p->seq_end;
+            }
+
+            rwl_unlock_r(&c->inqueue_lock);
+
+            return press;
+        }
+
+        case F_READABLE:
+            return service_pipe_get_flag(id, F_PRESSURE) != 0;
+
+        case F_WRITABLE:
+            return (c->status == STATUS_OPEN) || (c->status == STATUS_FIN_RCVD);
+
+        case F_IPC_SIGNAL:
+            return c->signal;
+
+        case F_DEST_IP:
+        case F_SRC_IP:
+            return c->dest_ip;
+
+        case F_DEST_PORT:
+            return c->dest_port;
+
+        case F_SRC_PORT:
+            // FIXME: Locking
+            return (c->inqueue != NULL) ? ntohs(c->inqueue->packet->src_port) : c->dest_port;
+
+        case F_MY_PORT:
+            return c->port;
+
+        case F_CONNECTION_STATUS:
+            if (c->status == STATUS_CLOSED)
+                return 0;
+            else if (c->status == STATUS_OPEN)
+                return 1;
+            else if (c->status == STATUS_LISTEN)
+                return 2;
+            else
+                return 3;
     }
 
-    return reced;
+    return 0;
 }
+
+
+int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
+{
+    struct tcp_connection *c = (struct tcp_connection *)id;
+
+    switch (flag)
+    {
+        case F_FLUSH:
+            return 0;
+
+        case F_IPC_SIGNAL:
+            c->owner  = getpgid(getppid());
+            c->signal = (bool)value;
+            return 0;
+
+        case F_DEST_IP:
+            tcp_disconnect(c);
+            c->dest_ip = value & 0xffffffffu;
+            if (c->dest_ip && c->dest_port)
+                tcp_connect(c);
+            return 0;
+
+        case F_DEST_PORT:
+            tcp_disconnect(c);
+            c->dest_port = value & 0xffff;
+            if (c->dest_ip && c->dest_port)
+                tcp_connect(c);
+            return 0;
+
+        case F_MY_PORT:
+            tcp_disconnect(c);
+            c->port = value & 0xffff;
+            if (c->dest_ip && c->dest_port)
+                tcp_connect(c);
+            return 0;
+
+        case F_CONNECTION_STATUS:
+            if (!value)
+                tcp_disconnect(c);
+            else if (value == 2)
+            {
+                tcp_disconnect(c);
+                c->status = STATUS_LISTEN;
+            }
+            return 0;
+    }
+
+    return -EINVAL;
+}
+
 
 static uintmax_t incoming(void)
 {
+    static lock_t incoming_lock = LOCK_INITIALIZER;
+
     struct
     {
         pid_t pid;
@@ -676,7 +783,7 @@ static uintmax_t incoming(void)
     assert(fd >= 0);
 
 
-    lock(&ip_lock);
+    lock(&incoming_lock);
 
 
     while (pipe_get_flag(fd, F_READABLE))
@@ -687,101 +794,108 @@ static uintmax_t incoming(void)
             continue;
         }
 
-        size_t press = pipe_get_flag(fd, F_PRESSURE);
 
-        struct tcppkt *pkt = calloc(1, sizeof(*pkt) + press);
+        uint32_t src_ip = pipe_get_flag(fd, F_SRC_IP);
+        uint32_t dest_ip = pipe_get_flag(fd, F_DEST_IP);
 
-        pkt->fhdr.psiphdr = (struct tcppsiphdr){
-            .src_ip = htonl(pipe_get_flag(fd, F_SRC_IP)),
-            .dst_ip = htonl(pipe_get_flag(fd, F_DEST_IP)),
-            .prot_id = 0x06,
-            .tcp_length = htons(press)
+
+        size_t total_length = pipe_get_flag(fd, F_PRESSURE);
+        struct tcp_header *tcph = malloc(total_length);
+
+        stream_recv(fd, tcph, total_length, O_BLOCKING);
+
+
+        struct pseudo_ip_header psip = {
+            .src_ip = htonl(src_ip),
+            .dest_ip = htonl(dest_ip),
+            .zero = 0x00,
+            .proto_type = 0x06,
+            .tcp_length = htons(total_length)
         };
 
-        stream_recv(fd, &pkt->fhdr.tcphdr, press, O_BLOCKING);
 
-        if (calculate_network_checksum(&pkt->fhdr, sizeof(pkt->fhdr.psiphdr) + press))
+        if (calculate_network_checksum(&psip, tcph, total_length))
         {
             fprintf(stderr, "(tcp) incoming checksum error, discarding packet\n");
-            free(pkt);
+            free(tcph);
             continue;
         }
 
-        pkt->data = (uint32_t *)&pkt->fhdr.tcphdr + (pkt->fhdr.tcphdr.hdrlen >> 4);
-        pkt->size = press - sizeof(uint32_t) * (pkt->fhdr.tcphdr.hdrlen >> 4);
-        if (!pkt->size && ((pkt->fhdr.tcphdr.flags & TCP_SYN) || (pkt->fhdr.tcphdr.flags & TCP_FIN) || (pkt->fhdr.tcphdr.flags & TCP_RST)))
-        {
-            pkt->size = 1;
-            pkt->pkt_type |= TCP_PKT_INV_DATA;
-        }
-        pkt->pkt_type |= (pkt->fhdr.tcphdr.flags & TCP_SYN) ? TCP_PKT_SYN : 0;
-        pkt->pkt_type |= (pkt->fhdr.tcphdr.flags & TCP_FIN) ? TCP_PKT_FIN : 0;
-        pkt->pkt_type |= (pkt->fhdr.tcphdr.flags & TCP_RST) ? TCP_PKT_RST : 0;
 
-        pkt->seq = ntohl(pkt->fhdr.tcphdr.seq);
+        uint32_t seq = ntohl(tcph->seq);
 
-        int used = 0;
+        size_t data_sz = total_length - (tcph->hdrlen >> 4) * 4;
+        size_t seq_size = (!data_sz && (tcph->flags & (TCP_SYN | TCP_FIN))) ? 1 : data_sz;
+
 
         rwl_lock_r(&connection_lock);
 
-        for (struct tcpcon *tcpc = connections; tcpc != NULL; tcpc = tcpc->next)
+        for (struct tcp_connection *c = connections; c != NULL; c = c->next)
         {
-            if (ntohs(pkt->fhdr.tcphdr.dst_port) != tcpc->sport)
+            if (ntohs(tcph->dest_port) != c->port)
                 continue;
 
-            if (pkt->seq < tcpc->ack)
-                break;
+            c->window = ntohs(tcph->window);
 
-            lock(&tcpc->lock);
 
-            if (pkt->pkt_type & TCP_PKT_FIN)
-                tcpc->got_fin_somewhere = 1;
+            if ((tcph->flags & TCP_SYN) && ((c->status == STATUS_LISTEN) || (c->status == STATUS_SYN_SENT)))
+                c->ack = ntohl(tcph->seq);
 
-            struct tcppkt **last = (struct tcppkt **)&tcpc->queue_start;
-            while ((*last != NULL) && ((*last)->seq < pkt->seq)) // FIXME: Wrap-around
-                last = &(*last)->next;
+            if (tcph->flags & TCP_ACK)
+                tcp_acked(c, ntohl(tcph->ack));
 
-            if ((*last != NULL) && ((*last)->seq == pkt->seq))
+
+            if (!data_sz && !(tcph->flags & (TCP_SYN | TCP_FIN | TCP_RST)))
+                continue;
+
+
+            struct packet *p = malloc(sizeof(*p));
+
+            p->seq_end = ntohl(tcph->seq) + seq_size;
+            p->size = total_length;
+            p->read_offset = 0;
+
+            p->packet = malloc(total_length);
+            memcpy(p->packet, tcph, total_length);
+
+
+            rwl_lock_w(&c->inqueue_lock);
+
+            struct packet **iq;
+            for (iq = &c->inqueue; (*iq != NULL) && (ntohl((*iq)->packet->seq) <= seq); iq = &(*iq)->next);
+
+            p->next = *iq;
+            *iq = p;
+
+            rwl_unlock_w(&c->inqueue_lock);
+
+
+            handle_inqueue(c);
+
+
+            if (c->signal)
             {
-                unlock(&tcpc->lock);
-                break;
-            }
-
-            pkt->next = *last;
-            *last = pkt;
-
-            if (pkt->fhdr.tcphdr.flags & TCP_ACK)
-            {
-                uint32_t ack_num = ntohl(pkt->fhdr.tcphdr.ack);
-
-                struct tcppkt **outpkt = (struct tcppkt **)&tcpc->out_queue;
-                while (*outpkt != NULL)
+                struct
                 {
-                    if ((*outpkt)->seq < ack_num) // FIXME
-                    {
-                        struct tcppkt *this = *outpkt;
-                        *outpkt = this->next;
-                        free(this);
-                    }
-                }
+                    pid_t pid;
+                    uintptr_t id;
+                } msg = {
+                    .pid = getpgid(0),
+                    .id = (uintptr_t)c
+                };
 
-                unlock(&tcpc->lock);
-                do_tcp_queue(tcpc);
-                lock(&tcpc->lock);
+                ipc_message(c->owner, IPC_SIGNAL, &msg, sizeof(msg));
             }
-
-            unlock(&tcpc->lock);
-
-            used = 1;
-
-            do_input_queue(tcpc);
         }
 
         rwl_unlock_r(&connection_lock);
 
-        if (!used)
-            free(pkt);
+
+        free(tcph);
     }
+
+
+    unlock(&incoming_lock);
 
 
     return 0;
