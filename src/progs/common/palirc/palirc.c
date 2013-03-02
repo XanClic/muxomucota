@@ -26,9 +26,6 @@ static char *my_fgets(char *s, int size, int stream)
     {
         stream_recv(stream, &cc, 1, O_BLOCKING);
 
-        if (!pipe_get_flag(stream, F_READABLE))
-            break;
-
         if ((cc & 0xC0) == 0xC0)
         {
             int expected = 0;
