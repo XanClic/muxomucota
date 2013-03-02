@@ -383,12 +383,10 @@ void service_destroy_pipe(uintptr_t id, int flags)
         free(f->data);
     else if (f->type == TYPE_CARD)
     {
-        rwl_lock_r(&f->card->listener_lock);
+        rwl_lock_w(&f->card->listener_lock);
 
         struct vfs_file **fp;
         for (fp = &f->card->listeners; (*fp != NULL) && (*fp != f); fp = &(*fp)->next);
-
-        rwl_lock_w(&f->card->listener_lock);
 
         if (*fp != NULL)
             *fp = f->next;
