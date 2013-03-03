@@ -109,7 +109,7 @@ Trollop::die('Unsupported target') unless ['clean', 'all'].include?(target)
 
 
 
-exit 1 unless system('mkdir -p build/root/{bin,boot,etc}') if target == 'all'
+exit 1 unless system('mkdir -p build/root/{bin,boot,dev,etc}') if target == 'all'
 
 image_root = "#{Dir.pwd}/build/root"
 
