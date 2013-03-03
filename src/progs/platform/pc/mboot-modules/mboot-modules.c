@@ -41,7 +41,10 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
     for (mod = first_module; (mod != NULL) && strcmp(mod->name, relpath); mod = mod->next);
 
     if (mod == NULL)
+    {
+        errno = ENOENT;
         return 0;
+    }
 
     struct module_handle *hmod = malloc(sizeof(*hmod));
     hmod->mod = mod;
@@ -107,6 +110,7 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
     }
 
 
+    errno = EINVAL;
     return 0;
 }
 
@@ -126,6 +130,7 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
     }
 
 
+    errno = EINVAL;
     return -EINVAL;
 }
 

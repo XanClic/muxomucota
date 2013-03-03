@@ -133,7 +133,10 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
             struct interface *i = locate_interface(relpath + 1);
 
             if (i == NULL)
+            {
+                errno = EHOSTUNREACH;
                 return 0;
+            }
 
             f->ifc = i;
             f->ifc_fixed = true;
@@ -293,7 +296,10 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
     struct vfs_file *f = (struct vfs_file *)id;
 
     if (f->ifc == NULL)
+    {
+        errno = ENOTCONN;
         return 0;
+    }
 
 
     struct ip_header *iph = malloc(sizeof(*iph) + size);
@@ -325,9 +331,6 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
 
     free(iph);
 
-
-    if (flags & O_NONBLOCK)
-        return size;
 
     return (sent > sizeof(*iph)) ? (sent - sizeof(*iph)) : 0;
 }
@@ -367,6 +370,7 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
             return (f->inqueue != NULL) ? f->inqueue->protocol : 0;
     }
 
+    errno = EINVAL;
     return 0;
 }
 
@@ -407,7 +411,10 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
 
         case F_MY_IP:
             if (f->ifc == NULL)
+            {
+                errno = ENOTCONN;
                 return -ENOTCONN;
+            }
 
             f->ifc->ip = value;
             return 0;
@@ -421,6 +428,7 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
             return 0;
     }
 
+    errno = EINVAL;
     return -EINVAL;
 }
 

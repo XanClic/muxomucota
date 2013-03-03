@@ -173,7 +173,10 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
     if (!*relpath)
     {
         if (flags & O_WRONLY)
+        {
+            errno = EACCES;
             return 0;
+        }
 
         struct vfs_file *f = malloc(sizeof(*f));
         f->type = TYPE_DIR;
@@ -203,7 +206,10 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
     else if (!strcmp(relpath, "/register"))
     {
         if (flags & O_RDONLY)
+        {
+            errno = EACCES;
             return 0;
+        }
 
         struct network_card *c = malloc(sizeof(*c));
         c->nr      = get_number();
@@ -225,7 +231,10 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
     else if (!strcmp(relpath, "/receive"))
     {
         if (flags & O_RDONLY)
+        {
+            errno = EACCES;
             return 0;
+        }
 
         struct vfs_file *f = malloc(sizeof(*f));
         f->type = TYPE_RECEIVE;
@@ -244,7 +253,10 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
         rwl_unlock_r(&card_lock);
 
         if (c == NULL)
+        {
+            errno = ENODEV;
             return 0;
+        }
 
         struct vfs_file *f = malloc(sizeof(*f));
         f->type = TYPE_CARD;
@@ -282,12 +294,18 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
         rwl_unlock_r(&card_lock);
 
         if (c == NULL)
+        {
+            errno = ENODEV;
             return 0;
+        }
 
         char *cptr = strtok(NULL, "/");
 
         if (strtok(NULL, "/") != NULL)
+        {
+            errno = ENOENT;
             return 0;
+        }
 
         uint8_t dest[6];
 
@@ -295,7 +313,10 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
         {
             int val = strtol(cptr, &cptr, 16);
             if ((val < 0x00) || (val > 0xff) || ((*cptr != ':') && (i < 5)) || (*cptr && (i == 5)))
+            {
+                errno = ENOENT;
                 return 0;
+            }
 
             cptr++;
 
@@ -324,6 +345,7 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
         return (uintptr_t)f;
     }
 
+    errno = ENODEV;
     return 0;
 }
 
@@ -421,7 +443,10 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
     {
         case TYPE_REGISTER:
             if (size != sizeof(uintptr_t) + sizeof(uint8_t) * 6)
+            {
+                errno = EINVAL;
                 return 0;
+            }
 
             f->card->id = *(uintptr_t *)data;
 
@@ -438,17 +463,24 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
 
         case TYPE_RECEIVE:
             if (f->card == NULL)
+            {
+                errno = ENXIO;
                 return 0;
+            }
 
             return eth_receive(f->card, data, size) ? size : 0;
 
         case TYPE_DIR:
+            errno = EACCES;
             return 0;
 
         case TYPE_CARD:
         {
             if (size > 1500)
+            {
+                errno = EFBIG;
                 return 0;
+            }
 
             size_t frame_len = (size < 46) ? 46 : size;
 
@@ -478,6 +510,7 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
         }
     }
 
+    errno = EINVAL;
     return 0;
 }
 
@@ -490,6 +523,7 @@ big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int fl
     {
         case TYPE_REGISTER:
         case TYPE_RECEIVE:
+            errno = EACCES;
             return 0;
 
         case TYPE_DIR:
@@ -537,6 +571,7 @@ big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int fl
         }
     }
 
+    errno = EINVAL;
     return 0;
 }
 
@@ -570,7 +605,10 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
     {
         case F_DEVICE_ID:
             if (f->type != TYPE_RECEIVE)
+            {
+                errno = EINVAL;
                 return -EINVAL;
+            }
 
             rwl_lock_r(&card_lock);
 
@@ -580,7 +618,10 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
             rwl_unlock_r(&card_lock);
 
             if (c == NULL)
+            {
+                errno = ENXIO;
                 return -ENXIO;
+            }
 
             f->card = c;
 
@@ -605,7 +646,10 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
 
         case F_POSITION:
             if (f->type != TYPE_DIR)
+            {
+                errno = EINVAL;
                 return -EINVAL;
+            }
 
             f->pos = (value > f->sz) ? f->sz : value;
 
@@ -613,7 +657,10 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
 
         case F_DEST_MAC:
             if (f->type != TYPE_CARD)
+            {
+                errno = EINVAL;
                 return -EINVAL;
+            }
 
             for (int i = 0; i < 6; i++, value >>= 8)
                 f->dest[i] = value & 0xff;
@@ -622,7 +669,10 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
 
         case F_ETH_PACKET_TYPE:
             if (f->type != TYPE_CARD)
+            {
+                errno = EINVAL;
                 return -EINVAL;
+            }
 
             f->packet_type = value;
 
@@ -630,7 +680,10 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
 
         case F_IPC_SIGNAL:
             if (f->type != TYPE_CARD)
+            {
+                errno = EINVAL;
                 return -EINVAL;
+            }
 
             f->owner  = getpgid(getppid());
             f->signal = (bool)value;
@@ -638,6 +691,7 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
             return 0;
     }
 
+    errno = EINVAL;
     return -EINVAL;
 }
 
@@ -678,7 +732,10 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
             else if (f->type == TYPE_CARD)
                 return S_IFODEV | 0666;
             else
+            {
+                errno = EINVAL;
                 return 0;
+            }
 
         case F_NLINK:
         case F_BLOCK_SIZE:
@@ -695,7 +752,10 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
         case F_DEST_MAC:
         {
             if (f->type != TYPE_CARD)
+            {
+                errno = EINVAL;
                 return 0;
+            }
 
             uint64_t mac = 0;
 
@@ -707,7 +767,13 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
 
         case F_SRC_MAC:
         {
-            if ((f->type != TYPE_CARD) || (f->inqueue == NULL))
+            if (f->type != TYPE_CARD)
+            {
+                errno = EINVAL;
+                return 0;
+            }
+
+            if (f->inqueue == NULL)
                 return 0;
 
             uint64_t mac = 0;
@@ -721,7 +787,10 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
         case F_MY_MAC:
         {
             if (f->type != TYPE_CARD)
+            {
+                errno = EINVAL;
                 return 0;
+            }
 
             uint64_t mac = 0;
 
@@ -738,6 +807,7 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
             return (f->type == TYPE_CARD) ? f->signal : false;
     }
 
+    errno = EINVAL;
     return 0;
 }
 

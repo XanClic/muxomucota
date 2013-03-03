@@ -171,9 +171,6 @@ static int hexnumlen(int num)
 
 uintptr_t service_create_pipe(const char *relpath, int flags)
 {
-    if (flags & O_CREAT)
-        return 0;
-
     char duped[strlen(relpath) + 1];
     strcpy(duped, relpath);
 
@@ -182,7 +179,10 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
     if ((busname == NULL) || !*busname)
     {
         if (flags & O_WRONLY)
+        {
+            errno = EACCES;
             return 0;
+        }
 
         struct vfs_file *f = malloc(sizeof(*f));
         f->type = TYPE_DIR;
@@ -210,20 +210,29 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
     int busn = strtol(busname, &endptr, 16);
 
     if (*endptr)
+    {
+        errno = ENOENT;
         return 0;
+    }
 
     struct bus *bus;
     for (bus = first_bus; (bus != NULL) && (bus->bus != busn); bus = bus->sibling);
 
     if (bus == NULL)
+    {
+        errno = ENOENT;
         return 0;
+    }
 
     char *devname = strtok(NULL, "/");
 
     if (devname == NULL)
     {
         if (flags & O_WRONLY)
+        {
+            errno = EACCES;
             return 0;
+        }
 
         struct vfs_file *f = malloc(sizeof(*f));
         f->type = TYPE_DIR;
@@ -250,20 +259,29 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
     int devn = strtol(devname, &endptr, 16);
 
     if (*endptr)
+    {
+        errno = ENOENT;
         return 0;
+    }
 
     struct device *dev;
     for (dev = bus->devices; (dev != NULL) && (dev->device != devn); dev = dev->sibling);
 
     if (dev == NULL)
+    {
+        errno = ENOENT;
         return 0;
+    }
 
     char *fncname = strtok(NULL, "/");
 
     if (fncname == NULL)
     {
         if (flags & O_WRONLY)
+        {
+            errno = EACCES;
             return 0;
+        }
 
         struct vfs_file *f = malloc(sizeof(*f));
         f->type = TYPE_DIR;
@@ -290,16 +308,25 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
     int fncn = strtol(fncname, &endptr, 16);
 
     if (*endptr)
+    {
+        errno = ENOENT;
         return 0;
+    }
 
     if (strtok(NULL, "/") != NULL)
+    {
+        errno = ENOENT;
         return 0;
+    }
 
     struct function *fnc;
     for (fnc = dev->functions; (fnc != NULL) && (fnc->function != fncn); fnc = fnc->sibling);
 
     if (fnc == NULL)
+    {
+        errno = ENOENT;
         return 0;
+    }
 
     struct vfs_file *f = malloc(sizeof(*f));
     f->type = TYPE_FUNCTION;
@@ -347,7 +374,10 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
     struct vfs_file *f = (struct vfs_file *)id;
 
     if (f->type == TYPE_DIR)
+    {
+        errno = EACCES;
         return 0;
+    }
 
     size_t copy_sz = (f->size - (size_t)f->ofs > size) ? size : (f->size - (size_t)f->ofs);
 
@@ -424,6 +454,7 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
             return 0;
     }
 
+    errno = EINVAL;
     return 0;
 }
 
@@ -441,6 +472,7 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
             return 0;
     }
 
+    errno = EINVAL;
     return -EINVAL;
 }
 

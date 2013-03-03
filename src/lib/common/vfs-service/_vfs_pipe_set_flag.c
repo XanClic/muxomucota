@@ -30,5 +30,5 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
 
     errno = ENOTSUP;
 
-    return 0;
+    return -ENOTSUP;
 }

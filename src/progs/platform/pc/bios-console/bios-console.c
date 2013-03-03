@@ -470,6 +470,7 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
             return 0;
     }
 
+    errno = EINVAL;
     return -EINVAL;
 }
 
@@ -480,12 +481,15 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
 
     switch (flag)
     {
+        case F_PRESSURE:
+            return 0;
         case F_READABLE:
             return false;
         case F_WRITABLE:
             return true;
     }
 
+    errno = EINVAL;
     return 0;
 }
 

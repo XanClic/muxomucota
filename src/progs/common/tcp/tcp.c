@@ -379,7 +379,10 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
         int64_t ip = get_ip(relpath + 1, &relpath);
 
         if (ip < 0)
+        {
+            errno = ENOENT;
             return 0;
+        }
 
         dest_ip = ip;
 
@@ -388,7 +391,10 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
         relpath = end;
 
         if ((val < 0x0000) || (val > 0xffff) || *relpath)
+        {
+            errno = ENOENT;
             return 0;
+        }
 
         dest_port = val;
     }
@@ -431,6 +437,7 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
         if (f->status != STATUS_OPEN)
         {
             service_destroy_pipe((uintptr_t)f, 0);
+            errno = EHOSTDOWN;
             return 0;
         }
     }
@@ -548,7 +555,10 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
     struct tcp_connection *c = (struct tcp_connection *)id;
 
     if ((c->status != STATUS_OPEN) && (c->status != STATUS_FIN_RCVD))
+    {
+        errno = ENOTCONN;
         return 0;
+    }
 
     for (size_t i = 0; i < size; i += MSS)
     {
@@ -633,6 +643,9 @@ big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int fl
         }
         while ((recvd < size) && ((c->status == STATUS_OPEN) || (c->status == STATUS_FIN_SENT)));
 
+        if ((c->status != STATUS_OPEN) && (c->status != STATUS_FIN_SENT))
+            errno = ENOTCONN;
+
         return recvd;
     }
 }
@@ -710,6 +723,7 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
                 return 3;
     }
 
+    errno = EINVAL;
     return 0;
 }
 
@@ -760,6 +774,7 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
             return 0;
     }
 
+    errno = EINVAL;
     return -EINVAL;
 }
 
