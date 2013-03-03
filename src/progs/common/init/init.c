@@ -97,18 +97,11 @@ int main(int argc, char *argv[])
 
     destroy_pipe(fd, 0);
 
-
-    bool echo = true;
+    int status_line_length = 0;
 
 
     STRTOK_FOREACH(commands, "\n", line)
     {
-        if (echo)
-        {
-            printf("$ %-71s", line);
-            fflush(stdout);
-        }
-
         int c_argc;
         const char *l = line;
         for (c_argc = 1; *l; l++)
@@ -128,20 +121,37 @@ int main(int argc, char *argv[])
             destroy_pipe(STDIN_FILENO, 0);
             infd = create_pipe(c_argv[1], O_RDONLY);
             assert(infd == STDIN_FILENO);
-            if (echo)
-                printf("\033[1m[\033[32mDONE\033[0;1m]\033[0m\n");
         }
         else if (!strcmp(c_argv[0], "@echo"))
         {
             if (!strcmp(c_argv[1], "off"))
             {
-                echo = false;
-                printf("\033[1m[\033[32mDONE\033[0;1m]\033[0m\n");
+                destroy_pipe(STDOUT_FILENO, 0);
+
+                outfd = create_pipe("/dev/null", O_WRONLY);
+                assert(outfd == STDOUT_FILENO);
             }
             else if (!strcmp(c_argv[1], "on"))
-                echo = true;
-            else if (echo)
-                printf("\033[1m[\033[31mINVA\033[0;1m]\033[0m\n");
+            {
+                destroy_pipe(STDOUT_FILENO, 0);
+
+                outfd = create_pipe(tty, O_WRONLY);
+                assert(outfd == STDOUT_FILENO);
+            }
+        }
+        else if (!strcmp(c_argv[0], "begin"))
+        {
+            for (int j = 1; j < c_argc; j++)
+            {
+                printf("%s ", c_argv[j]);
+                status_line_length += strlen(c_argv[j]) + 1;
+            }
+            fflush(stdout);
+        }
+        else if (!strcmp(c_argv[0], "done"))
+        {
+            printf("%*c\033[1m[\033[32mDONE\033[0;1m]\033[0m\n", 73 - status_line_length, ' ');
+            status_line_length = 0;
         }
         else
         {
@@ -155,21 +165,6 @@ int main(int argc, char *argv[])
 
             int status;
             waitpid(child, &status, 0);
-
-            if (echo)
-            {
-                printf("\033[1m[");
-
-                if (!WIFEXITED(status))
-                    printf("\033[31mCRSH");
-                else if (WEXITSTATUS(status))
-                    printf("\033[31mE%03i", WEXITSTATUS(status));
-                else
-                    printf("\033[32mDONE");
-            }
-
-            if (echo)
-                printf("\033[0;1m]\033[0m\n");
         }
     }
 
