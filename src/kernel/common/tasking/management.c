@@ -16,13 +16,10 @@
 #include <sys/wait.h>
 
 
-// FIXME: Die Ringlisten sind doof.
-
-
-lock_t runqueue_lock = LOCK_INITIALIZER, daemons_lock = LOCK_INITIALIZER, zombies_lock = LOCK_INITIALIZER, dead_lock = LOCK_INITIALIZER; // haha dead_lock
-
+extern lock_t schedule_lock;
 
 process_t *current_process, *idle_process, *runqueue, *daemons, *zombies, *dead;
+
 
 static inline pid_t get_new_pid(void)
 {
@@ -34,7 +31,7 @@ static inline pid_t get_new_pid(void)
 
 process_t *create_empty_process(const char *name)
 {
-    process_t *p = kmalloc(sizeof(*p));
+    process_t *p = kcalloc(sizeof(*p));
 
     p->status = PROCESS_COMA;
 
@@ -42,18 +39,9 @@ process_t *create_empty_process(const char *name)
     p->ppid = (current_process == NULL) ? 0 : current_process->pid;
 
     strncpy(p->name, name, sizeof(p->name) - 1);
-    p->name[sizeof(p->name) - 1] = 0;
 
-    p->tls = NULL;
-
-    p->popup_stack_mask = NULL;
     p->popup_stack_index = -1;
-
-    p->handles_irqs = false;
     p->currently_handled_irq = -1;
-    p->irq_stack_top = NULL;
-
-    p->schedule_tick = 0;
 
 
     initialize_orphan_process_arch(p);
@@ -212,28 +200,16 @@ void process_set_args(process_t *proc, struct cpu_state *state, int argc, const 
 
 void make_idle_process(void)
 {
-    idle_process = kmalloc(sizeof(*idle_process));
+    idle_process = kcalloc(sizeof(*idle_process));
 
     idle_process->status = PROCESS_ACTIVE;
 
     idle_process->pgid = idle_process->pid = get_new_pid();
-    idle_process->ppid = 0;
 
     strcpy(idle_process->name, "[idle]");
 
-    idle_process->tls = NULL;
-
-    idle_process->popup_stack_mask = NULL;
     idle_process->popup_stack_index = -1;
-
-    idle_process->rq_next = idle_process;
-    idle_process->next    = idle_process;
-
-    idle_process->handles_irqs = false;
     idle_process->currently_handled_irq = -1;
-    idle_process->irq_stack_top = NULL;
-
-    idle_process->schedule_tick = 0;
 
 
     initialize_orphan_process_arch(idle_process);
@@ -248,26 +224,16 @@ void make_idle_process(void)
 
 process_t *create_kernel_thread(const char *name, void (*function)(void))
 {
-    process_t *p = kmalloc(sizeof(*p));
+    process_t *p = kcalloc(sizeof(*p));
 
     p->status = PROCESS_COMA;
 
     p->pgid = p->pid = get_new_pid();
-    p->ppid = 0;
-
-    p->tls = NULL;
 
     strncpy(p->name, name, sizeof(p->name) - 1);
-    p->name[sizeof(p->name) - 1] = 0;
 
-    p->popup_stack_mask = NULL;
     p->popup_stack_index = -1;
-
-    p->handles_irqs = false;
     p->currently_handled_irq = -1;
-    p->irq_stack_top = NULL;
-
-    p->schedule_tick = 0;
 
 
     initialize_orphan_process_arch(p);
@@ -288,17 +254,14 @@ process_t *create_kernel_thread(const char *name, void (*function)(void))
 
 process_t *create_user_thread(void (*function)(void *), void *stack_top, void *arg)
 {
-    process_t *p = kmalloc(sizeof(*p));
+    process_t *p = kcalloc(sizeof(*p));
 
     p->status = PROCESS_COMA;
 
     p->pid = get_new_pid();
     p->ppid = p->pgid = current_process->pgid;
 
-    p->tls = NULL;
-
     strncpy(p->name, current_process->name, sizeof(p->name) - 1);
-    p->name[sizeof(p->name) - 1] = 0;
 
     p->popup_stack_mask = current_process->popup_stack_mask;
     p->popup_stack_index = -1;
@@ -306,11 +269,7 @@ process_t *create_user_thread(void (*function)(void *), void *stack_top, void *a
     if (p->popup_stack_mask != NULL)
         p->popup_stack_mask->refcount++;
 
-    p->handles_irqs = false;
     p->currently_handled_irq = -1;
-    p->irq_stack_top = NULL;
-
-    p->schedule_tick = 0;
 
 
     initialize_child_process_arch(p, current_process);
@@ -349,16 +308,9 @@ void rq_register_process(process_t *proc);
 
 void rq_register_process(process_t *proc)
 {
-    if (runqueue != NULL)
-    {
-        proc->rq_next = runqueue->rq_next;
-        runqueue->rq_next = proc;
-    }
-    else
-    {
-        proc->rq_next = proc;
-        runqueue = proc;
-    }
+    do
+        proc->rq_next = runqueue;
+    while (!__sync_bool_compare_and_swap(&runqueue, proc->rq_next, proc));
 }
 
 
@@ -369,26 +321,16 @@ void q_register_process(process_t **list, process_t *proc)
 {
     if (list == &runqueue)
         rq_register_process(proc);
-    else if (*list != NULL)
-    {
-        proc->next = (*list)->next;
-        (*list)->next = proc;
-    }
     else
-    {
-        proc->next = proc;
-        *list = proc;
-    }
+        do
+            proc->next = *list;
+        while (!__sync_bool_compare_and_swap(list, proc->next, proc));
 }
 
 
 void register_process(process_t *proc)
 {
-    lock(&runqueue_lock);
-
     q_register_process(&runqueue, proc);
-
-    unlock(&runqueue_lock);
 }
 
 
@@ -397,23 +339,11 @@ void rq_unregister_process(process_t *proc);
 
 void rq_unregister_process(process_t *proc)
 {
-    process_t **lp = &runqueue;
+    process_t **lp;
 
-    if (proc == proc->rq_next)
-    {
-        runqueue = NULL;
-        return;
-    }
-
-    lp = &(*lp)->rq_next;
-
-    while (*lp != proc)
-        lp = &(*lp)->rq_next;
-
-    if (runqueue == proc)
-        runqueue = proc->rq_next;
-
-    *lp = proc->rq_next;
+    do
+        for (lp = &runqueue; (*lp != NULL) && (*lp != proc); lp = (process_t **)&(*lp)->rq_next);
+    while (!__sync_bool_compare_and_swap(lp, proc, proc->rq_next) && (*lp != NULL));
 }
 
 
@@ -429,76 +359,30 @@ void q_unregister_process(process_t **list, process_t *proc)
     }
 
 
-    process_t **lp = list;
+    process_t **lp;
 
-    // FIXME: Prozess nicht in der Liste
-
-    if (proc == proc->next)
-    {
-        *list = NULL;
-        return;
-    }
-
-    // Weil Ring
-    lp = &(*lp)->next;
-
-    while (*lp != proc)
-        lp = &(*lp)->next;
-
-    if (*list == proc)
-        *list = proc->next;
-
-    *lp = proc->next;
+    do
+        for (lp = list; (*lp != NULL) && (*lp != proc); lp = (process_t **)&(*lp)->next);
+    while (!__sync_bool_compare_and_swap(lp, proc, proc->next) && (*lp != NULL));
 }
 
 
 pid_t find_daemon_by_name(const char *name)
 {
-    lock(&daemons_lock);
+    process_t *p;
+    for (p = daemons; (p != NULL) && strncmp(p->name, name, sizeof(p->name)); p = p->next);
 
-    process_t *p = daemons;
-
-    if (p == NULL)
-    {
-        unlock(&daemons_lock);
-        return -1;
-    }
-
-    if (!strncmp(p->name, name, sizeof(p->name)))
-    {
-        unlock(&daemons_lock);
-        return p->pid;
-    }
-
-    do
-        p = p->next;
-    while (strncmp(p->name, name, sizeof(p->name)) && (p != daemons));
-
-    unlock(&daemons_lock);
-
-    return (p != daemons) ? p->pid : -1;
+    return (p != NULL) ? p->pid : -1;
 }
 
 
 // FIXME
 static process_t *find_process_in_runqueue(pid_t pid)
 {
-    process_t *p = runqueue;
+    process_t *p;
+    for (p = runqueue; (p != NULL) && (p->pid != pid); p = p->rq_next);
 
-    if (p == NULL)
-        return NULL;
-
-    if (p->pid == pid)
-        return p;
-
-    do
-        p = p->rq_next;
-    while ((p->pid != pid) && (p != runqueue));
-
-    if (p->pid == pid)
-        return p;
-
-    return NULL;
+    return p;
 }
 
 
@@ -510,41 +394,21 @@ static process_t *find_process_in(process_t **list, pid_t pid)
         return find_process_in_runqueue(pid);
 
 
-    process_t *p = *list;
+    process_t *p;
+    for (p = *list; (p != NULL) && (p->pid != pid); p = p->next);
 
-    if (p == NULL)
-        return NULL;
-
-    if (p->pid == pid)
-        return p;
-
-    do
-        p = p->next;
-    while ((p->pid != pid) && (p != *list));
-
-    if (p->pid == pid)
-        return p;
-
-    return NULL;
+    return p;
 }
 
 
 process_t *find_process(pid_t pid)
 {
-    process_t *p;
-
-    lock(&runqueue_lock);
-    p = find_process_in(&runqueue, pid);
-    unlock(&runqueue_lock);
+    process_t *p = find_process_in(&runqueue, pid);
 
     if (p != NULL)
         return p;
 
-    lock(&daemons_lock);
-    p = find_process_in(&daemons,  pid);
-    unlock(&daemons_lock);
-
-    return p;
+    return find_process_in(&daemons, pid);
 }
 
 
@@ -554,10 +418,8 @@ void set_process_popup_entry(process_t *proc, void (*entry)(void))
 
     if (proc->popup_stack_mask == NULL)
     {
-        proc->popup_stack_mask = kmalloc(sizeof(*proc->popup_stack_mask));
+        proc->popup_stack_mask = kcalloc(sizeof(*proc->popup_stack_mask));
         proc->popup_stack_mask->refcount = 1;
-
-        memset(proc->popup_stack_mask->mask, 0, sizeof(proc->popup_stack_mask->mask));
     }
 }
 
@@ -590,26 +452,25 @@ void destroy_process(process_t *proc, uintmax_t exit_info)
     }
 
 
-    lock(&runqueue_lock);
+    bool is_current = proc == current_process;
+
+
+    if (is_current)
+        lock(&schedule_lock);
 
     q_unregister_process(&runqueue, proc);
-
-    // yay potentieller dead lock (FIXME, btw)
-    lock(&zombies_lock);
-
     q_register_process(&zombies, proc);
-
-    unlock(&zombies_lock);
 
     proc->exit_info = exit_info;
     proc->status = PROCESS_ZOMBIE;
 
-    unlock(&runqueue_lock);
+    if (is_current)
+    {
+        unlock(&schedule_lock);
 
-
-    if (proc == current_process)
         for (;;)
             yield();
+    }
 }
 
 
@@ -636,20 +497,14 @@ void destroy_this_popup_thread(uintmax_t exit_info)
         destroy_process(current_process, exit_info);
 
 
-    lock(&runqueue_lock);
+    lock(&schedule_lock);
 
     q_unregister_process(&runqueue, current_process);
-
-    // yay potentieller dead lock (FIXME, btw)
-    lock(&dead_lock);
-
     q_register_process(&dead, current_process);
-
-    unlock(&dead_lock);
 
     current_process->status = PROCESS_DESTRUCT;
 
-    unlock(&runqueue_lock);
+    unlock(&schedule_lock);
 
 
     for (;;)
@@ -662,22 +517,10 @@ static process_t *find_child_in_runqueue(pid_t pid);
 
 static process_t *find_child_in_runqueue(pid_t pid)
 {
-    process_t *p = runqueue;
+    process_t *p;
+    for (p = runqueue; (p != NULL) && (p->ppid != pid); p = p->rq_next);
 
-    if (p == NULL)
-        return NULL;
-
-    if (p->ppid == pid)
-        return p;
-
-    do
-        p = p->rq_next;
-    while ((p->ppid != pid) && (p != runqueue));
-
-    if (p->ppid == pid)
-        return p;
-
-    return NULL;
+    return p;
 }
 
 
@@ -689,22 +532,10 @@ static process_t *find_child_in(process_t **list, pid_t pid)
         return find_child_in_runqueue(pid);
 
 
-    process_t *p = *list;
+    process_t *p;
+    for (p = *list; (p != NULL) && (p->ppid != pid); p = p->next);
 
-    if (p == NULL)
-        return NULL;
-
-    if (p->ppid == pid)
-        return p;
-
-    do
-        p = p->next;
-    while ((p->ppid != pid) && (p != *list));
-
-    if (p->ppid == pid)
-        return p;
-
-    return NULL;
+    return p;
 }
 
 
@@ -716,9 +547,10 @@ static pid_t wait_for_any_child(uintmax_t *status, int options)
 
     do
     {
-        lock(&zombies_lock);
         p = find_child_in(&zombies, current_process->pid);
-        unlock(&zombies_lock);
+
+        if ((p == NULL) && !(options & WNOHANG))
+            yield();
     }
     while ((p == NULL) && !(options & WNOHANG));
 
@@ -741,9 +573,7 @@ pid_t raw_waitpid(pid_t pid, uintmax_t *status, int options)
 
     if (proc == NULL)
     {
-        lock(&zombies_lock);
         proc = (volatile process_t *)find_process_in(&zombies, pid);
-        unlock(&zombies_lock);
 
         if (proc == NULL)
         {
@@ -757,13 +587,12 @@ pid_t raw_waitpid(pid_t pid, uintmax_t *status, int options)
         return 0;
 
 
-    // FIXME: Das ist alles ziemlich fehleranfällig
+    // FIXME: Das ist alles ziemlich fehleranfällig, sobald mehrere Prozesse auf
+    // den hier warten (was aber nicht passieren sollte)
     while (proc->status != PROCESS_ZOMBIE)
         yield_to(proc->pid);
 
-    lock(&zombies_lock);
     q_unregister_process(&zombies, (process_t *)proc);
-    unlock(&zombies_lock);
 
     if (status != NULL)
         *status = proc->exit_info;
@@ -782,23 +611,15 @@ void sweep_dead_processes(void)
         return;
 
 
-    lock(&dead_lock);
-
-    process_t *p = dead;
-
-    do
+    while (dead != NULL)
     {
-        process_t *np = p->next;
+        process_t *p = dead;
+
+        if (!__sync_bool_compare_and_swap(&dead, p, p->next))
+            continue;
 
         destroy_process_struct(p);
-
-        p = np;
     }
-    while (p != dead);
-
-    dead = NULL;
-
-    unlock(&dead_lock);
 }
 
 
@@ -806,25 +627,26 @@ void daemonize_process(process_t *proc, const char *name)
 {
     strncpy(proc->name, name, sizeof(proc->name));
 
-    lock(&runqueue_lock);
+
+    bool is_current = proc == current_process;
+
+    if (is_current)
+        lock(&schedule_lock);
 
     if (!proc->handles_irqs)
         q_unregister_process(&runqueue, proc);
 
-    // yay potentieller dead lock (FIXME, btw)
-    lock(&daemons_lock);
-
     q_register_process(&daemons, proc);
-
-    unlock(&daemons_lock);
 
     proc->status = PROCESS_DAEMON;
 
-    unlock(&runqueue_lock);
+    if (is_current)
+    {
+        unlock(&schedule_lock);
 
-    if (proc == current_process)
         for (;;)
             yield();
+    }
 }
 
 
@@ -879,7 +701,7 @@ pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer
         return -EAGAIN;
 
 
-    process_t *pop = kmalloc(sizeof(*pop));
+    process_t *pop = kcalloc(sizeof(*pop));
 
     pop->status = PROCESS_COMA;
 
@@ -908,14 +730,8 @@ pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer
 
     strcpy(pop->name, "[popup]");
 
-    pop->popup_stack_mask = NULL;
     pop->popup_stack_index = stack_index;
-
-    pop->handles_irqs = false;
     pop->currently_handled_irq = -1;
-    pop->irq_stack_top = NULL;
-
-    pop->schedule_tick = 0;
 
 
     initialize_child_process_arch(pop, proc);
