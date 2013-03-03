@@ -1,1 +1,6 @@
+
 µxoµcota up and running, presumably.
+
+If there are any network interfaces ("ls (eth)" or ifconfig), try ifconfig,
+route and dhclient to bring them up.
+
