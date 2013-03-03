@@ -168,7 +168,7 @@ void destroy_process(process_t *proc, uintmax_t exit_info);
 void destroy_this_popup_thread(uintmax_t exit_info);
 
 
-pid_t raw_waitpid(pid_t pid, uintmax_t *status, int options);
+pid_t raw_waitpid(pid_t pid, uintmax_t *status, int options, int *errnop);
 
 
 void sweep_dead_processes(void);
