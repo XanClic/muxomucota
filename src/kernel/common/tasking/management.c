@@ -559,11 +559,11 @@ static pid_t wait_for_any_child(uintmax_t *status, int options)
         return 0;
 
     // Ich fauler Sack
-    return raw_waitpid(p->pid, status, options);
+    return raw_waitpid(p->pid, status, options, NULL);
 }
 
 
-pid_t raw_waitpid(pid_t pid, uintmax_t *status, int options)
+pid_t raw_waitpid(pid_t pid, uintmax_t *status, int options, int *errnop)
 {
     if (pid == -1)
         return wait_for_any_child(status, options);
@@ -596,6 +596,16 @@ pid_t raw_waitpid(pid_t pid, uintmax_t *status, int options)
 
     if (status != NULL)
         *status = proc->exit_info;
+
+    if (errnop != NULL)
+    {
+        uintptr_t phys;
+        kassert_exec_print(vmmc_address_mapped(proc->vmmc, &proc->tls->errno, &phys), "&proc->tls->errno = %p", &proc->tls->errno);
+
+        int *proc_errno = kernel_map(phys, sizeof(int));
+        *errnop = *proc_errno;
+        kernel_unmap(proc_errno, sizeof(int));
+    }
 
     pid = proc->pid;
 

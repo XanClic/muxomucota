@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <ipc.h>
 #include <isr.h>
+#include <kassert.h>
 #include <pmm.h>
 #include <process.h>
 #include <stdint.h>
@@ -108,7 +109,14 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
             if (ret < 0)
                 current_process->tls->errno = -ret;
             else if (ipc_sp->synced_result != NULL)
-                raw_waitpid(ret, ipc_sp->synced_result, 0);
+            {
+                int errno = 0;
+                raw_waitpid(ret, ipc_sp->synced_result, 0, &errno);
+
+                if (errno)
+                    current_process->tls->errno = errno;
+            }
+
             return 0;
         }
 
@@ -201,7 +209,7 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
             return exec(state, (const void *)p0, p1, (char *const *)p2, (char *const *)p3);
 
         case SYS_WAIT:
-            return raw_waitpid(p0, (uintmax_t *)p1, p2);
+            return raw_waitpid(p0, (uintmax_t *)p1, p2, NULL);
 
         case SYS_HANDLE_IRQ:
             if (current_process->popup_stack_index >= 0)
