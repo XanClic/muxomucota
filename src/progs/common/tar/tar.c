@@ -87,8 +87,11 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
 {
     if (!relpath[0])
     {
-        if ((flags & O_WRONLY) || (flags & O_CREAT))
+        if (flags & O_WRONLY)
+        {
+            errno = EACCES;
             return 0;
+        }
 
         struct file *f = malloc(sizeof(*f));
         f->type = T_ROOT;
@@ -121,9 +124,15 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
         for (mp = mountpoints; (mp != NULL) && strcmp(mp->name, relpath + 1); mp = mp->next);
 
         if ((mp == NULL) && !(flags & O_CREAT))
+        {
+            errno = ENOENT;
             return 0;
-        else if ((mp != NULL) && (flags & (O_CREAT | O_WRONLY)))
+        }
+        else if ((mp != NULL) && (flags & O_WRONLY))
+        {
+            errno = EACCES;
             return 0;
+        }
 
 
         struct file *f = malloc(sizeof(*f));
@@ -173,8 +182,11 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
     }
 
 
-    if (flags & (O_WRONLY | O_CREAT))
+    if (flags & O_WRONLY)
+    {
+        errno = EACCES;
         return 0;
+    }
 
 
     char *duped = strdup(relpath + 1);
@@ -188,6 +200,8 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
     if (mp == NULL)
     {
         free(duped);
+
+        errno = ENOENT;
         return 0;
     }
 
@@ -201,6 +215,8 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
         if (t == NULL)
         {
             free(duped);
+
+            errno = ENOENT;
             return 0;
         }
 
@@ -280,13 +296,19 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
     struct file *f = (struct file *)id;
 
     if ((f->type != T_MP) || (flags != F_MOUNT_FILE))
+    {
+        errno = EACCES;
         return 0;
+    }
 
 
     const char *name = data;
 
     if (!size || name[size - 1])
+    {
+        errno = EINVAL;
         return 0;
+    }
 
 
     int nfd = create_pipe(name, O_RDONLY);
@@ -473,6 +495,7 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
             return ((f->type == T_ROOT) || (f->type == T_MP)) ? 0 : f->node->mtime;
     }
 
+    errno = EINVAL;
     return 0;
 }
 
@@ -490,6 +513,7 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
             return 0;
     }
 
+    errno = EINVAL;
     return -EINVAL;
 }
 

@@ -171,8 +171,11 @@ static uintptr_t cdi_fs_create_pipe(const char *path, int flags)
 {
     if (!*path)
     {
-        if (flags & (O_WRONLY | O_CREAT))
+        if (flags & O_WRONLY)
+        {
+            errno = EACCES;
             return 0;
+        }
 
 
         struct vfs_file *file = malloc(sizeof(*file));
@@ -243,6 +246,7 @@ static uintptr_t cdi_fs_create_pipe(const char *path, int flags)
         if (!(flags & O_CREAT))
         {
             free(duped);
+            errno = ENOENT;
             return 0;
         }
 
@@ -279,8 +283,12 @@ static uintptr_t cdi_fs_create_pipe(const char *path, int flags)
     free(duped);
 
 
+    // TODO: O_CREAT
     if (res == NULL)
+    {
+        errno = ENOENT;
         return 0;
+    }
 
 
     struct cdi_fs_stream str = { .fs = fs, .res = res };
@@ -296,6 +304,7 @@ static uintptr_t cdi_fs_create_pipe(const char *path, int flags)
         if (flags & O_WRONLY)
         {
             unload_resource(fs, res);
+            errno = EACCES;
             return 0;
         }
 
@@ -338,6 +347,7 @@ static uintptr_t cdi_fs_create_pipe(const char *path, int flags)
     if (res->file == NULL)
     {
         unload_resource(fs, res);
+        errno = EACCES;
         return 0;
     }
 
@@ -436,6 +446,7 @@ static big_size_t cdi_fs_stream_recv(uintptr_t id, void *data, big_size_t size, 
         return count;
     }
 
+    errno = EACCES;
     return 0;
 }
 
@@ -447,7 +458,10 @@ static big_size_t cdi_fs_stream_send(uintptr_t id, const void *data, big_size_t 
     struct vfs_file *f = (struct vfs_file *)id;
 
     if (f->type == TYPE_DIR)
+    {
+        errno = EACCES;
         return 0;
+    }
 
     if (f->type == TYPE_CLEAN_MP)
     {
@@ -456,7 +470,10 @@ static big_size_t cdi_fs_stream_send(uintptr_t id, const void *data, big_size_t 
         const char *name = data;
 
         if (!size || name[size - 1])
+        {
+            errno = EINVAL;
             return 0;
+        }
 
         bool rdonly = false;
 
@@ -483,6 +500,8 @@ static big_size_t cdi_fs_stream_send(uintptr_t id, const void *data, big_size_t 
         {
             free(newfs);
             destroy_pipe(base_fd, 0);
+
+            errno = EMEDIUMTYPE;
 
             return 0;
         }
@@ -636,6 +655,7 @@ static uintmax_t cdi_fs_pipe_get_flag(uintptr_t id, int flag)
                 return f->str.res->res->meta_read(&f->str, CDI_FS_META_CREATETIME);
     }
 
+    errno = EINVAL;
     return 0;
 }
 
@@ -654,16 +674,23 @@ static int cdi_fs_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
             return 0;
         case F_ATIME:
             if ((f->type == TYPE_CLEAN_MP) || ((f->type == TYPE_DIR) && (f->str.res == NULL)))
+            {
+                errno = EPERM;
                 return -EPERM;
+            }
             else
                 return f->str.res->res->meta_write(&f->str, CDI_FS_META_ACCESSTIME, value);
         case F_MTIME:
             if ((f->type == TYPE_CLEAN_MP) || ((f->type == TYPE_DIR) && (f->str.res == NULL)))
+            {
+                errno = EPERM;
                 return -EPERM;
+            }
             else
                 return f->str.res->res->meta_write(&f->str, CDI_FS_META_CHANGETIME, value);
     }
 
+    errno = EINVAL;
     return -EINVAL;
 }
 

@@ -61,7 +61,10 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
     (void)relpath;
 
     if (flags & O_WRONLY)
+    {
+        errno = EACCES;
         return 0;
+    }
 
     return 1;
 }
@@ -79,12 +82,15 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
 
     switch (flag)
     {
+        case F_PRESSURE:
+            return (fifo_write_idx + 1024 - fifo_read_idx) % 1024;
         case F_READABLE:
             return (fifo_read_idx != fifo_write_idx);
         case F_WRITABLE:
             return false;
     }
 
+    errno = EINVAL;
     return 0;
 }
 
@@ -102,6 +108,7 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
             return 0;
     }
 
+    errno = EINVAL;
     return -EINVAL;
 }
 

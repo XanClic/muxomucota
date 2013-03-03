@@ -148,7 +148,10 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
         int64_t ip = get_ip(relpath + 1, &relpath);
 
         if (ip < 0)
+        {
+            errno = ENOENT;
             return 0;
+        }
 
         dest_ip = htonl(ip);
 
@@ -157,7 +160,10 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
         relpath = end;
 
         if ((val < 0x0000) || (val > 0xffff) || *relpath)
+        {
+            errno = ENOENT;
             return 0;
+        }
 
         dest_port = val;
     }
@@ -300,9 +306,6 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
     free(udph);
 
 
-    if (flags & O_NONBLOCK)
-        return size;
-
     return (sent > sizeof(udph->udp)) ? (sent - sizeof(udph->udp)) : 0;
 }
 
@@ -341,6 +344,7 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
             return f->port;
     }
 
+    errno = EINVAL;
     return 0;
 }
 
@@ -388,6 +392,7 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
             return 0;
     }
 
+    errno = EINVAL;
     return -EINVAL;
 }
 

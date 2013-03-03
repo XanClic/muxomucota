@@ -49,7 +49,10 @@ int main(void)
 uintptr_t service_create_pipe(const char *relpath, int flags)
 {
     if (flags & O_WRONLY)
+    {
+        errno = EACCES;
         return 0;
+    }
 
     struct connection *dnscon = calloc(1, sizeof(*dnscon));
     dnscon->dname = strdup(*relpath ? (relpath + 1) : "");
@@ -209,7 +212,10 @@ big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int fl
 
     struct connection *dnsc = (struct connection *)id;
 
-    update_ip(dnsc);
+    errno = -update_ip(dnsc);
+
+    if (errno)
+        return 0;
 
     if (dnsc->ip_string == NULL)
         return 0;
@@ -272,7 +278,8 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
             return 0;
     }
 
-    return -EINVAL;
+    errno = EINVAL;
+    return 0;
 }
 
 uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
@@ -306,5 +313,6 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
             return dnsc->dns_ip;
     }
 
+    errno = EINVAL;
     return 0;
 }
