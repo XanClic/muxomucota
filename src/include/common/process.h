@@ -47,13 +47,13 @@ typedef struct process
 
     pid_t pgid; // process group ID
 
-    process_status_t status;
+    volatile process_status_t status;
 
     struct cpu_state *cpu_state;
     vmm_context_t *vmmc;
 
     // rq_next = runqueue_next
-    struct process *rq_next, *next;
+    struct process *volatile rq_next, *volatile next;
 
     struct process_arch_info arch;
 
@@ -65,7 +65,7 @@ typedef struct process
     struct tls *tls;
 
 
-    pid_t ppid;
+    volatile pid_t ppid;
 
 
     // TODO: Ein paar Unions
@@ -85,6 +85,7 @@ typedef struct process
 
     bool handles_irqs;
     int currently_handled_irq;
+    bool fresh_irq;
 
     void *irq_stack_top;
 } process_t;

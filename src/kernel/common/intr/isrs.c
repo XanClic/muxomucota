@@ -116,6 +116,7 @@ int common_irq_handler(int irq, struct cpu_state *state)
         else if (likely(__sync_bool_compare_and_swap(&isr->process->status, PROCESS_DAEMON, PROCESS_COMA)))
         {
             isr->process->currently_handled_irq = irq;
+            isr->process->fresh_irq = true;
 
             kassert(isr->process->pid != isr->process->pgid);
 
