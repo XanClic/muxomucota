@@ -186,7 +186,7 @@ void arp_incoming(struct interface *ifc)
     {
         case 1:
         {
-            if (ntohl(pkt.targetprotoaddr) == ifc->ip)
+            if (ntohl(pkt.targetprotoaddr) != ifc->ip)
                 return;
 
             uint64_t srcmac = pipe_get_flag(ifc->fd, F_MY_MAC);
