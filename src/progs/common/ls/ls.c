@@ -13,7 +13,7 @@ static void print_info(const char *path, const char *name)
     struct stat stt;
 
     if (stat(path, &stt) < 0)
-        printf("?????????? ? ? ? %s\n", name);
+        printf("??????????    ?    ?        ? %s\n", name);
     else
     {
         printf("%c", S_ISDIR(stt.st_mode) ? 'd' : '-');
