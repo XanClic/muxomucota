@@ -5,9 +5,9 @@
 #include <stddef.h>
 
 
-extern lock_t runqueue_lock, dead_lock;
+lock_t schedule_lock = LOCK_INITIALIZER;
 
-extern process_t *runqueue, *dead, *idle_process;
+extern process_t *runqueue, *idle_process;
 
 
 process_t *schedule(pid_t switch_to)
@@ -15,7 +15,7 @@ process_t *schedule(pid_t switch_to)
     static unsigned schedule_tick = 0;
 
 
-    if (!trylock(&runqueue_lock))
+    if (!trylock(&schedule_lock))
         return current_process;
 
 
@@ -25,7 +25,7 @@ process_t *schedule(pid_t switch_to)
             current_process = idle_process;
         else
         {
-            unlock(&runqueue_lock);
+            unlock(&schedule_lock);
             return NULL;
         }
     }
@@ -40,7 +40,7 @@ process_t *schedule(pid_t switch_to)
 
     if (current_process == NULL)
     {
-        unlock(&runqueue_lock);
+        unlock(&schedule_lock);
         return idle_process;
     }
 
@@ -51,7 +51,7 @@ process_t *schedule(pid_t switch_to)
     process_t *eldest = NULL;
 
 
-    for (process_t *proc = current_process->rq_next; proc != current_process; proc = proc->rq_next)
+    for (process_t *proc = runqueue; proc != NULL; proc = proc->rq_next)
     {
         if (proc->status != PROCESS_ACTIVE)
             continue;
@@ -59,7 +59,7 @@ process_t *schedule(pid_t switch_to)
         if (proc->pid == switch_to)
             switch_target = proc;
 
-        if (proc->handles_irqs && (proc->currently_handled_irq >= 0))
+        if (proc->handles_irqs && (proc->currently_handled_irq >= 0) && (proc->fresh_irq))
             irq_process = proc;
 
         if (schedule_tick - proc->schedule_tick > max_sched_diff)
@@ -74,7 +74,7 @@ process_t *schedule(pid_t switch_to)
     {
         current_process = idle_process;
 
-        unlock(&runqueue_lock);
+        unlock(&schedule_lock);
 
         return current_process;
     }
@@ -86,10 +86,13 @@ process_t *schedule(pid_t switch_to)
         current_process = switch_target;
 
     if (irq_process != NULL)
+    {
+        irq_process->fresh_irq = false;
         current_process = irq_process;
+    }
 
 
-    unlock(&runqueue_lock);
+    unlock(&schedule_lock);
 
     if (current_process->pid != current_process->pgid)
         kassert((current_process->cpu_state->esp < 0xef000000) || !(current_process->cpu_state->cs & 3));

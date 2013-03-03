@@ -9,8 +9,6 @@
 
 extern process_t *dead, *runqueue;
 
-extern lock_t runqueue_lock;
-
 
 static void reaper(void)
 {
@@ -35,24 +33,14 @@ void enter_idle_process(void)
     {
         bool runqueue_empty = true;
 
-        lock(&runqueue_lock);
-
-        if (runqueue != NULL)
+        for (process_t *proc = runqueue; proc != NULL; proc = proc->next)
         {
-            process_t *proc = runqueue;
-            do
+            if (proc->status == PROCESS_ACTIVE)
             {
-                if (proc->status == PROCESS_ACTIVE)
-                {
-                    runqueue_empty = false;
-                    break;
-                }
-                proc = proc->next;
+                runqueue_empty = false;
+                break;
             }
-            while (proc != runqueue);
         }
-
-        unlock(&runqueue_lock);
 
         if (runqueue_empty)
             cpu_halt();
