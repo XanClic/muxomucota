@@ -18,12 +18,5 @@ int pipe_set_flag(int pipe, int flag, uintmax_t value)
         .value = value
     };
 
-    int ret = (int)ipc_message_synced(_pipes[pipe].pid, PIPE_SET_FLAG, &ipc_psf, sizeof(ipc_psf));
-
-
-    if (ret < 0)
-        errno = -ret; // FIXME
-
-
-    return ret;
+    return (int)ipc_message_synced(_pipes[pipe].pid, PIPE_SET_FLAG, &ipc_psf, sizeof(ipc_psf));
 }

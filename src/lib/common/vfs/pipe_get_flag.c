@@ -18,6 +18,5 @@ uintmax_t pipe_get_flag(int pipe, int flag)
     };
 
 
-    // FIXME: Fehlerhinweise zu bekommen wäre sehr geil
     return ipc_message_synced(_pipes[pipe].pid, PIPE_GET_FLAG, &ipc_pgf, sizeof(ipc_pgf));
 }

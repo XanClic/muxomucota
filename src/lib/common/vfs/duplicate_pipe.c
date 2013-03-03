@@ -41,7 +41,6 @@ int duplicate_pipe(int pipe, int dest)
                 _pipes[i].pid = 0;
                 unlock(&_pipe_allocation_lock);
 
-                errno = ENOENT; // FIXME
                 return -1;
             }
 

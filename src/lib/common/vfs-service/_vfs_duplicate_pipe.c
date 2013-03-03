@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <compiler.h>
+#include <errno.h>
 #include <ipc.h>
 #include <stddef.h>
 #include <vfs.h>
@@ -24,6 +25,8 @@ uintptr_t service_duplicate_pipe(uintptr_t id) cc_weak;
 uintptr_t service_duplicate_pipe(uintptr_t id)
 {
     (void)id;
+
+    errno = ENOTSUP;
 
     return 0;
 }

@@ -206,7 +206,6 @@ int create_pipe(const char *path, int flags)
                     shm_close(shmid, npath, true);
                 }
 
-                errno = ENOENT; // FIXME
                 goto error_after_allocation;
             }
 
