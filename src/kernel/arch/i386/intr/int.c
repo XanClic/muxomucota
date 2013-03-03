@@ -58,6 +58,7 @@ extern const void int_stub_0xA2;
 
 
 #define IDT_SYS_INTR_ENTRY(num) idt[num] = ((uint64_t)((uintptr_t)&int_stub_##num >> 16) << 48) | ((uintptr_t)&int_stub_##num & 0xFFFF) | (SEG_SYS_CS << 16) | (UINT64_C(0x8E) << 40);
+#define IDT_USR_INTR_ENTRY(num) idt[num] = ((uint64_t)((uintptr_t)&int_stub_##num >> 16) << 48) | ((uintptr_t)&int_stub_##num & 0xFFFF) | (SEG_SYS_CS << 16) | (UINT64_C(0xEE) << 40);
 #define IDT_SYS_TRAP_ENTRY(num) idt[num] = ((uint64_t)((uintptr_t)&int_stub_##num >> 16) << 48) | ((uintptr_t)&int_stub_##num & 0xFFFF) | (SEG_SYS_CS << 16) | (UINT64_C(0x8F) << 40);
 #define IDT_USR_TRAP_ENTRY(num) idt[num] = ((uint64_t)((uintptr_t)&int_stub_##num >> 16) << 48) | ((uintptr_t)&int_stub_##num & 0xFFFF) | (SEG_SYS_CS << 16) | (UINT64_C(0xEF) << 40);
 
@@ -91,25 +92,25 @@ void init_interrupts(void)
 
 
     // Exceptions
-    IDT_SYS_TRAP_ENTRY(0x00);
-    IDT_SYS_TRAP_ENTRY(0x01);
-    IDT_SYS_TRAP_ENTRY(0x02);
-    IDT_SYS_TRAP_ENTRY(0x03);
-    IDT_SYS_TRAP_ENTRY(0x04);
-    IDT_SYS_TRAP_ENTRY(0x05);
-    IDT_SYS_TRAP_ENTRY(0x06);
-    IDT_SYS_TRAP_ENTRY(0x07);
-    IDT_SYS_TRAP_ENTRY(0x08);
-    IDT_SYS_TRAP_ENTRY(0x09);
-    IDT_SYS_TRAP_ENTRY(0x0A);
-    IDT_SYS_TRAP_ENTRY(0x0B);
-    IDT_SYS_TRAP_ENTRY(0x0C);
-    IDT_SYS_TRAP_ENTRY(0x0D);
-    IDT_SYS_TRAP_ENTRY(0x0E);
-    IDT_SYS_TRAP_ENTRY(0x10);
-    IDT_SYS_TRAP_ENTRY(0x11);
-    IDT_SYS_TRAP_ENTRY(0x12);
-    IDT_SYS_TRAP_ENTRY(0x13);
+    IDT_SYS_INTR_ENTRY(0x00);
+    IDT_SYS_INTR_ENTRY(0x01);
+    IDT_SYS_INTR_ENTRY(0x02);
+    IDT_SYS_INTR_ENTRY(0x03);
+    IDT_SYS_INTR_ENTRY(0x04);
+    IDT_SYS_INTR_ENTRY(0x05);
+    IDT_SYS_INTR_ENTRY(0x06);
+    IDT_SYS_INTR_ENTRY(0x07);
+    IDT_SYS_INTR_ENTRY(0x08);
+    IDT_SYS_INTR_ENTRY(0x09);
+    IDT_SYS_INTR_ENTRY(0x0A);
+    IDT_SYS_INTR_ENTRY(0x0B);
+    IDT_SYS_INTR_ENTRY(0x0C);
+    IDT_SYS_INTR_ENTRY(0x0D);
+    IDT_SYS_INTR_ENTRY(0x0E);
+    IDT_SYS_INTR_ENTRY(0x10);
+    IDT_SYS_INTR_ENTRY(0x11);
+    IDT_SYS_INTR_ENTRY(0x12);
+    IDT_SYS_INTR_ENTRY(0x13);
 
     // IRQs
     IDT_SYS_INTR_ENTRY(0x20);
@@ -130,7 +131,7 @@ void init_interrupts(void)
     IDT_SYS_INTR_ENTRY(0x2F);
 
     // Syscall
-    IDT_USR_TRAP_ENTRY(0xA2);
+    IDT_USR_INTR_ENTRY(0xA2);
 
 
     struct
