@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <compiler.h>
+#include <errno.h>
 #include <ipc.h>
 #include <stddef.h>
 #include <vfs.h>
@@ -30,6 +31,8 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
 {
     (void)relpath;
     (void)flags;
+
+    errno = ENOTSUP;
 
     return 0;
 }

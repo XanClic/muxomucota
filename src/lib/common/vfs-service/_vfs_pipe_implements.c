@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <compiler.h>
+#include <errno.h>
 #include <ipc.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -26,6 +27,8 @@ bool service_pipe_implements(uintptr_t id, int interface)
 {
     (void)id;
     (void)interface;
+
+    errno = ENOTSUP;
 
     return false;
 }

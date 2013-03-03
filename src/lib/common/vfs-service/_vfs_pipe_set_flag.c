@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <compiler.h>
+#include <errno.h>
 #include <ipc.h>
 #include <stddef.h>
 #include <vfs.h>
@@ -26,6 +27,8 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
     (void)id;
     (void)flag;
     (void)value;
+
+    errno = ENOTSUP;
 
     return 0;
 }

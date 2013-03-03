@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <compiler.h>
+#include <errno.h>
 #include <ipc.h>
 #include <shm.h>
 #include <stddef.h>
@@ -35,6 +36,8 @@ big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int fl
     (void)data;
     (void)size;
     (void)flags;
+
+    errno = ENOTSUP;
 
     return 0;
 }
