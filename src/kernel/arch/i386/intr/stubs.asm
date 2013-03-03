@@ -109,7 +109,7 @@ int_stub_0xA2:
 cld
 
 push  dword 0
-push  dword 0x2a
+push  dword 0xa2
 
 push  ds
 push  es

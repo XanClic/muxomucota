@@ -361,7 +361,8 @@ static void tcp_connect(struct tcp_connection *c)
     c->status = STATUS_SYN_SENT;
     send_tcp_packet(c, TCP_SYN, NULL, 0);
 
-    while (c->status == STATUS_SYN_SENT)
+    int timeout = elapsed_ms() + 5000;
+    while ((c->status == STATUS_SYN_SENT) && (elapsed_ms() < timeout))
         yield();
 }
 

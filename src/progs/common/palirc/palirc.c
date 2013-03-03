@@ -66,6 +66,7 @@ static char *my_fgets(char *s, int size, int stream)
             s[i] = 0;
 
             pi -= 2;
+            printf("\33[s\33[1;%if\33[44m \33[0m\33[u", pi + 1);
 
             continue;
         }
