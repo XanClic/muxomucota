@@ -223,6 +223,8 @@ static void send_tcp_packet(struct tcp_connection *c, int flags, const void *dat
 
 static void handle_inqueue(struct tcp_connection *c)
 {
+    bool fin_just_came_in = false;
+
     rwl_lock_w(&c->inqueue_lock);
 
     for (struct packet **pp = &c->inqueue; *pp != NULL; pp = &(*pp)->next)
@@ -256,6 +258,8 @@ static void handle_inqueue(struct tcp_connection *c)
             }
             else if (p->packet->flags & TCP_FIN)
             {
+                fin_just_came_in = true;
+
                 if ((c->status == STATUS_FIN_SENT) || (c->status == STATUS_CLOSED))
                     c->status = STATUS_CLOSED;
                 else
@@ -282,7 +286,8 @@ static void handle_inqueue(struct tcp_connection *c)
 
     // TODO: Testen, ob am Ende der Queue schon ein ACK mit den richtigen Werten
     // hängt
-    send_tcp_packet(c, TCP_ACK, NULL, 0);
+    if ((c->status == STATUS_OPEN) || (c->status == STATUS_SYN_SENT) || (c->status == STATUS_SYN_RCVD) || (c->status == STATUS_FIN_RCVD) || fin_just_came_in)
+        send_tcp_packet(c, TCP_ACK, NULL, 0);
 }
 
 
@@ -859,6 +864,13 @@ static uintmax_t incoming(void)
 
             if (tcph->flags & TCP_ACK)
                 tcp_acked(c, ntohl(tcph->ack));
+
+            if (tcph->flags & TCP_RST)
+            {
+                c->status = STATUS_CLOSED;
+                flush_all_queues(c);
+                continue;
+            }
 
 
             if (!data_sz && !(tcph->flags & (TCP_SYN | TCP_FIN | TCP_RST)))
