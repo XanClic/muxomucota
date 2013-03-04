@@ -594,6 +594,8 @@ static size_t tcp_receive(struct tcp_connection *c, void *data, size_t size)
 
         uint32_t next_seq_end = p->seq_end;
 
+        assert(p->size >= (p->packet->hdrlen >> 4) * 4);
+
         size_t data_size = p->size - (p->packet->hdrlen >> 4) * 4;
         if (data_size)
         {
