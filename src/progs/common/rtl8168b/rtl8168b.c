@@ -411,5 +411,7 @@ static void rtl8168b_handle_interrupt(struct cdi_device* device)
         clear |= ISR_LINK_CHANGE;
     }
 
+    clear = isr; // lol what are you doing stahp
+
     write_register_word(netcard, REG_INTERRUPT_STATUS, clear);
 }
