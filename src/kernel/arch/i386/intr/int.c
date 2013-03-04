@@ -131,7 +131,7 @@ void init_interrupts(void)
     IDT_SYS_INTR_ENTRY(0x2F);
 
     // Syscall
-    IDT_USR_INTR_ENTRY(0xA2);
+    IDT_USR_TRAP_ENTRY(0xA2);
 
 
     struct
