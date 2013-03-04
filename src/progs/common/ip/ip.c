@@ -450,6 +450,9 @@ bool service_pipe_implements(uintptr_t id, int interface)
 
 static uintmax_t incoming(void)
 {
+    static lock_t incoming_lock = LOCK_INITIALIZER;
+
+
     struct
     {
         pid_t pid;
@@ -472,7 +475,7 @@ static uintmax_t incoming(void)
         return 0;
 
 
-    lock(&i->lock);
+    lock(&incoming_lock);
 
 
     while (pipe_get_flag(fd, F_READABLE))
@@ -567,7 +570,7 @@ static uintmax_t incoming(void)
     }
 
 
-    unlock(&i->lock);
+    unlock(&incoming_lock);
 
 
     return 0;
