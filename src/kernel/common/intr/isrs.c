@@ -54,6 +54,9 @@ void register_kernel_isr(int irq, void (*isr)(struct cpu_state *state))
 
 void register_user_isr(int irq, process_t *process, void (*process_handler)(void *info), void *info)
 {
+    kassert_print(process->handled_irq < 0, "Already handling IRQ %i", process->handled_irq);
+
+
     struct isr *nisr = kmalloc(sizeof(*nisr));
 
     nisr->is_kernel = false;
@@ -64,7 +67,7 @@ void register_user_isr(int irq, process_t *process, void (*process_handler)(void
     register_isr(irq, nisr);
 
 
-    process->handles_irqs = true;
+    process->handled_irq = irq;
 }
 
 
@@ -94,7 +97,7 @@ void unregister_isr_process(process_t *process)
     }
 
 
-    process->handles_irqs = false;
+    process->handled_irq = -1;
 
     // TODO: Prozess aus der Runqueue entfernen
 }
@@ -115,7 +118,7 @@ int common_irq_handler(int irq, struct cpu_state *state)
             isr->kernel_handler(state);
         else if (likely(__sync_bool_compare_and_swap(&isr->process->status, PROCESS_DAEMON, PROCESS_COMA)))
         {
-            isr->process->currently_handled_irq = irq;
+            isr->process->handling_irq = true;
             isr->process->fresh_irq = true;
 
             // Das funktioniert ohne jegliche Race Conditions, weil der Prozess

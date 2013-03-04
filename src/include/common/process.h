@@ -83,9 +83,9 @@ typedef struct process
     uintmax_t exit_info;
 
 
-    bool handles_irqs;
-    int currently_handled_irq;
-    bool fresh_irq;
+    int handled_irq;
+    bool fresh_irq, handling_irq;
+    volatile int settle_count;
 
     void *irq_stack_top;
 } process_t;
