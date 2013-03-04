@@ -81,11 +81,21 @@ void initialize_forked_cpu_state(struct cpu_state *dest, const struct cpu_state 
 void initialize_child_process_arch(process_t *child, process_t *parent)
 {
     child->arch.iopl = parent->arch.iopl;
+
+    // an 16 B ausrichten
+    child->arch.fxsave = (struct fxsave_space *)(((uintptr_t)child->arch.fxsave_real_space + 0xf) & ~0xf);
+
+    memcpy(child->arch.fxsave, parent->arch.fxsave, sizeof(*child->arch.fxsave));
 }
 
 void initialize_orphan_process_arch(process_t *proc)
 {
     proc->arch.iopl = 0;
+
+    proc->arch.fxsave = (struct fxsave_space *)(((uintptr_t)proc->arch.fxsave_real_space + 0xf) & ~0xf);
+
+    // ought to be enough
+    __asm__ __volatile__ ("fxsave %0" :: "m"(*proc->arch.fxsave));
 }
 
 
@@ -154,6 +164,8 @@ void process_set_initial_params(process_t *proc, struct cpu_state *state, int ar
 void destroy_process_arch_struct(process_t *proc)
 {
     kfree((void *)proc->arch.kernel_stack);
+
+    fpu_sse_unregister(proc);
 }
 
 

@@ -158,8 +158,14 @@ void i386_common_isr(struct cpu_state *state)
 {
     if (state->int_vector < 0x20)
     {
-        if ((state->int_vector == 0x0E) && handle_pagefault(state))
+        if ((state->int_vector == 0x0E) && handle_pagefault(state)) // #PF
             return;
+
+        if (state->int_vector == 0x07) // #NM
+        {
+            save_and_restore_fpu_and_sse();
+            return;
+        }
 
         __asm__ __volatile__ ("cli");
 
