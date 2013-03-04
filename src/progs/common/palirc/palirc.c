@@ -126,7 +126,7 @@ static void kbd_thread(void *arg)
                 else
                 {
                     char pbuf[90];
-                    sprintf(pbuf, "PART %s :paloxena3.5\r\n", current_channel);
+                    sprintf(pbuf, "PART %s :µxoµcota\r\n", current_channel);
                     tcp_send(con, pbuf);
                     joined = 0;
                 }

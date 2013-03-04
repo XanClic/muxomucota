@@ -213,13 +213,16 @@ void arp_incoming(struct interface *ifc)
                 destmac = destmac | ((uint64_t)pkt.senderhwaddr[i] << (i * 8));
 
 
-            // Nicht Interface locken, weil das der IP-Receive-Handler schon getan hat
+            lock(&ifc->lock);
+
             pipe_set_flag(ifc->fd, F_ETH_PACKET_TYPE, 0x0806);
             pipe_set_flag(ifc->fd, F_DEST_MAC, destmac);
 
-            stream_send(ifc->fd, &res, sizeof(res), O_NONBLOCK);
+            stream_send(ifc->fd, &res, sizeof(res), O_BLOCKING);
 
             pipe_set_flag(ifc->fd, F_ETH_PACKET_TYPE, 0x0800);
+
+            unlock(&ifc->lock);
 
             break;
         }
