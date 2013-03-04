@@ -13,4 +13,6 @@ void arch_process_change(process_t *new_process)
     x86_tss.esp0 = new_process->arch.kernel_stack_top;
 
     set_tls(new_process->tls);
+
+    __asm__ __volatile__ ("mov eax,cr0; or eax,8; mov cr0,eax" ::: "eax"); // TS setzen
 }
