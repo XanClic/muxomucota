@@ -101,14 +101,14 @@ static void kbd_thread(void *arg)
 
             if (!strcmp(cmd, "/quit"))
             {
-                printf("Verlasse den Server...\n");
+                printf("Quitting server...\n");
                 tcp_send(con, "QUIT :µxoµcota\r\n");
                 quit = 1;
             }
             else if (!strcmp(cmd, "/join"))
             {
                 if (joined)
-                    printf("Es kann nur ein Channel betreten werden.\n");
+                    printf("Cannot join more than one channel.\n");
                 else
                 {
                     memset(current_channel, 0, 64);
@@ -122,7 +122,7 @@ static void kbd_thread(void *arg)
             else if (!strcmp(cmd, "/part"))
             {
                 if (!joined)
-                    printf("Es muss zuerst ein Channel betreten werden.\n");
+                    printf("Must join a channel first.\n");
                 else
                 {
                     char pbuf[90];
@@ -133,7 +133,7 @@ static void kbd_thread(void *arg)
             }
             else if (!strcmp(cmd, "/nick"))
             {
-                printf("*** %s nennt sich jetzt ", current_nick);
+                printf("*** %s changes his nick to ", current_nick);
 
                 char nbuf[80];
                 memset(current_nick, 0, 64);
@@ -152,12 +152,12 @@ static void kbd_thread(void *arg)
                 printf("* %s \33[1;34m%s\33[0m\n", current_nick, cmd + 4);
             }
             else
-                printf("Unbekannter Befehl \"%s\".\n", cmd + 1);
+                printf("Unknown command \"%s\".\n", cmd + 1);
         }
         else
         {
             if (!joined)
-                printf("Es muss zuerst ein Channel betreten werden.\n");
+                printf("Must join a channel first.\n");
             else
             {
                 char sbuf[256];
@@ -177,13 +177,13 @@ int main(int argc, char *argv[])
 {
     if (argc != 2)
     {
-        fprintf(stderr, "Aufruf: palirc <server>\n");
+        fprintf(stderr, "Usage: palirc <server>\n");
         return 1;
     }
 
     const char *server = argv[1];
 
-    printf("Löse %s auf...\n", server);
+    printf("Resolving %s...\n", server);
 
     char sbuf[strlen(server) + 5];
     sprintf(sbuf, "(dns)/%s", server);
@@ -191,7 +191,7 @@ int main(int argc, char *argv[])
 
     if (dns < 0)
     {
-        fprintf(stderr, "%s: Konnte %s nicht öffnen: %s\n", argv[0], sbuf, strerror(errno));
+        fprintf(stderr, "%s: Could not open %s: %s\n", argv[0], sbuf, strerror(errno));
         return 1;
     }
 
@@ -199,7 +199,7 @@ int main(int argc, char *argv[])
     if (!len)
     {
         destroy_pipe(dns, 0);
-        fprintf(stderr, "%s: Konnte %s nicht auflösen: %s\n", argv[0], server, strerror(errno));
+        fprintf(stderr, "%s: Could not resolve %s: %s\n", argv[0], server, strerror(errno));
         return 1;
     }
 
@@ -209,7 +209,7 @@ int main(int argc, char *argv[])
     stream_recv(dns, ipbuf, len, O_BLOCKING);
     destroy_pipe(dns, 0);
 
-    printf("%s erhalten. Verbindung wird hergestellt...\n", ipbuf);
+    printf("Resolved to %s. Connecting...\n", ipbuf);
 
     char tcpbuf[strlen(ipbuf) + 12];
     sprintf(tcpbuf, "(tcp)/%s:6667", ipbuf);
@@ -218,7 +218,7 @@ int main(int argc, char *argv[])
 
     if (con < 0)
     {
-        fprintf(stderr, "%s: Konnte keine Verbindung zu %s aufbauen: %s\n", argv[0], tcpbuf, strerror(errno));
+        fprintf(stderr, "%s: Could not connect to %s: %s\n", argv[0], tcpbuf, strerror(errno));
         return 1;
     }
 
@@ -228,7 +228,7 @@ int main(int argc, char *argv[])
     if (!pid)
     {
         destroy_pipe(con, 0);
-        fprintf(stderr, "%s: Konnte Eingabethread nicht erstellen: %s\n", argv[0], strerror(errno));
+        fprintf(stderr, "%s: Could not create input thread: %s\n", argv[0], strerror(errno));
         return 1;
     }
 
@@ -343,7 +343,7 @@ int main(int argc, char *argv[])
                         if (!strncmp(msg + 1, "ACTION ", 7))
                             printf("* %s \33[1;34m%s\33[0m\n", name, msg + 8);
                         else
-                            printf("*** CTCP-%s-Anfrage von %s erhalten.\n", msg + 1, name);
+                            printf("*** Got CTCP %s request from %s.\n", msg + 1, name);
                     }
                     else
                     {
@@ -356,11 +356,11 @@ int main(int argc, char *argv[])
                     }
                 }
                 else if (!strcmp(cmd, "MODE"))
-                    printf("*** %s setzt Modus von %s %s\n", name, dest, msg);
+                    printf("*** %s sets mode %s of %s\n", name, msg, dest);
                 else if (!strcmp(cmd, "PART"))
-                    printf("*** %s hat den Kanal %s verlassen (%s).\n", name, dest, msg);
+                    printf("*** %s has left %s (%s).\n", name, dest, msg);
                 else if (!strcmp(cmd, "QUIT"))
-                    printf("*** %s hat den Server verlassen.\n", name);
+                    printf("*** %s has quit the server.\n", name);
                 else if (!strcmp(cmd, "KICK"))
                 {
                     char *real_msg = msg + strlen(msg) + 1;
@@ -368,30 +368,30 @@ int main(int argc, char *argv[])
                         real_msg++;
                     else
                         real_msg = strtok(NULL, " ");
-                    printf("*** %s hat %s aus %s gekickt (%s).\n", name, msg, dest, real_msg);
+                    printf("*** %s has kicked %s from %s (%s).\n", name, msg, dest, real_msg);
                 }
                 else if (!strcmp(cmd, "JOIN"))
                 {
                     if (*dest == ':')
                         dest++;
-                    printf("*** %s hat den Kanal %s betreten.\n", name, dest);
+                    printf("*** %s has joined %s.\n", name, dest);
                 }
                 else if (atoi(cmd))
                 {
                     switch (atoi(cmd))
                     {
                         case 332:
-                            printf("*** Thema von %s: %s\n", msg, msg + strlen(msg) + 2);
+                            printf("*** Topic of %s: %s\n", msg, msg + strlen(msg) + 2);
                             break;
                         case 352:
                             strtok(NULL, " "); strtok(NULL, " "); strtok(NULL, " ");
-                            printf("Benutzer: %s\n", strtok(NULL, " "));
+                            printf("Users: %s\n", strtok(NULL, " "));
                             break;
                         case 353:
                             msg[strlen(msg)] = ' ';
 
                             char *usr = strtok(NULL, " ");
-                            printf("*** Benutzer in %s:", usr);
+                            printf("*** Users in %s:", usr);
                             usr += strlen(usr) + 1;
                             if (*usr == ':')
                                 usr++;
