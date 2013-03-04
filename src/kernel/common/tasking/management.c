@@ -41,7 +41,7 @@ process_t *create_empty_process(const char *name)
     strncpy(p->name, name, sizeof(p->name) - 1);
 
     p->popup_stack_index = -1;
-    p->currently_handled_irq = -1;
+    p->handled_irq = -1;
 
 
     initialize_orphan_process_arch(p);
@@ -209,7 +209,7 @@ void make_idle_process(void)
     strcpy(idle_process->name, "[idle]");
 
     idle_process->popup_stack_index = -1;
-    idle_process->currently_handled_irq = -1;
+    idle_process->handled_irq = -1;
 
 
     initialize_orphan_process_arch(idle_process);
@@ -233,7 +233,7 @@ process_t *create_kernel_thread(const char *name, void (*function)(void))
     strncpy(p->name, name, sizeof(p->name) - 1);
 
     p->popup_stack_index = -1;
-    p->currently_handled_irq = -1;
+    p->handled_irq = -1;
 
 
     initialize_orphan_process_arch(p);
@@ -269,7 +269,7 @@ process_t *create_user_thread(void (*function)(void *), void *stack_top, void *a
     if (p->popup_stack_mask != NULL)
         p->popup_stack_mask->refcount++;
 
-    p->currently_handled_irq = -1;
+    p->handled_irq = -1;
 
 
     initialize_child_process_arch(p, current_process);
@@ -459,10 +459,10 @@ static void adopt_orphans(process_t *parent)
 
 void destroy_process(process_t *proc, uintmax_t exit_info)
 {
-    if (proc->handles_irqs)
+    if (proc->handled_irq >= 0)
     {
-        if (proc->currently_handled_irq >= 0)
-            irq_settled(proc->currently_handled_irq);
+        if ((proc->status == PROCESS_ACTIVE) && proc->handling_irq)
+            irq_settled(proc->handled_irq);
 
         unregister_isr_process(proc);
     }
@@ -664,7 +664,7 @@ void daemonize_process(process_t *proc, const char *name)
     if (is_current)
         lock(&schedule_lock);
 
-    if (!proc->handles_irqs)
+    if (proc->handled_irq < 0)
         q_unregister_process(&runqueue, proc);
 
     q_register_process(&daemons, proc);
@@ -683,12 +683,14 @@ void daemonize_process(process_t *proc, const char *name)
 
 void daemonize_from_irq_handler(process_t *proc)
 {
-    kassert(proc->handles_irqs);
-    kassert(proc->currently_handled_irq >= 0);
+    kassert(proc->handling_irq);
+    kassert(proc->handled_irq >= 0);
 
-    irq_settled(proc->currently_handled_irq);
-    proc->currently_handled_irq = -1;
+    proc->handling_irq = false;
 
+    __sync_fetch_and_add(&proc->settle_count, 1);
+
+    // Der Reaper macht den Rest
     proc->status = PROCESS_DAEMON;
 
     if (proc == current_process)
@@ -717,9 +719,16 @@ pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer
         {
             int bit = ffsl(~proc->popup_stack_mask->mask[i]);
 
-            // FIXME: Atomic
+            unsigned long old = proc->popup_stack_mask->mask[i];
+            unsigned long new = proc->popup_stack_mask->mask[i] | (1 << (bit - 1));
+
+            if (!__sync_bool_compare_and_swap(&proc->popup_stack_mask->mask[i], old, new))
+            {
+                i--;
+                continue;
+            }
+
             stack_top = USER_STACK_BASE + bit * POPUP_STACK_SIZE;
-            proc->popup_stack_mask->mask[i] |= 1 << (bit - 1);
 
             stack_index = (i * LONG_BIT) + (bit - 1);
 
@@ -732,16 +741,21 @@ pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer
         return -EAGAIN;
 
 
+    // i have no idea (FIXME)
+    __asm__ __volatile__ ("cli");
+
+
     process_t *pop = kcalloc(sizeof(*pop));
 
     pop->status = PROCESS_COMA;
 
     pop->pid  = get_new_pid();
-    pop->pgid = proc->pid;
+    pop->pgid = proc->pgid;
     pop->ppid = current_process->pid;
 
     pop->tls = (struct tls *)stack_top - 1;
     stack_top = (uintptr_t)pop->tls;
+
 
     vmmc_do_lazy_map(proc->vmmc, pop->tls);
 
@@ -762,13 +776,12 @@ pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer
     strcpy(pop->name, "[popup]");
 
     pop->popup_stack_index = stack_index;
-    pop->currently_handled_irq = -1;
+    pop->handled_irq = -1;
 
 
     initialize_child_process_arch(pop, proc);
 
     alloc_cpu_state(pop);
-
 
     if (buffer == NULL)
         pop->popup_tmp = NULL;
