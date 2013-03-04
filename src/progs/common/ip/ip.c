@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <ipc.h>
 #include <lock.h>
+#include <shm.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -302,7 +303,8 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
     }
 
 
-    struct ip_header *iph = malloc(sizeof(*iph) + size);
+    uintptr_t iph_shm = shm_create(sizeof(struct ip_header) + size);
+    struct ip_header *iph = shm_open(iph_shm, VMM_UW);
 
     iph->hdrlen_version = 0x45;
     iph->priority       = 0x00;
@@ -320,16 +322,21 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
     memcpy(iph + 1, data, size);
 
 
+    if (flags & O_NONBLOCK)
+        shm_close(iph_shm, iph, false);
+
+
     lock(&f->ifc->lock);
 
     pipe_set_flag(f->ifc->fd, F_DEST_MAC, f->mac);
 
-    size_t sent = stream_send(f->ifc->fd, iph, sizeof(*iph) + size, flags);
+    size_t sent = stream_send_shm(f->ifc->fd, iph_shm, sizeof(*iph) + size, flags);
 
     unlock(&f->ifc->lock);
 
 
-    free(iph);
+    if (!(flags & O_NONBLOCK))
+        shm_close(iph_shm, iph, true);
 
 
     return (sent > sizeof(*iph)) ? (sent - sizeof(*iph)) : 0;
@@ -484,21 +491,23 @@ static uintmax_t incoming(void)
 
 
         size_t total_length = pipe_get_flag(fd, F_PRESSURE);
-        struct ip_header *iph = malloc(total_length);
 
-        stream_recv(fd, iph, total_length, O_BLOCKING);
+        uintptr_t iph_shm = shm_create(total_length);
+        struct ip_header *iph = shm_open(iph_shm, VMM_UR);
+
+        stream_recv_shm(fd, iph_shm, total_length, O_BLOCKING);
 
 
         if ((iph->dest_ip != 0xffffffff) && (ntohl(iph->dest_ip) != i->ip))
         {
-            free(iph);
+            shm_close(iph_shm, iph, true);
             continue;
         }
 
         if (calculate_network_checksum(iph, (iph->hdrlen_version & 0xf) * 4))
         {
             fprintf(stderr, "(ip) incoming checksum error, discarding packet\n");
-            free(iph);
+            shm_close(iph_shm, iph, true);
             continue;
         }
 
@@ -554,7 +563,7 @@ static uintmax_t incoming(void)
         rwl_unlock_r(&connection_lock);
 
 
-        free(iph);
+        shm_close(iph_shm, iph, true);
     }
 
 

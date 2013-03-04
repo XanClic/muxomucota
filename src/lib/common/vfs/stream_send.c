@@ -77,15 +77,21 @@ big_size_t stream_send(int pipe, const void *data, big_size_t size, int flags)
 
 
     uintptr_t shm = shm_make(page_count, val, pcl, (uintptr_t)data % PAGE_SIZE);
-
     assert(shm);
 
-    // FIXME: synced? Bah. Zumindest Option für non-synced anbieten. Und das
-    // irgendwie bauen.
-    // FIXME: uintptr_t < big_size_t
-    uintptr_t retval = ipc_shm_message_synced(_pipes[pipe].pid, STREAM_SEND, shm, &ipc_ss, sizeof(ipc_ss));
+    uintmax_t retval;
 
-    shm_unmake(shm);
+    if (flags & O_NONBLOCK)
+    {
+        shm_unmake(shm, false);
+        ipc_shm_message(_pipes[pipe].pid, STREAM_SEND, shm, &ipc_ss, sizeof(ipc_ss));
+        retval = size;
+    }
+    else
+    {
+        retval = ipc_shm_message_synced(_pipes[pipe].pid, STREAM_SEND, shm, &ipc_ss, sizeof(ipc_ss));
+        shm_unmake(shm, true);
+    }
 
 
     for (int i = 0; i < ai; i++)

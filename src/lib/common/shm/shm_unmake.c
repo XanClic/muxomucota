@@ -3,7 +3,7 @@
 #include <syscall.h>
 
 
-void shm_unmake(uintptr_t shmid)
+void shm_unmake(uintptr_t shmid, bool destroy)
 {
-    syscall1(SYS_SHM_UNMAKE, shmid);
+    syscall2(SYS_SHM_UNMAKE, shmid, destroy);
 }
