@@ -84,8 +84,7 @@ void initialize_child_process_arch(process_t *child, process_t *parent)
 
     // an 16 B ausrichten
     child->arch.fxsave = (struct fxsave_space *)(((uintptr_t)child->arch.fxsave_real_space + 0xf) & ~0xf);
-
-    memcpy(child->arch.fxsave, parent->arch.fxsave, sizeof(*child->arch.fxsave));
+    child->arch.fxsave_valid = false;
 }
 
 void initialize_orphan_process_arch(process_t *proc)
@@ -93,9 +92,7 @@ void initialize_orphan_process_arch(process_t *proc)
     proc->arch.iopl = 0;
 
     proc->arch.fxsave = (struct fxsave_space *)(((uintptr_t)proc->arch.fxsave_real_space + 0xf) & ~0xf);
-
-    // ought to be enough
-    __asm__ __volatile__ ("finit; fxsave %0" :: "m"(*proc->arch.fxsave));
+    proc->arch.fxsave_valid = false;
 }
 
 

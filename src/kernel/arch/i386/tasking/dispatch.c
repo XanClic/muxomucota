@@ -30,14 +30,20 @@ void save_and_restore_fpu_and_sse(void)
     lock(&last_fpu_sse_user_lock);
 
     if (last_fpu_sse_user != NULL)
+    {
         __asm__ __volatile__ ("fxsave %0" :: "m"(*last_fpu_sse_user->arch.fxsave));
+        last_fpu_sse_user->arch.fxsave_valid = true;
+    }
 
     last_fpu_sse_user = current_process;
 
     unlock(&last_fpu_sse_user_lock);
 
 
-    __asm__ __volatile__ ("fxrstor %0" :: "m"(*current_process->arch.fxsave));
+    if (current_process->arch.fxsave_valid)
+        __asm__ __volatile__ ("fxrstor %0" :: "m"(*current_process->arch.fxsave));
+    else
+        __asm__ __volatile__ ("finit");
 }
 
 
