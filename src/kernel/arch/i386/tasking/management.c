@@ -95,7 +95,7 @@ void initialize_orphan_process_arch(process_t *proc)
     proc->arch.fxsave = (struct fxsave_space *)(((uintptr_t)proc->arch.fxsave_real_space + 0xf) & ~0xf);
 
     // ought to be enough
-    __asm__ __volatile__ ("fxsave %0" :: "m"(*proc->arch.fxsave));
+    __asm__ __volatile__ ("finit; fxsave %0" :: "m"(*proc->arch.fxsave));
 }
 
 
