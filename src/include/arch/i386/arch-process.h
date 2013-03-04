@@ -2,6 +2,7 @@
 #define _ARCH_PROCESS_H
 
 #include <compiler.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 
@@ -43,6 +44,7 @@ struct process_arch_info
     uintptr_t kernel_stack, kernel_stack_top;
     int iopl;
 
+    bool fxsave_valid;
     struct fxsave_space *fxsave;
 
     uint8_t fxsave_real_space[527];
