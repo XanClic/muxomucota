@@ -441,6 +441,22 @@ void destroy_process_struct(process_t *proc)
 }
 
 
+static void adopt_orphans(process_t *parent)
+{
+    for (process_t *c = runqueue; c != NULL; c = c->rq_next)
+        if (c->ppid == parent->pid)
+            c->ppid = parent->ppid;
+
+    for (process_t *c = daemons; c != NULL; c = c->next)
+        if (c->ppid == parent->pid)
+            c->ppid = parent->ppid;
+
+    for (process_t *c = zombies; c != NULL; c = c->next)
+        if (c->ppid == parent->pid)
+            c->ppid = parent->ppid;
+}
+
+
 void destroy_process(process_t *proc, uintmax_t exit_info)
 {
     if (proc->handles_irqs)
@@ -453,6 +469,9 @@ void destroy_process(process_t *proc, uintmax_t exit_info)
 
 
     bool is_current = proc == current_process;
+
+
+    adopt_orphans(proc);
 
 
     if (is_current)
@@ -495,6 +514,8 @@ void destroy_this_popup_thread(uintmax_t exit_info)
 
     if (current_process->popup_zombify)
         destroy_process(current_process, exit_info);
+    else
+        adopt_orphans(current_process);
 
 
     lock(&schedule_lock);
