@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <ipc.h>
 #include <lock.h>
+#include <shm.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -23,13 +24,12 @@ struct udp_header
 } cc_packed;
 
 
-struct checksum_header
+struct pseudo_ip_header
 {
     uint32_t src_ip, dest_ip;
     uint8_t zero, proto_type;
     uint16_t udp_length;
-    struct udp_header udp;
-} cc_packet;
+} cc_packed;
 
 
 struct packet
@@ -89,22 +89,21 @@ static uint16_t get_user_port(void)
 }
 
 
-static uint16_t calculate_network_checksum(void *buffer, int size)
+static uint32_t raw_checksum_calc(const uint8_t *buffer, size_t sz, uint32_t initial)
 {
-    if (size < 2)
-        return 0;
+    bool hi_byte = true;
 
-    bool odd = size & 1;
-    size &= ~1;
+    for (int i = 0; i < (int)sz; i++, hi_byte = !hi_byte)
+        initial += (buffer[i] << (hi_byte * 8)) & (0xff << (hi_byte * 8));
 
-    uint8_t *data = buffer;
+    return initial;
+}
 
-    uint32_t sum = 0;
-    for (int i = 0; i < size; i += 2)
-        sum += ((data[i] << 8) & 0xff00) + (data[i + 1] & 0xff);
 
-    if (odd)
-        sum += (data[size] << 8) & 0xff00;
+static uint16_t calculate_network_checksum(const struct pseudo_ip_header *psip, const struct udp_header *udph, size_t sz)
+{
+    uint32_t sum = raw_checksum_calc((const uint8_t *)psip, sizeof(*psip), 0);
+    sum = raw_checksum_calc((const uint8_t *)udph, sz, sum);
 
     while (sum >> 16)
         sum = (sum & 0xffff) + (sum >> 16);
@@ -269,7 +268,8 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
 {
     struct vfs_file *f = (struct vfs_file *)id;
 
-    struct checksum_header *udph = malloc(sizeof(*udph) + size);
+    uintptr_t udph_shm = shm_create(sizeof(struct udp_header) + size);
+    struct udp_header *udph = shm_open(udph_shm, VMM_UW);
 
     lock(&ip_lock);
 
@@ -278,35 +278,42 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
 
     unlock(&ip_lock);
 
-    udph->src_ip     = htonl(my_ip);
-    udph->dest_ip    = htonl(f->dest_ip);
-    udph->zero       = 0x00;
-    udph->proto_type = 0x11;
-    udph->udp_length = htons(sizeof(udph->udp) + size);
+    struct pseudo_ip_header psip = {
+        .src_ip     = htonl(my_ip),
+        .dest_ip    = htonl(f->dest_ip),
+        .zero       = 0x00,
+        .proto_type = 0x11,
+        .udp_length = htons(sizeof(*udph) + size)
+    };
 
-    udph->udp.src_port  = htons(f->port);
-    udph->udp.dest_port = htons(f->dest_port);
-    udph->udp.length    = htons(sizeof(udph->udp) + size);
-    udph->udp.checksum  = 0x0000;
+    udph->src_port  = htons(f->port);
+    udph->dest_port = htons(f->dest_port);
+    udph->length    = htons(sizeof(*udph) + size);
+    udph->checksum  = 0x0000;
 
     memcpy(udph + 1, data, size);
 
-    udph->udp.checksum = htons(calculate_network_checksum(udph, sizeof(*udph) + size));
+    udph->checksum = htons(calculate_network_checksum(&psip, udph, sizeof(*udph) + size));
+
+
+    if (flags & O_NONBLOCK)
+        shm_close(udph_shm, udph, false);
 
 
     lock(&ip_lock);
 
     pipe_set_flag(ip_fd, F_DEST_IP, f->dest_ip);
 
-    size_t sent = stream_send(ip_fd, &udph->udp, sizeof(udph->udp) + size, flags);
+    size_t sent = stream_send_shm(ip_fd, udph_shm, sizeof(*udph) + size, flags);
 
     unlock(&ip_lock);
 
 
-    free(udph);
+    if (!(flags & O_NONBLOCK))
+        shm_close(udph_shm, udph, true);
 
 
-    return (sent > sizeof(udph->udp)) ? (sent - sizeof(udph->udp)) : 0;
+    return (sent > sizeof(*udph)) ? (sent - sizeof(*udph)) : 0;
 }
 
 
@@ -440,26 +447,30 @@ static uintmax_t incoming(void)
 
 
         size_t total_length = pipe_get_flag(fd, F_PRESSURE);
-        struct checksum_header *udph = malloc(total_length + offsetof(struct checksum_header, udp));
 
-        stream_recv(fd, &udph->udp, total_length, O_BLOCKING);
+        uintptr_t udph_shm = shm_create(total_length);
+        struct udp_header *udph = shm_open(udph_shm, VMM_UR | VMM_UW);
+
+        stream_recv_shm(fd, udph_shm, total_length, O_BLOCKING);
 
 
-        size_t raw_data_size = ntohs(udph->udp.length) - sizeof(udph->udp);
+        size_t raw_data_size = ntohs(udph->length) - sizeof(*udph);
 
 
-        udph->src_ip     = htonl(src_ip);
-        udph->dest_ip    = htonl(dest_ip);
-        udph->zero       = 0x00;
-        udph->proto_type = 0x11;
-        udph->udp_length = htons(total_length);
+        struct pseudo_ip_header psip = {
+            .src_ip     = htonl(src_ip),
+            .dest_ip    = htonl(dest_ip),
+            .zero       = 0x00,
+            .proto_type = 0x11,
+            .udp_length = htons(total_length)
+        };
 
 
         // FIXME: Da hab ichs mir aber ein bisschen einfach gemacht (apropos 0xffff)
-        if (udph->udp.checksum && (udph->udp.checksum != 0xffff) && calculate_network_checksum(udph, raw_data_size + sizeof(*udph)))
+        if (udph->checksum && (udph->checksum != 0xffff) && calculate_network_checksum(&psip, udph, total_length))
         {
             fprintf(stderr, "(udp) incoming checksum error, discarding packet\n");
-            free(udph);
+            shm_close(udph_shm, udph, true);
             continue;
         }
 
@@ -468,7 +479,7 @@ static uintmax_t incoming(void)
 
         for (struct vfs_file *f = connections; f != NULL; f = f->next)
         {
-            if (ntohs(udph->udp.dest_port) != f->port)
+            if (ntohs(udph->dest_port) != f->port)
                 continue;
 
 
@@ -477,7 +488,7 @@ static uintmax_t incoming(void)
             p->next     = NULL;
 
             p->src_ip   = src_ip;
-            p->src_port = ntohs(udph->udp.src_port);
+            p->src_port = ntohs(udph->src_port);
 
             p->length   = raw_data_size;
             p->data     = malloc(p->length);
@@ -513,7 +524,7 @@ static uintmax_t incoming(void)
         rwl_unlock_r(&connection_lock);
 
 
-        free(udph);
+        shm_close(udph_shm, udph, true);
     }
 
 

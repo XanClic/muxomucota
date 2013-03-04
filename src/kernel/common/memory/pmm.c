@@ -174,7 +174,7 @@ uintptr_t pmm_alloc(void)
     }
 
 
-    kassert(0);
+    kassert_print(0, "physical memory exhausted", 0);
 
 
     return 0;
@@ -183,12 +183,12 @@ uintptr_t pmm_alloc(void)
 
 void pmm_free(uintptr_t paddr)
 {
-    kassert(!(paddr & (PAGE_SIZE - 1)));
+    kassert_print(!(paddr & (PAGE_SIZE - 1)), "paddr=%p", paddr);
 
 
     int base = (paddr - mem_base) >> PAGE_SHIFT;
 
-    kassert(bitmap[base] & BITMAP_USERS);
+    kassert_print(bitmap[base] & BITMAP_USERS, "paddr=%p\nbase=%i\nbitmap[base]=%p", paddr, base, (uintptr_t)bitmap[base]);
     if (!--bitmap[base] && (look_from_here > base))
         look_from_here = base;
 }
@@ -196,13 +196,13 @@ void pmm_free(uintptr_t paddr)
 
 void pmm_use(uintptr_t paddr)
 {
-    kassert(!(paddr & (PAGE_SIZE - 1)));
+    kassert_print(!(paddr & (PAGE_SIZE - 1)), "paddr=%p", paddr);
 
 
     int base = (paddr - mem_base) >> PAGE_SHIFT;
 
-    kassert(bitmap[base] & BITMAP_USERS); // Wenn das bisher unused ist, ist das doof.
-    kassert((bitmap[base] & BITMAP_USERS) < BITMAP_USERS); // Sonst wird das Inkrementieren lustig.
+    kassert_print(bitmap[base] & BITMAP_USERS, "paddr=%p\nbase=%i\nbitmap[base]=%p", paddr, base, (uintptr_t)bitmap[base]); // Wenn das bisher unused ist, ist das doof.
+    kassert_print((bitmap[base] & BITMAP_USERS) < BITMAP_USERS, "paddr=%p\nbase=%i\nbitmap[base]=%p", paddr, base, (uintptr_t)bitmap[base]); // Sonst wird das Inkrementieren lustig.
 
     bitmap[base]++;
 }
@@ -210,7 +210,7 @@ void pmm_use(uintptr_t paddr)
 
 int pmm_user_count(uintptr_t paddr)
 {
-    kassert(!(paddr & (PAGE_SIZE - 1)));
+    kassert_print(!(paddr & (PAGE_SIZE - 1)), "paddr=%p", paddr);
 
     return bitmap[(paddr - mem_base) >> PAGE_SHIFT] & BITMAP_USERS;
 }
@@ -224,12 +224,12 @@ bool pmm_alloced(uintptr_t paddr)
 
 void pmm_mark_cow(uintptr_t paddr, bool flag)
 {
-    kassert(!(paddr & (PAGE_SIZE - 1)));
+    kassert_print(!(paddr & (PAGE_SIZE - 1)), "paddr=%p", paddr);
 
 
     int base = (paddr - mem_base) >> PAGE_SHIFT;
 
-    kassert(bitmap[base] & BITMAP_USERS);
+    kassert_print(bitmap[base] & BITMAP_USERS, "paddr=%p\nbase=%i\nbitmap[base]=%p", paddr, base, (uintptr_t)bitmap[base]);
 
 
     if (flag)
@@ -241,11 +241,11 @@ void pmm_mark_cow(uintptr_t paddr, bool flag)
 
 bool pmm_is_cow(uintptr_t paddr)
 {
-    kassert(!(paddr & (PAGE_SIZE - 1)));
+    kassert_print(!(paddr & (PAGE_SIZE - 1)), "paddr=%p", paddr);
 
     int index = (paddr - mem_base) >> PAGE_SHIFT;
 
-    kassert(bitmap[index] & BITMAP_USERS);
+    kassert_print(bitmap[index] & BITMAP_USERS, "paddr=%p\nindex=%i\nbitmap[index]=%p", paddr, index, (uintptr_t)bitmap[index]);
 
     return !!(bitmap[index] & BITMAP_COW_FLAG);
 }

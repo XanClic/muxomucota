@@ -72,7 +72,7 @@ uintptr_t vmmc_create_shm(size_t sz);
 uintptr_t vmmc_make_shm(vmm_context_t *context, int count, void **vaddr_list, int *page_count_list, ptrdiff_t offset);
 void *vmmc_open_shm(vmm_context_t *context, uintptr_t shm_id, unsigned flags);
 void vmmc_close_shm(vmm_context_t *context, uintptr_t shm_id, void *virt, bool destroy);
-void vmmc_unmake_shm(uintptr_t shm_id);
+void vmmc_unmake_shm(uintptr_t shm_id, bool destroy);
 size_t vmmc_get_shm_size(uintptr_t shm_id);
 
 

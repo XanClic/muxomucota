@@ -169,20 +169,23 @@ void vmmc_close_shm(vmm_context_t *context, uintptr_t shm_id, void *virt, bool d
 }
 
 
-void vmmc_unmake_shm(uintptr_t shm_id)
+void vmmc_unmake_shm(uintptr_t shm_id, bool destroy)
 {
     struct shm_sg *sg = (struct shm_sg *)shm_id;
 
-    if (sg->kept_alive)
+    if (destroy)
     {
-        int pages = (sg->size + PAGE_SIZE - 1) / PAGE_SIZE;
+        if (sg->kept_alive)
+        {
+            int pages = (sg->size + PAGE_SIZE - 1) / PAGE_SIZE;
 
-        for (int i = 0; i < pages; i++)
-            pmm_free(sg->phys[i]);
+            for (int i = 0; i < pages; i++)
+                pmm_free(sg->phys[i]);
+        }
+
+        if (!__sync_sub_and_fetch(&sg->users, 1))
+            kfree(sg);
     }
-
-    if (sg->kept_alive || !__sync_sub_and_fetch(&sg->users, 1))
-        kfree(sg);
 }
 
 

@@ -162,6 +162,8 @@ void duplicate_all_pipes(void);
 
 big_size_t stream_send(int pipe, const void *data, big_size_t size, int flags);
 big_size_t stream_recv(int pipe, void *data, big_size_t size, int flags);
+big_size_t stream_send_shm(int pipe, uintptr_t shmid, big_size_t size, int flags);
+big_size_t stream_recv_shm(int pipe, uintptr_t shmid, big_size_t size, int flags);
 
 uintmax_t pipe_get_flag(int pipe, int flag);
 int pipe_set_flag(int pipe, int flag, uintmax_t value);

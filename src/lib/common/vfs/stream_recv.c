@@ -84,10 +84,9 @@ big_size_t stream_recv(int pipe, void *data, big_size_t size, int flags)
 
     assert(shm);
 
-    // FIXME: uintptr_t < big_size_t
-    uintptr_t retval = ipc_shm_message_synced(_pipes[pipe].pid, STREAM_RECV, shm, &ipc_sr, sizeof(ipc_sr));
+    uintmax_t retval = ipc_shm_message_synced(_pipes[pipe].pid, STREAM_RECV, shm, &ipc_sr, sizeof(ipc_sr));
 
-    shm_unmake(shm);
+    shm_unmake(shm, true);
 
 
     for (int i = 0; i < ai; i++)

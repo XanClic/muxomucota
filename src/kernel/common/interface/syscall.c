@@ -178,7 +178,7 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
                 return 0;
             }
             // FIXME: p0 (shm_id) noch besser testen
-            vmmc_unmake_shm(p0);
+            vmmc_unmake_shm(p0, p1);
             return 0;
 
         case SYS_SHM_SIZE:
