@@ -469,5 +469,8 @@ int main(void)
         my_fgets(input, 128, STDIN_FILENO);
 
         cmd_called(cmdtok(input));
+
+
+        while (waitpid(-1, NULL, WNOHANG) > 0);
     }
 }

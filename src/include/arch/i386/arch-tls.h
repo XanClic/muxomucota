@@ -2,17 +2,6 @@
 #define _ARCH_TLS_H
 
 #include <compiler.h>
-#include <sys/types.h>
-
-
-struct tls
-{
-    struct tls *absolute;
-
-    pid_t pid, pgid, ppid;
-
-    int errno;
-};
 
 
 #ifndef KERNEL

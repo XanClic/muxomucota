@@ -21,11 +21,46 @@ extern lock_t schedule_lock;
 process_t *current_process, *idle_process, *runqueue, *daemons, *zombies, *dead;
 
 
+static unsigned long used_pids[MAX_PID_COUNT / LONG_BIT];
+
+
 static inline pid_t get_new_pid(void)
 {
-    static pid_t pid_counter = 1;
+    for (int i = 0; i < MAX_PID_COUNT/ LONG_BIT; i++)
+    {
+        if (used_pids[i] != ULONG_MAX)
+        {
+            int bit = ffsl(~used_pids[i]);
 
-    return __sync_fetch_and_add(&pid_counter, 1);
+            unsigned long old = used_pids[i];
+            unsigned long new = used_pids[i] | (1 << (bit - 1));
+
+            if (!__sync_bool_compare_and_swap(&used_pids[i], old, new))
+            {
+                i--;
+                continue;
+            }
+
+
+            return (pid_t)i * LONG_BIT + bit;
+        }
+    }
+
+
+    return 0;
+}
+
+
+static inline void relinquish_pid(pid_t pid)
+{
+    unsigned long new, old;
+
+    do
+    {
+        old = used_pids[(pid - 1) / LONG_BIT];
+        new = old & ~(1 << ((pid - 1) % LONG_BIT));
+    }
+    while (!__sync_bool_compare_and_swap(&used_pids[(pid - 1) / LONG_BIT], old, new));
 }
 
 
@@ -427,7 +462,7 @@ void set_process_popup_entry(process_t *proc, void (*entry)(void))
 void destroy_process_struct(process_t *proc)
 {
     if (proc->popup_stack_mask != NULL)
-        if (__sync_sub_and_fetch(&proc->popup_stack_mask->refcount, 1))
+        if (!__sync_sub_and_fetch(&proc->popup_stack_mask->refcount, 1))
             kfree(proc->popup_stack_mask);
 
     destroy_process_arch_struct(proc);
@@ -437,23 +472,31 @@ void destroy_process_struct(process_t *proc)
     if (!proc->vmmc->users)
         kfree(proc->vmmc);
 
+    relinquish_pid(proc->pid);
+
     kfree(proc);
 }
 
+
+static void adopt(pid_t parent_pid, process_t *child)
+{
+    child->ppid = parent_pid;
+    child->tls->ppid = parent_pid;
+}
 
 static void adopt_orphans(process_t *parent)
 {
     for (process_t *c = runqueue; c != NULL; c = c->rq_next)
         if (c->ppid == parent->pid)
-            c->ppid = parent->ppid;
+            adopt(parent->ppid, c);
 
     for (process_t *c = daemons; c != NULL; c = c->next)
         if (c->ppid == parent->pid)
-            c->ppid = parent->ppid;
+            adopt(parent->ppid, c);
 
     for (process_t *c = zombies; c != NULL; c = c->next)
         if (c->ppid == parent->pid)
-            c->ppid = parent->ppid;
+            adopt(parent->ppid, c);
 }
 
 
@@ -702,11 +745,6 @@ void daemonize_from_irq_handler(process_t *proc)
 pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer, size_t length, bool zombify)
 {
     if (proc->popup_stack_mask == NULL)
-        return -EINVAL;
-
-
-    // TODO
-    if (proc->pid != proc->pgid)
         return -EINVAL;
 
 
