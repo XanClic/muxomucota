@@ -121,6 +121,12 @@ void add_process_func_param(process_t *proc, struct cpu_state *state, uintptr_t 
 }
 
 
+void set_process_func_regparam(struct cpu_state *state, uintptr_t param)
+{
+    state->eax = param;
+}
+
+
 void process_simulate_func_call(struct cpu_state *state)
 {
     state->esp -= sizeof(void (*)(void));

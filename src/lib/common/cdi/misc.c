@@ -28,7 +28,7 @@ struct irq_info
 };
 
 
-static void raw_irq_handler(void *info)
+static void __attribute__((regparm(1))) raw_irq_handler(void *info)
 {
     struct irq_info *irq_info = info;
 

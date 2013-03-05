@@ -191,7 +191,7 @@ static int kbd_b[128] =
 };
 
 
-static void irq(void *info)
+static void __attribute__((regparm(1))) irq(void *info)
 {
     (void)info;
 

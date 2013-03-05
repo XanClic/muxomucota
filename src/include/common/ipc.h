@@ -31,7 +31,7 @@ void popup_ping_handler(int index, uintmax_t (*handler)(void));
 void popup_message_handler(int index, uintmax_t (*handler)(void));
 void popup_shm_handler(int index, uintmax_t (*handler)(uintptr_t));
 
-void register_irq_handler(int irq, void (*handler)(void *info), void *info);
+void register_irq_handler(int irq, void (__attribute__((regparm(1))) *handler)(void *info), void *info);
 noreturn void irq_handler_exit(void);
 
 

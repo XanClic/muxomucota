@@ -18,7 +18,7 @@ struct isr
         struct
         {
             process_t *process;
-            void (*process_handler)(void *info);
+            void (__attribute__((regparm(1))) *process_handler)(void *info);
             void *info;
         };
     };
@@ -52,7 +52,7 @@ void register_kernel_isr(int irq, void (*isr)(struct cpu_state *state))
 }
 
 
-void register_user_isr(int irq, process_t *process, void (*process_handler)(void *info), void *info)
+void register_user_isr(int irq, process_t *process, void (__attribute__((regparm(1))) *process_handler)(void *info), void *info)
 {
     kassert_print(process->handled_irq < 0, "Already handling IRQ %i", process->handled_irq);
 
@@ -126,8 +126,12 @@ int common_irq_handler(int irq, struct cpu_state *state)
             // gibt es auch keinen State, den man hier kaputtmachen könnte.
             make_process_entry(isr->process, isr->process->cpu_state, (void (*)(void))isr->process_handler, isr->process->irq_stack_top);
 
-            add_process_func_param(isr->process, isr->process->cpu_state, (uintptr_t)isr->info);
-            process_simulate_func_call(isr->process->cpu_state);
+            // Muss im Register übergeben werden, sonst könnten Locks auf den
+            // virtuellen Speicher fällig werden.
+            set_process_func_regparam(isr->process->cpu_state, (uintptr_t)isr->info);
+
+            // Sollte bei reiner Registerübergabe nicht nötig sein.
+            //process_simulate_func_call(isr->process->cpu_state);
 
             isr->process->status = PROCESS_ACTIVE;
 
