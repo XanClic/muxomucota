@@ -27,6 +27,9 @@ static void join_memory(void)
 
     while (current->next != NULL)
     {
+        if ((uintptr_t)current < (uintptr_t)current->next + current->next->size + 16)
+            *(volatile uintptr_t *)NULL = 0;
+
         if ((uintptr_t)current == (uintptr_t)current->next + current->next->size + 16)
             current = current->next;
         else if (*base != current)

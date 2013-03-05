@@ -1,4 +1,5 @@
 #include <ipc.h>
+#include <kassert.h>
 #include <lock.h>
 #include <process.h>
 #include <stdbool.h>
@@ -11,7 +12,10 @@ void lock(volatile lock_t *v)
     pid_t mypid = (current_process == NULL) ? -1 : current_process->pid, owner;
 
     while ((owner = __sync_val_compare_and_swap(v, 0, mypid)) != 0)
+    {
+        kassert(mypid != owner);
         yield_to(owner);
+    }
 }
 
 
