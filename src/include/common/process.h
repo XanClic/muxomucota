@@ -130,6 +130,7 @@ void *process_stack_alloc(struct cpu_state *state, size_t size);
 
 
 void add_process_func_param(process_t *proc, struct cpu_state *state, uintptr_t param);
+void set_process_func_regparam(struct cpu_state *state, uintptr_t param);
 void process_simulate_func_call(struct cpu_state *state);
 
 
