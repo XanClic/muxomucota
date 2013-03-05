@@ -468,6 +468,8 @@ static void flush_all_queues(struct tcp_connection *c)
         p = np;
     }
 
+    c->inqueue = NULL;
+
     rwl_unlock_w(&c->inqueue_lock);
 
 
@@ -484,6 +486,8 @@ static void flush_all_queues(struct tcp_connection *c)
 
         p = np;
     }
+
+    c->outqueue = NULL;
 
     rwl_unlock_w(&c->outqueue_lock);
 }
