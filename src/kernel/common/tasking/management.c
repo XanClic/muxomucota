@@ -713,7 +713,7 @@ pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer
     uintptr_t stack_top = 0;
     int stack_index = -1;
 
-    for (int i = 0; i < POPUP_STACKS; i++)
+    for (int i = 0; i < POPUP_STACKS / LONG_BIT; i++)
     {
         if (proc->popup_stack_mask->mask[i] != ULONG_MAX)
         {
@@ -728,7 +728,7 @@ pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer
                 continue;
             }
 
-            stack_top = USER_STACK_BASE + bit * POPUP_STACK_SIZE;
+            stack_top = USER_STACK_BASE + (i * LONG_BIT + bit) * POPUP_STACK_SIZE;
 
             stack_index = (i * LONG_BIT) + (bit - 1);
 
