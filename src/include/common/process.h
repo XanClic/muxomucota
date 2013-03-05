@@ -13,7 +13,7 @@
 
 
 #ifdef KERNEL
-#define COOPERATIVE
+// #define COOPERATIVE
 #endif
 
 
@@ -29,6 +29,8 @@ typedef enum process_status
     PROCESS_DESTRUCT
 } process_status_t;
 
+
+#define MAX_PID_COUNT    65536
 
 #define POPUP_STACKS      1024
 #define POPUP_STACK_SIZE 65536
