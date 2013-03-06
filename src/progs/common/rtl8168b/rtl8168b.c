@@ -316,26 +316,29 @@ static void rtl8168b_unown_rx_desc(struct rtl8168b_device* netcard, int i)
 
 static void rtl8168b_handle_receive_ok(struct rtl8168b_device* netcard)
 {
-    static bool is_first = true;
+    static bool is_second = true;
 
 
     int i;
 
 
-    if (__sync_bool_compare_and_swap(&is_first, true, false)) {
-        // Oh god please, somebody fix this.
-        // (The netword card always receives the first package as garbage, using
-        // this driver, while hitting the Rx OK interrupt anyway. It
-        // nevertheless seems to notice something fishy going on, thus
-        // automatically resetting the Rx index to 0. The second packet will
-        // therefore also be received in descriptor 0.)
-        i = 0;
-    } else {
-        do {
-            i = netcard->rx_index;
-        } while (!__sync_bool_compare_and_swap(&netcard->rx_index, i,
-            (i + 1) % RX_BUFFER_COUNT));
+    // Oh god please, somebody fix this.
+    // (One of my two cards always receives the first package as garbage,
+    // using this driver, while hitting the Rx OK interrupt anyway. It
+    // nevertheless seems to notice something fishy going on, thus
+    // automatically resetting the Rx index to 0. The second packet will
+    // therefore also be received in descriptor 0.)
+    if ((netcard->rx_index == 1) &&
+        __sync_bool_compare_and_swap(&is_second, true, false) &&
+        !(netcard->rx_buffer[0].command & DC_OWN))
+    {
+        netcard->rx_index = 0;
     }
+
+    do {
+        i = netcard->rx_index;
+    } while (!__sync_bool_compare_and_swap(&netcard->rx_index, i,
+        (i + 1) % RX_BUFFER_COUNT));
 
     if (netcard->rx_buffer[i].command & DC_OWN) {
         netcard->rx_index = i;
