@@ -3,10 +3,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <vmem.h>
 #include <vfs.h>
 #include <cdi.h>
 #include <cdi/lists.h>
 #include <cdi/pci.h>
+#include <drivers/memory.h>
 #include <drivers/pci.h>
 
 #ifdef X86
@@ -24,7 +26,31 @@ void cdi_pci_alloc_ioports(struct cdi_pci_device *device)
 
     iopl(3);
 }
+
+void cdi_pci_free_ioports(struct cdi_pci_device *device)
+{
+    (void)device;
+}
 #endif
+
+
+void cdi_pci_alloc_memory(struct cdi_pci_device *device)
+{
+    struct cdi_pci_resource *res;
+
+    for (int i = 0; (res = cdi_list_get(device->resources, i)) != NULL; i++)
+        if (res->type == CDI_PCI_MEMORY)
+            res->address = map_memory(res->start, res->length, VMM_UR | VMM_UW);
+}
+
+void cdi_pci_free_memory(struct cdi_pci_device *device)
+{
+    struct cdi_pci_resource *res;
+
+    for (int i = 0; (res = cdi_list_get(device->resources, i)) != NULL; i++)
+        if (res->type == CDI_PCI_MEMORY)
+            unmap_memory(res->address, res->length);
+}
 
 
 static void serve_device(struct cdi_driver *drv, const char *devname, struct pci_config_space *conf_space, int bus, int device, int function)
@@ -63,6 +89,9 @@ static void serve_device(struct cdi_driver *drv, const char *devname, struct pci
     for (int i = 0; i < 6; i++)
     {
         uint32_t val = conf_space->hdr0.bar[i];
+
+        if (!val)
+            continue;
 
         if (val & 1)
         {
@@ -138,6 +167,8 @@ static void serve_device(struct cdi_driver *drv, const char *devname, struct pci
                 stream_send(fd, &val64, sizeof(val64), O_BLOCKING);
 
                 cdi_list_push(cdi_pci_dev->resources, res);
+
+                i++;
             }
         }
     }

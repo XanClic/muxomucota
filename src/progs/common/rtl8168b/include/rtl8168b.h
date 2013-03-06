@@ -44,12 +44,22 @@
 #define REG_INTERRUPT_STATUS        0x3E
 #define REG_TRANSMIT_CONFIGURATION  0x40
 #define REG_RECEIVE_CONFIGURATION   0x44
+#define REG_PHY_ACCESS              0x60
+#define REG_PHY_DATA                0x60
+#define REG_PHY_ADDRESS             0x62
+#define REG_PHY_RW                  0x63
 #define REG_PHY_STATUS              0x6C
+#define REG_RECV_MAX_SIZE           0xDA
+#define REG_CP_COMMAND              0xE0
 #define REG_RECEIVE_DESCRIPTORS     0xE4
+#define REG_MAX_TRANS_SIZE          0xEC
 
 #define CR_RESET                (1 << 4)
 #define CR_RECEIVER_ENABLE      (1 << 3)
 #define CR_TRANSMITTER_ENABLE   (1 << 2)
+
+#define CPCR_VLAN_DETAG         (1 << 6)
+#define CPCR_CHECKSUM_OFFLOAD   (1 << 5)
 
 #define TPR_PACKET_WAITING      (1 << 6)
 
@@ -58,6 +68,7 @@
 #define TCR_MXDMA_1024          (6 << 8)
 #define TCR_MXDMA_UNLIMITED     (7 << 8)
 
+#define RCR_NO_FIFO_THRESHOLD   (7 << 13)
 #define RCR_MXDMA_512           (5 << 8)
 #define RCR_MXDMA_1024          (6 << 8)
 #define RCR_MXDMA_UNLIMITED     (7 << 8)
@@ -69,6 +80,13 @@
 #define ISR_RECEIVE_BUFFER_OVERFLOW (1 << 4)
 #define ISR_TRANSMIT_OK             (1 << 2)
 #define ISR_RECEIVE_OK              (1 << 0)
+
+#define PA_RW   (1 << 31)
+
+#define PHY_REG_BMCR 0x00
+
+#define PHY_BMCR_RESET            (1 << 15)
+#define PHY_BMCR_AUTO_NEGOTIATION (1 << 12)
 
 #define DC_OWN  (1 << 31)
 #define DC_EOR  (1 << 30)
@@ -88,28 +106,33 @@
 #define TX_BUFFER_SIZE  (0x1000 & DC_LENGTH)
 #define RX_BUFFER_SIZE  (0x2000 & DC_LENGTH)
 
-#define TX_BUFFER_COUNT 1
-#define RX_BUFFER_COUNT 1
+#define TX_BUFFER_COUNT 16
+#define RX_BUFFER_COUNT 16
 
 struct rtl8168b_descriptor
 {
-    uint32_t command;
+    volatile uint32_t command;
     uint32_t vlan;
     uint64_t address;
 };
 
 struct rtl8168b_device {
     struct cdi_net_device       net;
-    uintptr_t                   phys;
-    uint16_t                    port_base;
-    uint8_t                     lock;
-    struct rtl8168b_descriptor  tx_buffer[TX_BUFFER_COUNT]
-                                    __attribute__ ((aligned (256)));
+    void*                       mmio;
+
+    int                         tx_index;
+    int                         rx_index;
+
+    struct cdi_mem_area*        tx_buffer_area;
+    struct cdi_mem_area*        rx_buffer_area;
+
+    struct rtl8168b_descriptor* tx_buffer;
+    uintptr_t                   tx_buffer_phys;
     struct cdi_mem_area*        tx_area[TX_BUFFER_COUNT];
-    struct rtl8168b_descriptor  rx_buffer[RX_BUFFER_COUNT]
-                                    __attribute__ ((aligned (256)));
+
+    struct rtl8168b_descriptor* rx_buffer;
+    uintptr_t                   rx_buffer_phys;
     struct cdi_mem_area*        rx_area[RX_BUFFER_COUNT];
-    cdi_list_t                  pending_sends;
 };
 
 struct cdi_device* rtl8168b_init_device(struct cdi_bus_data* bus_data);
