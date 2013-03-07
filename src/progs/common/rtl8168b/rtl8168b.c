@@ -38,7 +38,8 @@
 
 #include "rtl8168b.h"
 
-#define DEBUG_MSG(s) printf("[RTL8111B/8168B] debug: %s() '%s'\n", __FUNCTION__, s)
+#define DEBUG_MSG(s) \
+    printf("[RTL8111B/8168B] debug: %s() '%s'\n", __FUNCTION__, s)
 #define DEVICE_MSG printf
 
 static void rtl8168b_handle_interrupt(struct cdi_device* device);
@@ -226,12 +227,15 @@ struct cdi_device* rtl8168b_init_device(struct cdi_bus_data* bus_data)
     }
 
     DEBUG_MSG("Initialisiere Buffer");
-    write_register_64(netcard, REG_RECEIVE_DESCRIPTORS, netcard->rx_buffer_phys);
-    write_register_64(netcard, REG_TRANSMIT_DESCRIPTORS, netcard->tx_buffer_phys);
+    write_register_64(netcard, REG_RECEIVE_DESCRIPTORS,
+        netcard->rx_buffer_phys);
+    write_register_64(netcard, REG_TRANSMIT_DESCRIPTORS,
+        netcard->tx_buffer_phys);
 
     DEBUG_MSG("Initialisiere RCR/TCR");
     write_register_32(netcard, REG_RECEIVE_CONFIGURATION,
-        RCR_MXDMA_UNLIMITED | RCR_NO_FIFO_THRESHOLD | RCR_ACCEPT_BROADCAST | RCR_ACCEPT_PHYS_MATCH);
+        RCR_MXDMA_UNLIMITED | RCR_NO_FIFO_THRESHOLD | RCR_ACCEPT_BROADCAST |
+        RCR_ACCEPT_PHYS_MATCH);
     write_register_32(netcard, REG_TRANSMIT_CONFIGURATION,
         TCR_MXDMA_UNLIMITED | TCR_IFG_STANDARD);
 
@@ -316,24 +320,7 @@ static void rtl8168b_unown_rx_desc(struct rtl8168b_device* netcard, int i)
 
 static void rtl8168b_handle_receive_ok(struct rtl8168b_device* netcard)
 {
-    static bool is_second = true;
-
-
     int i;
-
-
-    // Oh god please, somebody fix this.
-    // (One of my two cards always receives the first package as garbage,
-    // using this driver, while hitting the Rx OK interrupt anyway. It
-    // nevertheless seems to notice something fishy going on, thus
-    // automatically resetting the Rx index to 0. The second packet will
-    // therefore also be received in descriptor 0.)
-    if ((netcard->rx_index == 1) &&
-        __sync_bool_compare_and_swap(&is_second, true, false) &&
-        !(netcard->rx_buffer[0].command & DC_OWN))
-    {
-        netcard->rx_index = 0;
-    }
 
     do {
         i = netcard->rx_index;
@@ -342,15 +329,23 @@ static void rtl8168b_handle_receive_ok(struct rtl8168b_device* netcard)
 
     if (netcard->rx_buffer[i].command & DC_OWN) {
         netcard->rx_index = i;
-        DEVICE_MSG("[RTL8111B/8168B] Empfangsdeskriptor sollte %i sein, dort ist aber nichts.\n", i);
 
-        return;
+        if (!(netcard->rx_buffer[0].command & DC_OWN)) {
+            // FIXME: Make atomic
+            i = 0;
+            netcard->rx_index = 1;
+        } else {
+            DEVICE_MSG("[RTL8111B/8168B] Empfangsdeskriptor sollte %i sein, "
+                "dort ist aber nichts.\n", i);
+            return;
+        }
     }
 
 
     size_t sz = netcard->rx_buffer[i].command & DC_LENGTH;
 
-    DEVICE_MSG("[RTL8111B/8168B] Empfange %i B von Deskriptor %i\n", (int)sz - 4, i);
+    DEVICE_MSG("[RTL8111B/8168B] Empfange %i B von Deskriptor %i\n",
+        (int)sz - 4, i);
 
     if (sz < 5)
     {
@@ -386,7 +381,8 @@ static void rtl8168b_handle_link_change(struct rtl8168b_device* netcard)
             speed |= 10;
         }
 
-        DEVICE_MSG("[RTL8111B/8168B] Link up (%uMb/s %s-duplex)\n", speed & 0x7FFF, (speed & 0x8000) ? "Full" : "Half");
+        DEVICE_MSG("[RTL8111B/8168B] Link up (%uMb/s %s-duplex)\n",
+            speed & 0x7FFF, (speed & 0x8000) ? "Full" : "Half");
     }
 }
 
