@@ -201,7 +201,8 @@ static void pcnet_handle_interrupt(struct cdi_device* device)
             else
             {
                 size_t size = netcard->receive_descriptor[netcard->last_receive_descriptor].flags2 & 0xFFFF;
-                if (size > 64)size -= 4;
+                // Makes sense, but breaks under VBox 4.2.10 (for whatever reason)
+                // if (size > 64)size -= 4;
                 cdi_net_receive((struct cdi_net_device*) netcard,
                                 netcard->receive_buffer[netcard->last_receive_descriptor],
                                 size);
