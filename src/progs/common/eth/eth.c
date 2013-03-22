@@ -95,7 +95,7 @@ struct ethernet_frame
 
 static bool eth_receive(struct network_card *card, const void *data, size_t length)
 {
-    if (length < 60)
+    if (length < sizeof(struct ethernet_frame))
     {
         fprintf(stderr, "(%s) short packet\n", card->name);
         return false;
