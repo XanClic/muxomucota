@@ -8,6 +8,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <vfs.h>
+#include <vm86.h>
+
+
+// #define WRONG
 
 
 uint16_t *text_mem;
@@ -64,6 +68,16 @@ static void scroll_down(void)
 {
     // FIXME, aber irgendwie auch nicht (tut ja so)
 
+#ifdef WRONG
+    uint32_t *dst = (uint32_t *)(text_mem + 80 * 25);
+    uint32_t *src = (uint32_t *)(text_mem + 80 * 24);
+
+    for (int i = 0; i < 960; i++)
+        *(--dst) = *(--src);
+
+    for (int i = 0; i < 40; i++)
+        *(--dst) = 0x07200720;
+#else
     uint32_t *dst = (uint32_t *)text_mem;
     uint32_t *src = (uint32_t *)(text_mem + 80);
 
@@ -72,6 +86,7 @@ static void scroll_down(void)
 
     for (int i = 0; i < 40; i++)
         *(dst++) = 0x07200720;
+#endif
 }
 
 static void clrscr(int fg, int bg)
@@ -88,12 +103,26 @@ static void clrscr(int fg, int bg)
 
 static void display_cursor(uint8_t x, uint8_t y)
 {
+#ifdef WRONG
+    uint16_t tmp = (24 - y) * 80 + 79 - x;
+#else
     uint16_t tmp = y * 80 + x;
+#endif
 
     out8(0x3D4, 14);
     out8(0x3D5, tmp >> 8);
     out8(0x3D4, 15);
     out8(0x3D5, tmp);
+}
+
+
+static uint16_t *recalc_pos(int x, int y)
+{
+#ifdef WRONG
+    return &text_mem[(24 - y) * 80 + 79 - x];
+#else
+    return &text_mem[y * 80 + x];
+#endif
 }
 
 
@@ -120,7 +149,7 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
 
     lock(&output_lock);
 
-    uint16_t *output = &text_mem[y * 80 + x];
+    uint16_t *output = recalc_pos(x, y);
 
 
     const char *s = data;
@@ -245,7 +274,7 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
                         type = ANSI_UNKNOWN;
                         x = tp->sx;
                         y = tp->sy;
-                        output = &text_mem[y * 80 + x];
+                        output = recalc_pos(x, y);
                         s++;
                         break;
                     default:
@@ -274,7 +303,7 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
                             }
                             x = nx;
                             y = ny;
-                            output = &text_mem[y * 80 + x];
+                            output = recalc_pos(x, y);
                             break;
                         }
                     case ANSI_COLOR:
@@ -403,7 +432,7 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
                 }
             case '\r':
                 x = 0;
-                output = &text_mem[y * 80];
+                output = recalc_pos(x, y);
                 break;
             case '\b':
                 if (x > 0)
@@ -416,14 +445,19 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
                         y--;
                     }
                 }
-                output = &text_mem[y * 80 + x];
+                output = recalc_pos(x, y);
                 break;
             case 0:
                 break;
             case '\t':
                 uni = ' '; // FIXME
             default:
-                *(output++) = get_c437_from_unicode(uni) | (tp->fg << 8) | (tp->bg << 12);
+#ifdef WRONG
+                *(output--)
+#else
+                *(output++)
+#endif
+                    = get_c437_from_unicode(uni) | (tp->fg << 8) | (tp->bg << 12);
 
                 if (++x >= 80)
                 {
@@ -434,7 +468,12 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
                         scroll_down();
                         y--;
 
-                        output -= 80; // Eine Zeile nach oben
+                        // Eine Zeile nach oben
+#ifdef WRONG
+                        output += 80;
+#else
+                        output -= 80;
+#endif
                     }
                 }
         }
@@ -496,6 +535,62 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
 
 int main(void)
 {
+#ifdef WRONG
+    void *full_mem = malloc(1048576);
+
+
+    struct vm86_registers vm86_regs = { .eax = 0x1130, .ebx = 0x0600 };
+    struct vm86_memory_area mem = { .vm = 0, .caller = full_mem, .size = 1048576, .in = false, .out = true };
+
+    vm86_interrupt(0x10, &vm86_regs, &mem, 1);
+
+
+    uint8_t *src = (uint8_t *)((uintptr_t)full_mem + ((vm86_regs.es & 0xffff) << 4) + (vm86_regs.ebp & 0xffff));
+    uint8_t *dst = malloc(256 * 16);
+
+    for (int c = 0; c < 256; c++)
+    {
+        for (int r = 0; r < 16; r++)
+        {
+            uint8_t swapped = src[c * 16 + 15 - r];
+
+            swapped = ((swapped & 0x55) << 1) | ((swapped & 0xaa) >> 1);
+            swapped = ((swapped & 0x33) << 2) | ((swapped & 0xcc) >> 2);
+            swapped = ( swapped         << 4) | ( swapped         >> 4);
+
+            dst[c * 16 + r] = swapped;
+        }
+    }
+
+
+    vm86_regs.eax = 0x1100;
+    vm86_regs.ebx = 16 << 8;
+    vm86_regs.ecx = 256;
+    vm86_regs.edx = 0x0000;
+    vm86_regs.ebp = 0x0000;
+    vm86_regs.es  = 0x1000;
+
+    mem.vm = 0x10000;
+    mem.caller = dst;
+    mem.size = 256 * 16;
+    mem.in = true;
+    mem.out = false;
+
+    vm86_interrupt(0x10, &vm86_regs, &mem, 1);
+
+
+    free(dst);
+    free(full_mem);
+
+
+    // Cursorposition
+    vm86_regs.eax = 0x0100;
+    vm86_regs.ecx = 0x0001;
+
+    vm86_interrupt(0x10, &vm86_regs, &mem, 1);
+#endif
+
+
     // Für display_cursor().
     iopl(3);
 
