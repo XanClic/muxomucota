@@ -105,6 +105,9 @@ static void add_function(int bus, int device, int function)
 
         pfnc->sibling = pdev->functions;
         pdev->functions = pfnc;
+
+        // Busmastering
+        pci_out16(bus, device, function, 0x04, pci_in16(bus, device, function, 0x04) | (1 << 2));
     }
 }
 
