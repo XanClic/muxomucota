@@ -302,6 +302,10 @@ int main(int argc, char *argv[])
             }
         }
         linebufs[i] = NULL;
+
+        if (!last_line_complete && (incomplete_line == NULL))
+            incomplete_line = linebufs[0];
+
         if (!last_line_complete)
             linebufs[i - 1] = NULL;
 
