@@ -322,9 +322,6 @@ process_t *create_user_thread(void (*function)(void *), void *stack_top, void *a
     process_simulate_func_call(p->cpu_state);
 
 
-    run_process(p);
-
-
     return p;
 }
 

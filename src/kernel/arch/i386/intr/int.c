@@ -10,6 +10,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <syscall.h>
+#include <vm86.h>
 #include <x86-segments.h>
 
 
@@ -166,6 +167,9 @@ void i386_common_isr(struct cpu_state *state)
             save_and_restore_fpu_and_sse();
             return;
         }
+
+        if ((state->int_vector == 0x0D) && (state->eflags & 0x20000) && handle_vm86_gpf(state))
+            return;
 
         __asm__ __volatile__ ("cli");
 

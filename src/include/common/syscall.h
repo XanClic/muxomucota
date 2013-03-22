@@ -39,7 +39,8 @@ enum syscall_number
     SYS_SLEEP,
     SYS_CREATE_THREAD,
     SYS_GETPGID,
-    SYS_ELAPSED_MS
+    SYS_ELAPSED_MS,
+    SYS_VM86
 };
 
 

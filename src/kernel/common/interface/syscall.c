@@ -12,6 +12,7 @@
 #include <system-timer.h>
 #include <unistd.h>
 #include <vmem.h>
+#include <vm86.h>
 
 
 // FIXME: Überprüfung, ob der Anfang der übergebenen Zeiger im Kernel liegt,
@@ -257,12 +258,18 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
             return 0;
 
         case SYS_CREATE_THREAD:
+        {
             if (IS_KERNEL(p0) || IS_KERNEL(p1))
             {
                 current_process->tls->errno = EFAULT;
                 return (uintptr_t)-EFAULT;
             }
-            return create_user_thread((void (*)(void *))p0, (void *)p1, (void *)p2)->pid;
+
+            process_t *p = create_user_thread((void (*)(void *))p0, (void *)p1, (void *)p2);
+            if (p != NULL)
+                run_process(p);
+            return p->pid;
+        }
 
         case SYS_GETPGID:
         {
@@ -277,6 +284,20 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
 
         case SYS_ELAPSED_MS:
             return elapsed_ms;
+
+        case SYS_VM86:
+#ifdef X86
+            if (IS_KERNEL(p1) || (p3 && IS_KERNEL(p2)))
+            {
+                current_process->tls->errno = EFAULT;
+                return (uintptr_t)-EFAULT;
+            }
+            vm86_interrupt(p0, (struct vm86_registers *)p1, (struct vm86_memory_area *)p2, p3);
+            return 0;
+#else
+            current_process->tls->errno = ENOSYS;
+            return (uintptr_t)-ENOSYS;
+#endif
     }
 
     current_process->tls->errno = ENOSYS;
