@@ -4,6 +4,7 @@
 #include <compiler.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <vm86.h>
 
 
 struct fxsave_space
@@ -48,6 +49,8 @@ struct process_arch_info
     struct fxsave_space *fxsave;
 
     uint8_t fxsave_real_space[527];
+
+    struct vm86_registers *vm86_exit_regs;
 };
 
 
