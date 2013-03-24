@@ -1,0 +1,5 @@
+{
+    cc: {
+        flags: "-Wno-missing-field-initializers -Wno-unused-parameter -Wno-sign-compare -Wno-missing-declarations"
+    }
+}
