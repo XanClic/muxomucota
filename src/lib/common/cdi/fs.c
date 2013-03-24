@@ -382,6 +382,8 @@ static uintptr_t cdi_fs_duplicate_pipe(uintptr_t id)
 }
 
 
+extern void caches_sync_all(void);
+
 static void cdi_fs_destroy_pipe(uintptr_t id, int flags)
 {
     (void)flags;
@@ -412,6 +414,10 @@ static void cdi_fs_destroy_pipe(uintptr_t id, int flags)
 
 
     free(f);
+
+
+    // ... FIXME? D:
+    caches_sync_all();
 }
 
 
