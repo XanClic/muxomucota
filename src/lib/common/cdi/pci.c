@@ -16,9 +16,6 @@
 #endif
 
 
-cdi_list_t cdi_osdep_devices = NULL;
-
-
 #ifdef X86
 void cdi_pci_alloc_ioports(struct cdi_pci_device *device)
 {
@@ -53,7 +50,7 @@ void cdi_pci_free_memory(struct cdi_pci_device *device)
 }
 
 
-static void serve_device(struct cdi_driver *drv, const char *devname, struct pci_config_space *conf_space, int bus, int device, int function)
+static void serve_device(struct cdi_driver *drv, const char *devname, struct pci_config_space *conf_space, int bus, int device, int function, cdi_list_t list)
 {
     if (conf_space->header_type & 0x7f)
         return;
@@ -177,30 +174,29 @@ static void serve_device(struct cdi_driver *drv, const char *devname, struct pci
     cdi_pci_dev->meta = strdup(devname);
 
 
-    struct cdi_device *dev = drv->init_device((struct cdi_bus_data *)cdi_pci_dev);
-
-    if (dev == NULL)
+    if (list != NULL)
+        cdi_list_push(list, cdi_pci_dev);
+    else
     {
-        struct cdi_pci_resource *res;
-        while ((res = cdi_list_pop(cdi_pci_dev->resources)) != NULL)
-            free(res);
-        cdi_list_destroy(cdi_pci_dev->resources);
+        struct cdi_device *dev = drv->init_device((struct cdi_bus_data *)cdi_pci_dev);
 
-        free(cdi_pci_dev->meta);
-        free(cdi_pci_dev);
+        if (dev == NULL)
+        {
+            struct cdi_pci_resource *res;
+            while ((res = cdi_list_pop(cdi_pci_dev->resources)) != NULL)
+                free(res);
+            cdi_list_destroy(cdi_pci_dev->resources);
 
-        return;
+            free(cdi_pci_dev->meta);
+            free(cdi_pci_dev);
+
+            return;
+        }
     }
-
-
-    if (cdi_osdep_devices == NULL)
-        cdi_osdep_devices = cdi_list_create();
-
-    cdi_list_push(cdi_osdep_devices, dev);
 }
 
 
-static void enum_something(struct cdi_driver *drv, const char *basename, int p1, int p2, int p3)
+static void enum_something(struct cdi_driver *drv, const char *basename, int p1, int p2, int p3, cdi_list_t list)
 {
     int fd = create_pipe(basename, O_RDONLY);
 
@@ -215,7 +211,7 @@ static void enum_something(struct cdi_driver *drv, const char *basename, int p1,
 
         destroy_pipe(fd, 0);
 
-        serve_device(drv, basename, &conf_space, p1, p2, p3);
+        serve_device(drv, basename, &conf_space, p1, p2, p3, list);
 
         return;
     }
@@ -234,7 +230,7 @@ static void enum_something(struct cdi_driver *drv, const char *basename, int p1,
         char entry_name[strlen(basename) + 1 + strlen(entries + i) + 1];
         sprintf(entry_name, "%s/%s", basename, entries + i);
 
-        enum_something(drv, entry_name, p2, p3, strtol(entries + i, NULL, 16));
+        enum_something(drv, entry_name, p2, p3, strtol(entries + i, NULL, 16), list);
     }
 }
 
@@ -246,5 +242,11 @@ void cdi_osdep_pci_collect(struct cdi_driver *drv)
     if (drv->bus != CDI_PCI)
         return;
 
-    enum_something(drv, "(pci)", -1, -1,-1);
+    enum_something(drv, "(pci)", -1, -1, -1, NULL);
+}
+
+
+void cdi_pci_get_all_devices(cdi_list_t list)
+{
+    enum_something(NULL, "(pci)", -1, -1, -1, list);
 }
