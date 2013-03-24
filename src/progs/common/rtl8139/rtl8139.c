@@ -41,8 +41,8 @@
 #include "ethernet.h"
 
 //Hier koennen die Debug-Nachrichten aktiviert werden
-//#define DEBUG_MSG(s) printf("[RTL8139] debug: %s() '%s'\n", __FUNCTION__, s)
-#define DEBUG_MSG(s) //
+#define DEBUG_MSG(s) printf("[RTL8139] debug: %s() '%s'\n", __FUNCTION__, s)
+//#define DEBUG_MSG(s) //
 
 static void rtl8139_handle_interrupt(struct cdi_device* device);
 
@@ -141,9 +141,10 @@ struct cdi_device* rtl8139_init_device(struct cdi_bus_data* bus_data)
         TCR_IFG_STANDARD | TCR_MXDMA_2048);
 
     // Wir wollen Interrupts, wann immer es was zu vermelden gibt
+    // Fix: Nein, wollen wir nicht.
     DEBUG_MSG("Setze Interruptmaske");
-    write_register_word(netcard, REG_INTERRUPT_STATUS, 0);
-    write_register_word(netcard, REG_INTERRUPT_MASK, 0xFFFF);
+    write_register_word(netcard, REG_INTERRUPT_STATUS, 0xFFFF);
+    write_register_word(netcard, REG_INTERRUPT_MASK, ISR_RECEIVE_OK | ISR_TRANSMIT_OK);
 
     // Sende- und Empfangspuffer
     DEBUG_MSG("Initialisiere Buffer");
