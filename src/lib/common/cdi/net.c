@@ -9,6 +9,9 @@
 #include <cdi/net.h>
 
 
+extern void cdi_osdep_device_found(void);
+
+
 static struct cdi_net_driver *net_driver;
 
 
@@ -63,6 +66,9 @@ void cdi_net_device_init(struct cdi_net_device *device)
     stream_send(fd, &reg_info, sizeof(reg_info), O_BLOCKING);
 
     destroy_pipe(fd, 0);
+
+
+    cdi_osdep_device_found();
 }
 
 

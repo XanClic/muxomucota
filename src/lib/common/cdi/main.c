@@ -7,17 +7,22 @@
 #include <cdi/fs.h>
 #include <cdi/lists.h>
 #include <cdi/net.h>
+#include <cdi/storage.h>
 #include <drivers/ports.h>
 
 
 extern struct cdi_driver *__start_cdi_drivers, *__stop_cdi_drivers;
 
-extern cdi_list_t cdi_osdep_devices;
-
 
 extern void cdi_osdep_pci_collect(struct cdi_driver *drv);
 
 extern void cdi_net_driver_register(struct cdi_net_driver *driver);
+extern void cdi_storage_driver_register(struct cdi_storage_driver *driver);
+
+
+void cdi_osdep_device_found(void);
+
+static bool found_any = false;
 
 
 int main(void)
@@ -44,11 +49,19 @@ int main(void)
     {
         case CDI_NETWORK:
             cdi_net_driver_register((struct cdi_net_driver *)__start_cdi_drivers);
-            cdi_osdep_pci_collect(__start_cdi_drivers);
+            if (__start_cdi_drivers->init_device != NULL)
+                cdi_osdep_pci_collect(__start_cdi_drivers);
             break;
 
         case CDI_FILESYSTEM:
             cdi_fs_driver_register((struct cdi_fs_driver *)__start_cdi_drivers);
+            vfs = true;
+            break;
+
+        case CDI_STORAGE:
+            cdi_storage_driver_register((struct cdi_storage_driver *)__start_cdi_drivers);
+            if (__start_cdi_drivers->init_device != NULL)
+                cdi_osdep_pci_collect(__start_cdi_drivers);
             vfs = true;
             break;
 
@@ -58,10 +71,10 @@ int main(void)
     }
 
 
-    if ((__start_cdi_drivers->type != CDI_FILESYSTEM) && ((cdi_osdep_devices == NULL) || !cdi_list_size(cdi_osdep_devices)))
-        return 1;
+    if ((__start_cdi_drivers->type == CDI_FILESYSTEM) || found_any)
+        daemonize(__start_cdi_drivers->name, vfs);
 
-    daemonize(__start_cdi_drivers->name, vfs);
+    return 1;
 }
 
 
@@ -87,4 +100,10 @@ void cdi_driver_destroy(struct cdi_driver *driver)
 
 void cdi_init(void)
 {
+}
+
+
+void cdi_osdep_device_found(void)
+{
+    found_any = true;
 }
