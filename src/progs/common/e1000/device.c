@@ -277,7 +277,7 @@ static void reset_nic(struct e1000_device* netcard)
     // Rx/Tx-Ring initialisieren
     reg_outl(netcard, REG_RXDESC_ADDR_HI, 0);
     reg_outl(netcard, REG_RXDESC_ADDR_LO, PHYS(netcard, rx_desc[0]));
-    printf("e1000: RX descriptors at %x\n", PHYS(netcard, rx_desc[0]));
+    printf("e1000: RX descriptors at %x\n", (unsigned)PHYS(netcard, rx_desc[0]));
     reg_outl(netcard, REG_RXDESC_LEN,
         RX_BUFFER_NUM * sizeof(struct e1000_rx_descriptor));
     reg_outl(netcard, REG_RXDESC_HEAD, 0);

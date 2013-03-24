@@ -9,7 +9,7 @@
 void init_pmm(void);
 
 uintptr_t pmm_alloc(void);
-uintptr_t pmm_alloc_advanced(uintptr_t max_addr, size_t length, int alignment);
+uintptr_t pmm_alloc_advanced(size_t length, uintptr_t max_addr, int alignment);
 void pmm_free(uintptr_t paddr);
 
 void pmm_use(uintptr_t paddr);
