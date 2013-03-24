@@ -7,7 +7,17 @@
 #include <vfs.h>
 
 
+#define _IONBF 0
+#define _IOLBF 1
+#define _IOFBF 2
+
 #define EOF (-1)
+
+#ifndef SEEK_SET
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
+#endif
 
 
 typedef struct FILE
@@ -40,6 +50,22 @@ int vsnprintf(char *buffer, size_t n, const char *format, va_list argptr);
 void perror(const char *s);
 
 int fflush(FILE *fp);
+
+
+FILE *fopen(const char *path, const char *mode);
+FILE *fdopen(int fd, const char *mode);
+int fclose(FILE *stream);
+
+size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream);
+size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream);
+
+int fseek(FILE *stream, long offset, int whence);
+void rewind(FILE *stream);
+long ftell(FILE *stream);
+
+int feof(FILE *stream);
+int ferror(FILE *stream);
+void clearerr(FILE *stream);
 
 
 static inline int filepipe(FILE *fp) { return fp->fd; }
