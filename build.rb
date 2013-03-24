@@ -327,19 +327,19 @@ else
         end
 
         if pathparts.empty?
-            image_dir = '.'
+            image_dir = 'etc'
         else
             image_dir = pathparts.join('/')
 
             puts('%-8s%s' % ['MKDIR', image_dir])
-            exit 1 unless system("mkdir -p '#{image_root}/etc/#{image_dir}'")
+            exit 1 unless system("mkdir -p '#{image_root}/#{image_dir}'")
         end
 
         Dir.new(sd).each do |file|
             next unless File.file?("#{sd}/#{file}")
 
             puts('%-8s%s' % ['CP', file])
-            exit 1 unless system("cp '#{sd}/#{file}' '#{image_root}/etc/#{image_dir}/#{file}'")
+            exit 1 unless system("cp '#{sd}/#{file}' '#{image_root}/#{image_dir}/#{file}'")
         end
     end
 
