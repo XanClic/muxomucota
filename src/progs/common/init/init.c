@@ -102,6 +102,10 @@ int main(int argc, char *argv[])
 
     STRTOK_FOREACH(commands, "\n", line)
     {
+        if (line[0] == '#')
+            continue;
+
+
         int c_argc;
         const char *l = line;
         for (c_argc = 1; *l; l++)
