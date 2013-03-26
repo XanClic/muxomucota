@@ -77,10 +77,11 @@ void init_pmm(void)
     bitmap = kernel_map(kernel_end << PAGE_SHIFT, bmp_size);
     kernel_end += bmp_size;
 
-    memset(bitmap, 0, mem_entries * sizeof(*bitmap));
+    // Alles als belegt markieren
+    memset(bitmap, 0xff, mem_entries * sizeof(*bitmap));
 
 
-    // Unbenutzbare Einträge der Memory Map als belegt markieren
+    // Nur benutzbare Einträge der Memory Map als belegt markieren
     for (int i = 0; i < mmap_entries; i++)
     {
         bool usable;
@@ -88,7 +89,7 @@ void init_pmm(void)
         size_t length;
 
         get_memmap_info(i, &usable, &base, &length);
-        if (!usable)
+        if (usable && (base < memsize) && (base + length > mem_base))
         {
             int top;
 
@@ -97,21 +98,16 @@ void init_pmm(void)
             else
                 top = (base + length + PAGE_SIZE - 1 - mem_base) >> PAGE_SHIFT;
 
-            int paddr = (base - mem_base) >> PAGE_SHIFT;
             if (top > mem_entries)
                 top = mem_entries;
+
+            int paddr = (base > mem_base) ? ((base - mem_base) >> PAGE_SHIFT) : 0;
 
             if (paddr > mem_entries) // Whyever
                 continue;
 
-            if (paddr < 0)
-                paddr = 0;
-
-            if (top < 0)
-                continue;
-
             for (int bi = paddr; bi < top; bi++)
-                bitmap[bi] = BITMAP_USERS;
+                bitmap[bi] = 0;
         }
     }
 
