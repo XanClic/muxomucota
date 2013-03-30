@@ -63,6 +63,8 @@ static char *cmdtok(char *s)
 // TODO: Tab Completion für builtins
 static char *my_fgets(char *s, int size, int stream)
 {
+    pipe_set_flag(STDIN_FILENO, F_ECHO, 0);
+
     int cc = 0, i = 0;
 
     memset(s, 0, size);
@@ -262,6 +264,8 @@ static char *my_fgets(char *s, int size, int stream)
             s[i++] = cc;
     }
 
+    pipe_set_flag(STDIN_FILENO, F_ECHO, 1);
+
     return s;
 }
 
@@ -440,8 +444,6 @@ static int cmd_called(char *cmd)
 int main(void)
 {
     char input[128];
-
-    pipe_set_flag(STDIN_FILENO, F_ECHO, 0);
 
     if (getenv("PWD") != NULL)
         chdir(getenv("PWD"));
