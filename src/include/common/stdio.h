@@ -33,9 +33,14 @@ extern FILE *stdin, *stdout, *stderr;
 
 
 int getchar(void);
+int fgetc(FILE *fp);
+#define getc(c, fp) fgetc(c, fp)
 int putchar(int c);
+int fputc(int c, FILE *fp);
+#define putc(c, fp) fputc(c, fp)
 
 int puts(const char *s);
+int fputs(const char *s, FILE *fp);
 
 int printf(const char *s, ...) __attribute__((format(printf, 1, 2)));
 int fprintf(FILE *fp, const char *s, ...) __attribute__((format(printf, 2, 3)));

@@ -28,6 +28,10 @@
 #endif
 
 
+#define EXIT_SUCCESS 0
+#define EXIT_FAILURE 1
+
+
 void *sbrk(intptr_t diff);
 
 int clearenv(void);
@@ -54,9 +58,12 @@ long long atoll(const char *nptr);
 long long atoq(const char *nptr);
 long long strtoll(const char *s, char **endptr, int base);
 long strtol(const char *s, char **endptr, int base);
+unsigned long strtoul(const char *s, char **endptr, int base);
 long double strtold(const char *nptr, char **endptr);
 double strtod(const char *nptr, char **endptr);
 float strtof(const char *nptr, char **endptr);
+
+int abs(int i);
 
 int mbtowc(wchar_t *pwc, const char *s, size_t n);
 int mblen(const char *s, size_t n);

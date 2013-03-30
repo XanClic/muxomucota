@@ -75,6 +75,11 @@ __def1i(ldexp);
 __def2(pow);
 __def1(exp);
 
+double frexp(double x, int *exp);
+float frexpf(float x, int *exp);
+long double frexpl(long double x, int *exp);
+
+
 static inline int feraiseexcept(int excepts)
 {
     __fp_exceptions |= excepts;

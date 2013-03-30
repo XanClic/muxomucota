@@ -34,6 +34,8 @@ static unsigned long long __stdlib_pow(unsigned long base, unsigned long exp)
 
 long long strtoll(const char *s, char **endptr, int base)
 {
+    // FIXME: ERANGE
+
     char sign = 0;
     int pos = 0;
     signed char digit[10] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
@@ -96,6 +98,38 @@ long long strtoll(const char *s, char **endptr, int base)
 
 long strtol(const char *s, char **endptr, int base)
 {
-    // FIXME: ERANGE
-    return (long)strtoll(s, endptr, base);
+    long long result = strtoll(s, endptr, base);
+
+    if (result < LONG_MIN)
+    {
+        errno = ERANGE;
+        return LONG_MIN;
+    }
+
+    if (result > LONG_MAX)
+    {
+        errno = ERANGE;
+        return LONG_MAX;
+    }
+
+    return (long)result;
+}
+
+unsigned long strtoul(const char *s, char **endptr, int base)
+{
+    long long result = strtoll(s, endptr, base);
+
+    if (result < 0)
+    {
+        errno = ERANGE;
+        return 0;
+    }
+
+    if (result > ULONG_MAX)
+    {
+        errno = ERANGE;
+        return ULONG_MAX;
+    }
+
+    return (unsigned long)result;
 }
