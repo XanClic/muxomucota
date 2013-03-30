@@ -14,7 +14,7 @@
 static bool echo_keys = true;
 
 
-static char *fifo_buffer;
+static unsigned char *fifo_buffer;
 static int fifo_read_idx = 0, fifo_write_idx = 0;
 static lock_t fifo_lock = LOCK_INITIALIZER;
 
@@ -47,12 +47,31 @@ static int fifo_read(void)
         return EOF;
     }
 
-    char c = fifo_buffer[fifo_read_idx];
+    int c = fifo_buffer[fifo_read_idx];
     fifo_read_idx = (fifo_read_idx + 1) % 1024;
 
     unlock(&fifo_lock);
 
     return c;
+}
+
+static bool fifo_eof(void)
+{
+    lock(&fifo_lock);
+
+    if (fifo_read_idx == fifo_write_idx)
+    {
+        unlock(&fifo_lock);
+        return false;
+    }
+
+    int c = fifo_buffer[fifo_read_idx];
+    if (c == 255)
+        fifo_read_idx = (fifo_read_idx + 1) % 1024;
+
+    unlock(&fifo_lock);
+
+    return c == 255;
 }
 
 
@@ -85,7 +104,7 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
         case F_PRESSURE:
             return (fifo_write_idx + 1024 - fifo_read_idx) % 1024;
         case F_READABLE:
-            return (fifo_read_idx != fifo_write_idx);
+            return !fifo_eof();
         case F_WRITABLE:
             return false;
     }
@@ -123,7 +142,9 @@ big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int fl
     for (got = 0; got < size; got++)
     {
         int chr = fifo_read();
-        if (chr == EOF)
+        if (chr == 255)
+            break;
+        else if (chr == EOF)
         {
             if (flags & O_NONBLOCK)
                 break;
@@ -309,6 +330,12 @@ static void flush_input_queue(void)
 
         if (((table_content & 0xF000) != 0xE000) && table_content)
         {
+            if (ctrl && (table_content == 'd'))
+            {
+                fifo_write(255);
+                continue;
+            }
+
             char echo[5] = { 0, 0, 0, 0, 0 };
             int length = 0;
 
