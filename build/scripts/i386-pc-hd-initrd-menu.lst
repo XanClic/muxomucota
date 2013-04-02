@@ -1,0 +1,15 @@
+default 0
+timeout 8
+
+title Myxomycota
+  root (hd0,0)
+  kernel /boot/kernel prime=/bin/init,/bin/bios-console,/bin/mboot-modules
+  module /boot/initrd.tar
+  module /bin/init prime=tty,mboot tty=(tty)/tty0 script=(mboot)/etc/init.conf
+  module /bin/bios-console
+  module /bin/mboot-modules
+  module /bin/daemon
+  module /bin/wait4server
+  module /bin/mount
+  module /bin/tar
+  module /etc/init.conf
