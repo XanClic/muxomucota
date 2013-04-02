@@ -1,0 +1,90 @@
+#!/usr/bin/env ruby
+# coding: utf-8
+
+require 'find'
+
+
+Dir.chdir('build')
+
+ENV['PATH'] += ':/usr/local/sbin:/usr/sbin:/sbin'
+
+system('mkdir -p root/boot/grub')
+system('mkdir -p root-unstripped')
+
+
+relevant_files = []
+
+File.open('scripts/i386-pc-hd-initrd-menu.lst') do |f|
+    is_relevant = false
+
+    f.each_line do |line|
+        next if line.strip.empty?
+
+        if line =~ /^\s*title\s+/
+            break if is_relevant
+
+            is_relevant = true
+        end
+
+        next if !is_relevant
+
+        match = /^\s*(kernel|module)\s+\/(\S+)/.match(line)
+        next if !match
+
+        relevant_files << match[2]
+    end
+end
+
+
+initrd_files = Dir.entries('root').reject { |f| ['initrd.tar', 'boot', '.', '..'].include?(f) }
+
+
+puts('STRIP')
+
+Find.find('root').select { |f| File.file?(f) }.each do |f|
+    system("cp #{f} root-unstripped")
+    system("strip -s '#{f}' 2> /dev/null") unless f == 'root/boot/kernel' # Kernel wegen Backtraces nicht strippen
+end
+
+
+# Damit die relativen Pfadangaben im tar korrekt sind
+Dir.chdir('root')
+
+puts('%-8s%s' % ['TAR', '>initrd.tar'])
+exit 1 unless system("tar cf boot/initrd.tar #{initrd_files.map { |f| "'#{f}'" } * ' '}")
+
+Dir.chdir('..')
+
+
+puts("ZIP")
+
+Find.find('root').select { |f| File.file?(f) }.each do |f|
+    system("gzip -9 '#{f}'")
+    File.rename("#{f}.gz", f)
+end
+
+
+system('cp scripts/i386-pc-hd-initrd-menu.lst root/boot/grub/menu.lst')
+system('cp scripts/i386-pc-default-stage1 root/boot/grub/stage1')
+system('cp scripts/i386-pc-default-stage2 root/boot/grub/stage2')
+
+
+puts('%-8s%s' % ['DD', '/dev/zero -> tmp.img'])
+exit 1 unless system('dd if=/dev/zero of=tmp.img bs=512 count=64 &> /dev/null')
+
+puts('%-8s%s' % ['DD', '/dev/zero -> hd.img'])
+exit 1 unless system('dd if=/dev/zero of=images/hd.img bs=1048576 count=64 &> /dev/null')
+
+puts('%-8s%s' % ['PARTED', 'hd.img'])
+exit 1 unless system('echo -e "mktable msdos\nmkpart primary ext2 63s $((64 * 2048 - 1))s" | parted -s hd.img')
+
+puts('%-8s%s' % ['MKFS', 'hd.img#p1'])
+exit 1 unless system('
+
+puts('%-8s%s' % ['CP', 'root/... -> floppy.img/'])
+exit 1 unless system("mcopy -s root/{bin,boot,etc} x:/ > /dev/null")
+
+puts('%-8s%s' % ['GRUB', 'floppy.img'])
+exit 1 unless system("echo -e 'device (fd0) images/floppy.img\nroot (fd0)\nsetup (fd0)\nquit' | grub --batch &> /dev/null")
+
+system("rm -rf '#{ENV['MTOOLSRC']}'")
