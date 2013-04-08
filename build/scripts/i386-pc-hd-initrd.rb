@@ -69,22 +69,27 @@ system('cp scripts/i386-pc-default-stage1 root/boot/grub/stage1')
 system('cp scripts/i386-pc-default-stage2 root/boot/grub/stage2')
 
 
-puts('%-8s%s' % ['DD', '/dev/zero -> tmp.img'])
-exit 1 unless system('dd if=/dev/zero of=tmp.img bs=512 count=64 &> /dev/null')
-
 puts('%-8s%s' % ['DD', '/dev/zero -> hd.img'])
 exit 1 unless system('dd if=/dev/zero of=images/hd.img bs=1048576 count=64 &> /dev/null')
 
 puts('%-8s%s' % ['PARTED', 'hd.img'])
-exit 1 unless system('echo -e "mktable msdos\nmkpart primary ext2 63s $((64 * 2048 - 1))s" | parted -s hd.img')
+exit 1 unless system("echo -e 'mktable msdos\\nmkpart primary ext2 63s #{64 * 2048 - 1}s\\nquit' | parted images/hd.img &> /dev/null")
+
+puts('%-8s%s' % ['LOSETUP', 'hd.img#p1'])
+loop_dev = `sudo losetup -f images/hd.img -o #{63 * 512} --show`.strip
+exit 1 unless $?.exitstatus == 0
 
 puts('%-8s%s' % ['MKFS', 'hd.img#p1'])
-exit 1 unless system('
+exit 1 unless system("sudo mkfs.ext2 -F -q '#{loop_dev}'")
 
-puts('%-8s%s' % ['CP', 'root/... -> floppy.img/'])
-exit 1 unless system("mcopy -s root/{bin,boot,etc} x:/ > /dev/null")
+puts('%-8s%s' % ['MOUNT', 'hd.img#p1 -> mp'])
+exit 1 unless system("mkdir -p mp && sudo mount '#{loop_dev}' -o loop -t ext2 mp && sudo chmod ugo+rwx -R mp")
 
-puts('%-8s%s' % ['GRUB', 'floppy.img'])
-exit 1 unless system("echo -e 'device (fd0) images/floppy.img\nroot (fd0)\nsetup (fd0)\nquit' | grub --batch &> /dev/null")
+puts('%-8s%s' % ['CP', 'root/... -> mp/'])
+exit 1 unless system("cp -r root/{bin,boot,etc} mp")
 
-system("rm -rf '#{ENV['MTOOLSRC']}'")
+puts('%-8s%s' % ['UMOUNT', 'mp'])
+exit 1 unless system("sudo umount mp && sudo losetup -d '#{loop_dev}' && rmdir mp")
+
+puts('%-8s%s' % ['GRUB', 'hd.img'])
+exit 1 unless system("echo -e 'device (hd0) images/hd.img\nroot (hd0,0)\nsetup (hd0)\nquit' | grub --batch &> /dev/null")

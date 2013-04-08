@@ -42,7 +42,7 @@ end
 
 
 def image_types
-    Dir.entries('build/scripts').select { |e| e =~ /^.*-.*-.*\.rb$/ }.map { |e| e.chomp('.rb').split('-') }
+    Dir.entries('build/scripts').select { |e| e =~ /^[^-]*-[^-]*-.*\.rb$/ }.map { |e| /^([^-]*)-([^-]*)-(.*)$/.match(e.chomp('.rb')).to_a[1..3] }
 end
 
 def platform_output
@@ -64,7 +64,6 @@ def image_type_output
 
     hash.keys.map { |ap| "    %*s: #{hash[ap].uniq * ', '}" % [maxlen, ap] } * "\n"
 end
-
 
 opts = Trollop::options do
     version('µxoµcota build system 0.0.1 (c) 2012/13 Hanna Reitz')
