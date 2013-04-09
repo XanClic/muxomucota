@@ -80,7 +80,7 @@ puts('%-8s%s' % ['MFMT', 'floppy.img'])
 exit 1 unless system('mformat -l MYXOMYCOTA x: > /dev/null')
 
 puts('%-8s%s' % ['CP', 'root/... -> floppy.img/'])
-exit 1 unless system("mcopy -s root/{bin,boot,etc} x:/ > /dev/null")
+exit 1 unless system("mcopy -s root/{boot,#{relevant_files * ','}} x:/ > /dev/null")
 
 puts('%-8s%s' % ['GRUB', 'floppy.img'])
 exit 1 unless system("echo -e 'device (fd0) images/floppy.img\nroot (fd0)\nsetup (fd0)\nquit' | grub --batch &> /dev/null")
