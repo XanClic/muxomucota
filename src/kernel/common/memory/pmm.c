@@ -74,7 +74,7 @@ void init_pmm(void)
 
     int bmp_size = (mem_entries * sizeof(*bitmap) + PAGE_SIZE - 1) >> PAGE_SHIFT;
 
-    bitmap = kernel_map(kernel_end << PAGE_SHIFT, bmp_size);
+    bitmap = kernel_map(kernel_end << PAGE_SHIFT, (size_t)bmp_size << PAGE_SHIFT);
     kernel_end += bmp_size;
 
     // Alles als belegt markieren
