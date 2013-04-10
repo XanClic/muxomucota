@@ -22,6 +22,8 @@ extern int __fp_exceptions;
 
 #define FE_DFL_ENV 0
 
+#define HAVE_LOG2
+
 #define isinff(x) ((x) == __builtin_inff())
 #define isinfd(x) ((x) == __builtin_inf ())
 #define isinfl(x) ((x) == __builtin_infl())
@@ -74,11 +76,21 @@ __def1(nearbyint);
 __def1i(ldexp);
 __def2(pow);
 __def1(exp);
+__def2(atan2);
+__def1(sinh);
+__def1(cosh);
+__def1(tanh);
+__def1(asinh);
+__def1(acosh);
+__def1(atanh);
+__def1(cbrt);
+__def2(hypot);
+__def1(erf);
+__def1(erfc);
 
 double frexp(double x, int *exp);
 float frexpf(float x, int *exp);
 long double frexpl(long double x, int *exp);
-
 
 static inline int feraiseexcept(int excepts)
 {
