@@ -6,7 +6,7 @@
         type r; \
         if (isinf(x)) \
             return __domain_error(); \
-        __asm__ __volatile__ ("fprem; fptan; fstp st0" : "=t"(r) : "0"(x), "u"(2 * M_PI)); \
+        __asm__ __volatile__ ("fprem; fptan; fstp %%st(0)" : "=t"(r) : "0"(x), "u"(2 * M_PI)); \
         return r; \
     }
 
