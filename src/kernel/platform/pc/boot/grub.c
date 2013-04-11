@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <vmem.h>
 
 #include <arch-constants.h>
 
@@ -13,6 +14,7 @@ static uint32_t mbhdr[] __attribute__((section(".multiboot"), used)) = { 0x1BADB
 
 
 static struct multiboot_info *mboot;
+static uintptr_t mboot_paddr;
 
 static struct memory_map *mmap;
 static int mmap_length;
@@ -34,13 +36,14 @@ bool get_boot_info(void *info)
         return false;
 
 
-    mboot = (struct multiboot_info *)(((uint32_t *)info)[1] | PHYS_BASE);
+    mboot_paddr = ((uint32_t *)info)[1];
+    mboot = kernel_map(mboot_paddr, sizeof(*mboot));
 
 
     if (!(mboot->mi_flags & (1 << 6))) // Memory Map
         return false;
 
-    mmap = (struct memory_map *)(mboot->mmap_addr | PHYS_BASE);
+    mmap = kernel_map(mboot->mmap_addr, sizeof(*mboot));
 
     for (struct memory_map *entry = mmap; entry - mmap < (int)mboot->mmap_length; mmap_length++)
         entry = (struct memory_map *)((uintptr_t)entry + entry->size + sizeof(entry->size));
@@ -48,7 +51,7 @@ bool get_boot_info(void *info)
 
     if (mboot->mi_flags & (1 << 3)) // Module
     {
-        modules = (struct multiboot_module *)((uintptr_t)mboot->mods_addr | PHYS_BASE);
+        modules = kernel_map((uintptr_t)mboot->mods_addr, sizeof(modules[0]) * mboot->mods_count);
         module_count = mboot->mods_count;
     }
     else
@@ -58,7 +61,7 @@ bool get_boot_info(void *info)
     }
 
 
-    kernel_elf_shdr = (void *)((uintptr_t)mboot->elfshdr_addr | PHYS_BASE);
+    kernel_elf_shdr = kernel_map((uintptr_t)mboot->elfshdr_addr, sizeof(const char *) * mboot->elfshdr_num);
     kernel_elf_shdr_count = mboot->elfshdr_num;
 
 
@@ -68,7 +71,12 @@ bool get_boot_info(void *info)
 
 const char *get_kernel_command_line(void)
 {
-    return (const char *)(mboot->cmdline | PHYS_BASE);
+    static const char *cmdline;
+
+    if (cmdline == NULL)
+        cmdline = kernel_map(mboot->cmdline, 512); // FIXME
+
+    return cmdline;
 }
 
 
@@ -145,14 +153,14 @@ void fetch_prime_process(int index, void **start, size_t *length, char *name_arr
     }
 
 
-    *start  = (void *)(modules[index].mod_start | PHYS_BASE);
     *length = modules[index].mod_end - modules[index].mod_start;
+    *start  = kernel_map(modules[index].mod_start, *length);
 
     if (!name_array_size)
         return;
 
 
-    const char *src = (const char *)(modules[index].string | PHYS_BASE);
+    const char *src = kernel_map(modules[index].string, 512); // FIXME
 
     int i;
     for (i = 0; (i < (int)name_array_size - 1) && src[i]; i++)
@@ -162,13 +170,21 @@ void fetch_prime_process(int index, void **start, size_t *length, char *name_arr
     for (int j = 0; (i < (int)name_array_size - 1) && " mbi="[j]; i++, j++)
         name_array[i] = " mbi="[j];
 
-    uintptr_t mbi_paddr = (uintptr_t)mboot & ~PHYS_BASE;
-
     for (int j = 0; (i < (int)name_array_size - 1) && (j < 8); i++, j++)
     {
-        int digit = mbi_paddr >> ((7 - j) * 4) & 0xF;
+        int digit = mboot_paddr >> ((7 - j) * 4) & 0xF;
         name_array[i] = (digit >= 10) ? (digit - 10 + 'a') : (digit + '0');
     }
 
     name_array[i] = 0;
+
+    kernel_unmap((char *)src, 512);
+}
+
+
+void release_prime_process(int index, void *start, size_t length)
+{
+    (void)index;
+
+    kernel_unmap(start, length);
 }

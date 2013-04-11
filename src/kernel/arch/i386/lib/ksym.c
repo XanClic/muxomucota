@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <vmem.h>
 
 
 extern Elf32_Shdr *kernel_elf_shdr;
@@ -22,6 +23,9 @@ bool kernel_find_function(uintptr_t addr, char *name, uintptr_t *func_base)
     {
         if (kernel_elf_shdr[i].sh_type == SH_SYMTAB)
         {
+            // FIXME: Eigentlich müsste man kernel_map benutzen, aber das ist im
+            // Falle einer schweren Exception vielleicht doof (es könnte bspw.
+            // passieren, dass kernel_map den PMM benutzt, etc.)
             elf_sym = (void *)(kernel_elf_shdr[i].sh_addr | PHYS_BASE);
             syms = kernel_elf_shdr[i].sh_size / sizeof(Elf32_Sym);
 

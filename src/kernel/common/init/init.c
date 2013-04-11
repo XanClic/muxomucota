@@ -76,6 +76,9 @@ void main(void *boot_info)
             if (found)
                 create_process_from_image(argc, argv, img_start);
         }
+
+
+        release_prime_process(i, img_start, img_size);
     }
 
 
