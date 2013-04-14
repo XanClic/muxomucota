@@ -78,6 +78,9 @@ uint8_t get_c437_from_unicode(unsigned uni)
         t(0x0003C3, 0xE5); //σ
         t(0x0003C4, 0xE7); //τ
         t(0x0003C6, 0xED); //φ
+        t(0x00201C, 0x22); //“
+        t(0x00201D, 0x22); //”
+        t(0x00201E, 0x22); //„
         t(0x002022, 0x07); //•
         t(0x00203C, 0x13); //‼
         t(0x00207F, 0xFC); //SUPERSCRIPT LATIN SMALL LETTER N
