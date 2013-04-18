@@ -9,7 +9,7 @@
 struct free_block
 {
     struct free_block *next;
-    size_t size;
+    size_t size; // Inhaltsgröße
 };
 
 volatile lock_t __heap_lock = LOCK_INITIALIZER;
@@ -33,6 +33,13 @@ void *malloc(size_t sz)
     {
         if ((*fb)->size >= sz)
         {
+            /*
+             *          _ HDR     _
+             *         |  [block] _| - sz
+             * osize - |  HDR
+             *         |_ [fill]
+             */
+
             struct free_block *t = *fb;
 
             if (t->size - sz < 32)
@@ -41,7 +48,7 @@ void *malloc(size_t sz)
             {
                 size_t osize = t->size;
                 *fb = (struct free_block *)((uintptr_t)t + sz + 16);
-                (*fb)->size = osize - (sz + 16);
+                (*fb)->size = osize - sz - 16;
                 (*fb)->next = t->next;
 
                 t->size = sz;
@@ -73,6 +80,9 @@ void *aligned_alloc(size_t align, size_t size)
     if (align < 0x10)
         align = 0x10;
 
+    if (!size)
+        size = 1;
+
     if (size & 0xF)
         size = (size + 0xF) & ~0xF;
 
@@ -98,30 +108,49 @@ void *aligned_alloc(size_t align, size_t size)
 
             if (align_space == 16)
             {
+                /*                    _
+                 *          _ HDR     _| - align_space
+                 *         |  [block] _| - size
+                 * osize - |  HDR
+                 *         |_ [fill]
+                 */
+
                 // Erster Block: Alignter Block
                 if (osize - size >= 32)
                 {
                     t->size = size;
 
                     // Zweiter Block: freier Platz am Ende
-                    rf = (struct free_block *)((uintptr_t)t + size + 16);
-                    rf->size = osize - (size + 16);
+                    rf = (struct free_block *)((uintptr_t)t + 16 + size);
+                    rf->size = osize - size - 16;
                 }
             }
             else
             {
+                /*                    _
+                 *          _ HDR      |
+                 *         |  [align]  | - align_space
+                 *         |  HDR     _|
+                 * osize - |  [block] _| - size
+                 *         |  HDR
+                 *         |_ [fill]
+                 */
+
                 // Erster Block: Alignment
                 t->size = align_space - 32;
 
                 // Zweiter Block: Alignter Block
                 t = (struct free_block *)((uintptr_t)t + align_space - 16);
-                t->size = size;
 
-                // Dritter Block: Evtl. freier Platz am Ende
-                if (osize - align_space - size >= 32)
+                if (osize - align_space - size < 16)
+                    t->size = osize - align_space + 16;
+                else
                 {
+                    t->size = size;
+
+                    // Dritter Block: Evtl. freier Platz am Ende
                     rf = (struct free_block *)((uintptr_t)t + 16 + size);
-                    rf->size = osize - align_space - size - 16;
+                    rf->size = osize - align_space - size;
                 }
             }
 
@@ -138,6 +167,9 @@ void *aligned_alloc(size_t align, size_t size)
 
     // Genug Platz für Alignment
     struct free_block *t = sbrk(size + 48 + align);
+    assert(t);
+
+    size_t bsize = size + 48 + align; // Block size
 
     size_t align_space = align - ((uintptr_t)t & (align - 1));
 
@@ -146,33 +178,61 @@ void *aligned_alloc(size_t align, size_t size)
 
     if (align_space == 16)
     {
+        /*          _         _
+         *         |  HDR     _| - align_space
+         * bsize - |  [block] _| - size
+         *         |  HDR
+         *         |_ [fill]
+         */
+
+        struct free_block *rf = NULL;
+
         t->size = size;
 
-        struct free_block *rf = (struct free_block *)((uintptr_t)t + size + 16);
-        rf->size = 32 + align;
+        if (bsize - size >= 48)
+            t->size = bsize - 16;
+        else
+        {
+            t->size = size;
+
+            rf = (struct free_block *)((uintptr_t)t + size + 16);
+            rf->size = bsize - size - 32;
+        }
 
         unlock(&__heap_lock);
 
-        free((void *)((uintptr_t)rf + 16));
+        if (rf != NULL)
+            free((void *)((uintptr_t)rf + 16));
 
         return (void *)((uintptr_t)t + 16);
     }
     else
     {
+        /*
+         *          _         _
+         *         |  HDR      |
+         *         |  [align]  | - align_space
+         * bsize - |  HDR     _|
+         *         |  [block] _| - size
+         *         |  HDR
+         *         |_ [fill]
+         */
+
         struct free_block *rf1 = t, *rf2 = NULL;
         rf1->size = align_space - 32;
 
         t = (struct free_block *)((uintptr_t)t + align_space - 16);
-        t->size = size;
 
-        // Freier Platz am Ende
-        if (align + 16 >= align_space)
-        {
-            rf2 = (struct free_block *)((uintptr_t)t + size + 16);
-            rf2->size = align + 16 - align_space;
-        }
+        if (bsize - align_space - size < 32)
+            t->size = bsize - align_space;
         else
-            t->size += align + 48 - align_space;
+        {
+            t->size = size;
+
+            // Freier Platz am Ende
+            rf2 = (struct free_block *)((uintptr_t)t + size + 16);
+            rf2->size = bsize - align_space - size - 16;
+        }
 
         unlock(&__heap_lock);
 
