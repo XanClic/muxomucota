@@ -28,12 +28,20 @@ static void join_memory(void)
     while (current->next != NULL)
     {
         if ((uintptr_t)current < (uintptr_t)current->next + current->next->size + 16)
-            *(volatile uintptr_t *)NULL = 0;
+            *(volatile void **)NULL = current; // no u
 
         if ((uintptr_t)current == (uintptr_t)current->next + current->next->size + 16)
             current = current->next;
         else if (*base != current)
         {
+            /*         _
+             * HDR          current
+             * [block]
+             * ...     _
+             * HDR     _    *base
+             * [block] _| - (*base)->size
+             */
+
             current->size = (uintptr_t)*base + (*base)->size - (uintptr_t)current;
             *base = current;
         }
@@ -59,15 +67,6 @@ void free(void *ptr)
 
     struct free_block *t = (struct free_block *)((uintptr_t)ptr - 16);
 
-#ifndef NDEBUG
-    struct free_block *dfc;
-    for (dfc = __first_free; (dfc != NULL) && (dfc != t); dfc = dfc->next);
-
-    // Assert tut dann lustigerweise nicht mehr.
-    if (dfc != NULL)
-        *(volatile void **)NULL = ptr;
-#endif
-
     lock(&__heap_lock);
 
     struct free_block **fb = &__first_free;
@@ -76,6 +75,12 @@ void free(void *ptr)
     // in der Liste hängt, sodass join_memory() auch gut arbeiten kann.
     while ((uintptr_t)*fb > (uintptr_t)t)
         fb = &(*fb)->next;
+
+#ifndef NDEBUG
+    // Assert tut dann lustigerweise nicht mehr.
+    if (*fb == t)
+        *(volatile void **)NULL = ptr;
+#endif
 
     t->next = *fb;
     *fb = t;
