@@ -27,6 +27,27 @@ big_size_t stream_recv(int pipe, void *data, big_size_t size, int flags)
     };
 
 
+    // TODO: Das ist etwas willkürlich; außerdem kann man das schon per SHM
+    // machen, wenn die Daten bereits perfekt reinkommen (was aber selten genug
+    // vorkommen sollte)
+    if (size < 16384)
+    {
+        uintptr_t aid;
+
+        uintmax_t retval = ipc_message_request(_pipes[pipe].pid, STREAM_RECV_MSG, &ipc_sr, sizeof(ipc_sr), &aid);
+
+        if (!aid)
+            assert(!retval);
+        else
+        {
+            size_t recvd = popup_get_answer(aid, data, retval);
+            assert(retval == recvd);
+        }
+
+        return retval;
+    }
+
+
     // TODO: Irgendwie optimieren durch Zusammenfassen aufeinanderfolgender
     // Pages und so. Aber so ists ja nicht fatal.
 

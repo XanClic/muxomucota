@@ -25,7 +25,8 @@ big_size_t stream_send_shm(int pipe, uintptr_t shmid, big_size_t size, int flags
 
     if (flags & O_NONBLOCK)
     {
-        ipc_shm_message(_pipes[pipe].pid, STREAM_SEND, shmid, &ipc_ss, sizeof(ipc_ss));
+        // Issue 25
+        ipc_shm_message_synced(_pipes[pipe].pid, STREAM_SEND, shmid, &ipc_ss, sizeof(ipc_ss));
         return size;
     }
 

@@ -19,6 +19,35 @@ big_size_t stream_send(int pipe, const void *data, big_size_t size, int flags)
     }
 
 
+    // TODO: Das ist schon ein bisschen willkürlich (das einzige nicht
+    // willkürliche daran ist, dass die Zahl kleiner als in stream_recv ist,
+    // da hier noch ein zusätzliches memcpy drin ist).
+    if (size < 12288)
+    {
+        // TODO: Dass man die Daten hier nochmal kopieren muss, ist doch doof.
+        struct ipc_stream_send *ipc_ss = malloc(sizeof(*ipc_ss) + size);
+        ipc_ss->id = _pipes[pipe].id;
+        ipc_ss->flags = flags;
+        ipc_ss->size = size;
+
+        memcpy(ipc_ss + 1, data, size);
+
+        uintmax_t retval;
+        if (!(flags & O_NONBLOCK))
+            retval = ipc_message_synced(_pipes[pipe].pid, STREAM_SEND_MSG, ipc_ss, sizeof(*ipc_ss) + size);
+        else
+        {
+            // Issue 25
+            ipc_message_synced(_pipes[pipe].pid, STREAM_SEND_MSG, ipc_ss, sizeof(*ipc_ss) + size);
+            retval = size;
+        }
+
+        free(ipc_ss);
+
+        return retval;
+    }
+
+
     struct ipc_stream_send ipc_ss = {
         .id = _pipes[pipe].id,
         .flags = flags,
@@ -84,7 +113,8 @@ big_size_t stream_send(int pipe, const void *data, big_size_t size, int flags)
     if (flags & O_NONBLOCK)
     {
         shm_unmake(shm, false);
-        ipc_shm_message(_pipes[pipe].pid, STREAM_SEND, shm, &ipc_ss, sizeof(ipc_ss));
+        // Issue 25
+        ipc_shm_message_synced(_pipes[pipe].pid, STREAM_SEND, shm, &ipc_ss, sizeof(ipc_ss));
         retval = size;
     }
     else

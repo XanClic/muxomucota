@@ -1,7 +1,9 @@
 #include <arch-constants.h>
+#include <digest.h>
 #include <kassert.h>
 #include <kmalloc.h>
 #include <pmm.h>
+#include <process.h>
 #include <stdbool.h>
 #include <vmem.h>
 
@@ -44,16 +46,6 @@ void vmmc_set_heap_top(vmm_context_t *context, void *address)
 }
 
 
-struct shm_sg
-{
-    size_t size;
-    int users;
-    ptrdiff_t offset;
-    bool kept_alive;
-    uintptr_t phys[];
-};
-
-
 uintptr_t vmmc_create_shm(size_t sz)
 {
     int pages = (sz + PAGE_SIZE - 1) / PAGE_SIZE;
@@ -64,6 +56,8 @@ uintptr_t vmmc_create_shm(size_t sz)
     sg->users = 0;
     sg->offset = 0;
     sg->kept_alive = false;
+
+    sg->digest = calculate_checksum(*sg);
 
     return (uintptr_t)sg;
 }
@@ -89,6 +83,8 @@ uintptr_t vmmc_make_shm(vmm_context_t *context, int count, void **vaddr_list, in
     sg->offset = offset;
     sg->kept_alive = false;
 
+    sg->digest = calculate_checksum(*sg);
+
     int k = 0;
 
     for (int i = 0; i < count; i++)
@@ -111,6 +107,8 @@ uintptr_t vmmc_make_shm(vmm_context_t *context, int count, void **vaddr_list, in
             kassert_print(vaddr < PHYS_BASE, "vaddr: %p\nPHYS_BASE: %p", vaddr, PHYS_BASE);
             kassert_print(pmm_alloced(dst), "dst: %p", dst);
 
+            pmm_use(dst);
+
             sg->phys[k] = dst;
         }
     }
@@ -121,33 +119,57 @@ uintptr_t vmmc_make_shm(vmm_context_t *context, int count, void **vaddr_list, in
 
 void *vmmc_open_shm(vmm_context_t *context, uintptr_t shm_id, unsigned flags)
 {
+    kassert_print(is_valid_shm(shm_id), "shm_id = %p", shm_id);
+
     struct shm_sg *sg = (struct shm_sg *)shm_id;
 
     int pages = (sg->size + PAGE_SIZE - 1) / PAGE_SIZE;
 
-    if (sg->kept_alive)
+    void *mapping = NULL;
+
+    if (sg->kept_alive || sg->users)
     {
-        sg->kept_alive = false;
-        sg->users++;
+        mapping = (void *)((uintptr_t)vmmc_user_map_sg(context, sg->phys, pages, flags) + sg->offset);
+
+        if (mapping == NULL)
+            return NULL;
     }
+
+    if (sg->kept_alive)
+        sg->kept_alive = false;
     else
     {
         if (sg->users)
             for (int i = 0; i < pages; i++)
                 pmm_use(sg->phys[i]);
         else
+        {
             for (int i = 0; i < pages; i++)
                 sg->phys[i] = pmm_alloc();
+
+            mapping = (void *)((uintptr_t)vmmc_user_map_sg(context, sg->phys, pages, flags) + sg->offset);
+
+            if (mapping == NULL)
+            {
+                for (int i = 0; i < pages; i++)
+                    pmm_free(sg->phys[i]);
+
+                return NULL;
+            }
+        }
     }
 
     sg->users++;
+    sg->digest = calculate_checksum(*sg);
 
-    return (void *)((uintptr_t)vmmc_user_map_sg(context, sg->phys, pages, flags) + sg->offset);
+    return mapping;
 }
 
 
 void vmmc_close_shm(vmm_context_t *context, uintptr_t shm_id, void *virt, bool destroy)
 {
+    kassert_print(is_valid_shm(shm_id), "shm_id = %p", shm_id);
+
     struct shm_sg *sg = (struct shm_sg *)shm_id;
 
     bool last = !__sync_sub_and_fetch(&sg->users, 1);
@@ -164,34 +186,71 @@ void vmmc_close_shm(vmm_context_t *context, uintptr_t shm_id, void *virt, bool d
             pmm_free(sg->phys[i]);
 
         if (last)
+        {
             kfree(sg);
+            sg = NULL;
+        }
     }
+
+    if (sg != NULL)
+        sg->digest = calculate_checksum(*sg);
 }
 
 
 void vmmc_unmake_shm(uintptr_t shm_id, bool destroy)
 {
+    kassert_print(is_valid_shm(shm_id), "shm_id = %p", shm_id);
+
     struct shm_sg *sg = (struct shm_sg *)shm_id;
 
-    if (destroy)
+    bool last = !__sync_sub_and_fetch(&sg->users, 1);
+
+    int pages = (sg->size + PAGE_SIZE - 1) / PAGE_SIZE;
+
+    if (last && !destroy)
+        sg->kept_alive = true;
+    else
     {
-        if (sg->kept_alive)
+        for (int i = 0; i < pages; i++)
+            pmm_free(sg->phys[i]);
+
+        if (last)
         {
-            int pages = (sg->size + PAGE_SIZE - 1) / PAGE_SIZE;
-
-            for (int i = 0; i < pages; i++)
-                pmm_free(sg->phys[i]);
-        }
-
-        if (!__sync_sub_and_fetch(&sg->users, 1))
             kfree(sg);
+            sg = NULL;
+        }
     }
+
+    if (sg != NULL)
+        sg->digest = calculate_checksum(*sg);
 }
 
 
 size_t vmmc_get_shm_size(uintptr_t shm_id)
 {
+    kassert_print(is_valid_shm(shm_id), "shm_id = %p", shm_id);
+
     return ((struct shm_sg *)shm_id)->size;
+}
+
+
+bool is_valid_shm(uintptr_t shm_id)
+{
+    struct shm_sg *sg = (struct shm_sg *)shm_id;
+
+    if (!is_valid_kernel_mem(sg, sizeof(*sg), VMM_PR | VMM_PW))
+        return false;
+
+    if (!check_integrity(*sg))
+        return false;
+
+    /*
+    // Sollte eigentlich mit bestandener Checksummenüberprüfung abgehakt sein
+    if (!is_valid_kernel_mem(sg, sizeof(*sg) + sizeof(uintptr_t) * ((sg->size + PAGE_SIZE - 1) / PAGE_SIZE), VMM_PR | VMM_PW))
+        return false;
+    */
+
+    return true;
 }
 
 
@@ -244,4 +303,49 @@ void *context_sbrk(vmm_context_t *context, intptr_t inc)
     }
 
     return (void *)ret;
+}
+
+
+bool is_valid_kernel_mem(const void *start, size_t length, unsigned flags)
+{
+    uintptr_t addr = (uintptr_t)start & ~(PAGE_SIZE - 1);
+    int pages = (length + ((uintptr_t)start & (PAGE_SIZE - 1)) + PAGE_SIZE - 1) >> PAGE_SHIFT;
+
+    while (pages--)
+    {
+        if (!IS_KERNEL(addr))
+            return false;
+
+        if ((vmmc_address_mapped(current_process->vmmc, (void *)addr, NULL) & flags) != flags)
+            return false;
+
+        addr += PAGE_SIZE;
+    }
+
+    return true;
+}
+
+
+bool is_valid_user_mem(vmm_context_t *context, const void *start, size_t length, unsigned flags)
+{
+    uintptr_t addr = (uintptr_t)start & ~(PAGE_SIZE - 1);
+    int pages = (length + ((uintptr_t)start & (PAGE_SIZE - 1)) + PAGE_SIZE - 1) >> PAGE_SHIFT;
+
+    while (pages--)
+    {
+        if (IS_KERNEL(addr))
+            return false;
+
+        unsigned flags_set = vmmc_address_mapped(context, (void *)addr, NULL);
+        if ((flags_set & flags) != flags)
+        {
+            // FIXME: Hier wird angenommen, dass RO nur bei COW auftritt (und dass es COW gibt)
+            if (!(flags & (VMM_UW | VMM_PW)) || (flags_set & (VMM_UW | VMM_PW)))
+                return false;
+        }
+
+        addr += PAGE_SIZE;
+    }
+
+    return true;
 }
