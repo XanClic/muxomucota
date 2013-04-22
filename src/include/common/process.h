@@ -3,6 +3,7 @@
 
 #include <arch-process.h>
 #include <cpu-state.h>
+#include <digest.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -43,6 +44,19 @@ typedef struct
 } popup_stack_mask_t;
 
 
+typedef struct
+{
+    // Wer erlaubt ist, diesen Speicher auszulesen (der Prozess, der den
+    // Popup-Thread gestartet hat)
+    pid_t parent;
+
+    size_t size;
+    void *mem;
+
+    DIGESTIFY
+} popup_return_memory_t;
+
+
 typedef struct process
 {
     pid_t pid; // process ID
@@ -78,6 +92,8 @@ typedef struct process
 
     void *popup_tmp;
     size_t popup_tmp_sz;
+
+    popup_return_memory_t *popup_return;
 
     bool popup_zombify;
 
@@ -152,6 +168,7 @@ int exec(struct cpu_state *state, const void *file, size_t file_length, char *co
 
 pid_t popup(process_t *proc, int func_index, uintptr_t shmid, const void *buffer, size_t length, bool zombify);
 
+bool is_popup(process_t *proc);
 
 bool check_process_file_image(const void *address);
 
@@ -171,7 +188,7 @@ void destroy_process(process_t *proc, uintmax_t exit_info);
 void destroy_this_popup_thread(uintmax_t exit_info);
 
 
-pid_t raw_waitpid(pid_t pid, uintmax_t *status, int options, int *errnop);
+pid_t raw_waitpid(pid_t pid, uintmax_t *status, int options, int *errnop, popup_return_memory_t **prmp);
 
 
 void sweep_dead_processes(void);

@@ -1,6 +1,7 @@
 #ifndef _VMEM_H
 #define _VMEM_H
 
+#include <digest.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -30,6 +31,19 @@ typedef struct
 
 
 extern vmm_context_t kernel_context;
+
+
+struct shm_sg
+{
+    size_t size;
+    int users;
+    ptrdiff_t offset;
+    bool kept_alive;
+
+    DIGESTIFY
+
+    uintptr_t phys[];
+};
 
 
 void init_virtual_memory(void);
@@ -74,6 +88,11 @@ void *vmmc_open_shm(vmm_context_t *context, uintptr_t shm_id, unsigned flags);
 void vmmc_close_shm(vmm_context_t *context, uintptr_t shm_id, void *virt, bool destroy);
 void vmmc_unmake_shm(uintptr_t shm_id, bool destroy);
 size_t vmmc_get_shm_size(uintptr_t shm_id);
+
+bool is_valid_kernel_mem(const void *start, size_t length, unsigned flags);
+bool is_valid_user_mem(vmm_context_t *context, const void *start, size_t length, unsigned flags);
+
+bool is_valid_shm(uintptr_t shmid);
 
 
 void *context_sbrk(vmm_context_t *context, ptrdiff_t inc);

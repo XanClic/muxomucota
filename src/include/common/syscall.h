@@ -40,7 +40,9 @@ enum syscall_number
     SYS_CREATE_THREAD,
     SYS_GETPGID,
     SYS_ELAPSED_MS,
-    SYS_VM86
+    SYS_VM86,
+    SYS_POPUP_SET_ANSWER,
+    SYS_POPUP_GET_ANSWER
 };
 
 

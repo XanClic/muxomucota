@@ -10,6 +10,9 @@ extern uintmax_t _vfs_duplicate_pipe(void);
 extern uintmax_t _vfs_stream_recv(uintptr_t shmid);
 extern uintmax_t _vfs_stream_send(uintptr_t shmid);
 
+extern uintmax_t _vfs_stream_recv_msg(void);
+extern uintmax_t _vfs_stream_send_msg(void);
+
 extern uintmax_t _vfs_pipe_get_flag(void);
 extern uintmax_t _vfs_pipe_set_flag(void);
 
@@ -28,6 +31,9 @@ void _provide_vfs_services(void)
 
     popup_shm_handler    (STREAM_RECV,     _vfs_stream_recv);
     popup_shm_handler    (STREAM_SEND,     _vfs_stream_send);
+
+    popup_message_handler(STREAM_RECV_MSG, _vfs_stream_recv_msg);
+    popup_message_handler(STREAM_SEND_MSG, _vfs_stream_send_msg);
 
     popup_message_handler(PIPE_GET_FLAG,   _vfs_pipe_get_flag);
     popup_message_handler(PIPE_SET_FLAG,   _vfs_pipe_set_flag);
