@@ -8,6 +8,7 @@
 #include <limits.h>
 #include <lock.h>
 #include <process.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 #include <unistd.h>
@@ -47,7 +48,7 @@ static inline pid_t get_new_pid(void)
     }
 
 
-    return 0;
+    kassert_print(0, "PIDs exhausted (max is %i)", MAX_PID_COUNT);
 }
 
 
@@ -555,7 +556,15 @@ void destroy_this_popup_thread(uintmax_t exit_info)
     if (current_process->popup_zombify)
         destroy_process(current_process, exit_info);
     else
+    {
         adopt_orphans(current_process);
+
+        if (current_process->popup_return != NULL)
+        {
+            kfree(current_process->popup_return->mem);
+            kfree(current_process->popup_return);
+        }
+    }
 
 
     lock(&schedule_lock);
@@ -620,11 +629,11 @@ static pid_t wait_for_any_child(uintmax_t *status, int options)
         return 0;
 
     // Ich fauler Sack
-    return raw_waitpid(p->pid, status, options, NULL);
+    return raw_waitpid(p->pid, status, options, NULL, NULL);
 }
 
 
-pid_t raw_waitpid(pid_t pid, uintmax_t *status, int options, int *errnop)
+pid_t raw_waitpid(pid_t pid, uintmax_t *status, int options, int *errnop, popup_return_memory_t **prmp)
 {
     if (pid == -1)
         return wait_for_any_child(status, options);
@@ -667,6 +676,9 @@ pid_t raw_waitpid(pid_t pid, uintmax_t *status, int options, int *errnop)
         *errnop = *proc_errno;
         kernel_unmap(proc_errno, sizeof(int));
     }
+
+    if (prmp != NULL)
+        *prmp = proc->popup_return;
 
     pid = proc->pid;
 
@@ -951,4 +963,10 @@ int exec(struct cpu_state *state, const void *file, size_t file_length, char *co
 
 
     return 0;
+}
+
+
+bool is_popup(process_t *proc)
+{
+    return proc->popup_stack_index >= 0;
 }

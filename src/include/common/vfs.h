@@ -79,6 +79,9 @@ typedef enum
     STREAM_SEND,
     STREAM_RECV,
 
+    STREAM_SEND_MSG,
+    STREAM_RECV_MSG,
+
     PIPE_GET_FLAG,
     PIPE_SET_FLAG,
 

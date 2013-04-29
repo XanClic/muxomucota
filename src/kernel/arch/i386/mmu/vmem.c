@@ -679,7 +679,8 @@ unsigned vmmc_address_mapped(vmm_context_t *context, void *virt, uintptr_t *phys
         return 0;
     }
 
-    *phys = (pt[pti] & ~0xFFF) | ((uintptr_t)virt & 0xFFF);
+    if (phys != NULL)
+        *phys = (pt[pti] & ~0xFFF) | ((uintptr_t)virt & 0xFFF);
 
 
     unsigned flags = 0;

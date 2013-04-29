@@ -101,7 +101,7 @@ void vm86_interrupt(int intr, struct vm86_registers *regs, struct vm86_memory_ar
 
     run_process(p);
 
-    raw_waitpid(p->pid, NULL, 0, NULL);
+    raw_waitpid(p->pid, NULL, 0, NULL, NULL);
 
 
     kfree(first_mb_base);

@@ -258,17 +258,23 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
                         if (*saved_pos == '2')
                             clrscr(tp->fg, tp->bg);
                         s++;
+                        if (!size--)
+                            return omsz;
                         break;
                     case 'f':
                     case 'H':
                         type = ANSI_POSITION;
                         s++;
+                        if (!size--)
+                            return omsz;
                         break;
                     case 's':
                         type = ANSI_UNKNOWN;
                         tp->sx = x;
                         tp->sy = y;
                         s++;
+                        if (!size--)
+                            return omsz;
                         break;
                     case 'u':
                         type = ANSI_UNKNOWN;
@@ -276,9 +282,12 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
                         y = tp->sy;
                         output = recalc_pos(x, y);
                         s++;
+                        if (!size--)
+                            return omsz;
                         break;
                     default:
                         type = ANSI_UNKNOWN;
+                        size += s - saved_pos - 1;
                         s = saved_pos - 1;
                         break;
                 }
@@ -421,6 +430,8 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
                             s++;
                         }
                         s++;
+                        if (!size--)
+                            return omsz;
                         break;
                 }
                 break;

@@ -31,6 +31,8 @@
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1
 
+#define RAND_MAX 0x7fffffff
+
 
 void *sbrk(intptr_t diff);
 
@@ -72,5 +74,9 @@ size_t wcstombs(char* buf, const wchar_t* wcs, size_t len);
 size_t mbstowcs(wchar_t* buf, const char* str, size_t len);
 
 int system(const char *c);
+
+int rand(void);
+int rand_r(unsigned *seedp);
+void srand(unsigned seed);
 
 #endif

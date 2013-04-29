@@ -37,17 +37,24 @@ noreturn void irq_handler_exit(void);
 
 size_t popup_get_message(void *buffer, size_t buflen);
 
+void popup_set_answer(const void *buffer, size_t buflen);
+size_t popup_get_answer(uintptr_t answer_id, void *buffer, size_t buflen);
+
 void ipc_ping(pid_t pid, int func_index);
 uintmax_t ipc_ping_synced(pid_t pid, int func_index);
+uintmax_t ipc_ping_request(pid_t pid, int func_index, uintptr_t *answer_id);
 
 void ipc_message(pid_t pid, int func_index, const void *buffer, size_t length);
 uintmax_t ipc_message_synced(pid_t pid, int func_index, const void *buffer, size_t length);
+uintmax_t ipc_message_request(pid_t pid, int func_index, const void *buffer, size_t length, uintptr_t *answer_id);
 
 void ipc_shm(pid_t pid, int func_index, uintptr_t shmid);
 uintmax_t ipc_shm_synced(pid_t pid, int func_index, uintptr_t shmid);
+uintmax_t ipc_shm_request(pid_t pid, int func_index, uintptr_t shmid, uintptr_t *answer_id);
 
 void ipc_shm_message(pid_t pid, int func_index, uintptr_t shmid, const void *buffer, size_t length);
 uintmax_t ipc_shm_message_synced(pid_t pid, int func_index, uintptr_t shmid, const void *buffer, size_t length);
+uintmax_t ipc_shm_message_request(pid_t pid, int func_index, uintptr_t shmid, const void *buffer, size_t length, uintptr_t *answer_id);
 
 
 pid_t find_daemon_by_name(const char *name);
