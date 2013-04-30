@@ -2,6 +2,7 @@
 # coding: utf-8
 
 require 'find'
+require 'shellwords'
 require 'trollop'
 
 
@@ -147,10 +148,10 @@ threads = Array.new
     pars = eval(IO.read("arch/#{arch}/build-vars.rb"))
 
     objdir = "#{Dir.pwd}/obj"
-    exit 1 unless system("mkdir -p '#{objdir}'")
+    exit 1 unless system("mkdir -p #{objdir.shellescape}")
 
     progdir = { 'progs' => "#{Dir.pwd}/progs" }[dir]
-    exit 1 unless system("mkdir -p '#{progdir}'") if progdir
+    exit 1 unless system("mkdir -p #{progdir.shellescape}") if progdir
 
     exit 1 unless system('mkdir -p crt') if dir == 'lib'
 
@@ -218,17 +219,17 @@ threads = Array.new
 
             case ext
             when '.c'
-                operations << [['CC', file], "#{pars[:cc][:cmd]} #{pars[:cc][:flags]} #{cdipars[:cc][:flags]} -c '#{sd}/#{file}' -o '#{output}'"]
+                operations << [['CC', file], "#{pars[:cc][:cmd]} #{pars[:cc][:flags]} #{cdipars[:cc][:flags]} -c #{"#{sd}/#{file}".shellescape} -o #{output.shellescape}"]
             when '.asm', '.S'
-                operations << [['ASM', file], "#{(cdipars[:asm][:cmd] ? cdipars : pars)[:asm][:cmd]} #{pars[:asm][:flags]} #{cdipars[:asm][:flags]} '#{sd}/#{file}' #{(cdipars[:asm][:out] ? cdipars : pars)[:asm][:out]} '#{output}'"]
+                operations << [['ASM', file], "#{(cdipars[:asm][:cmd] ? cdipars : pars)[:asm][:cmd]} #{pars[:asm][:flags]} #{cdipars[:asm][:flags]} #{"#{sd}/#{file}".shellescape} #{(cdipars[:asm][:out] ? cdipars : pars)[:asm][:out]} #{output.shellescape}"]
             when '.incbin'
-                operations << [['OBJCP', file], "pushd '#{sd}' &> /dev/null; #{pars[:objcp][:cmd]} #{pars[:objcp][:bin2elf]} #{cdipars[:objcp][:bin2elf]} '#{file}' '#{output}' && popd &> /dev/null"]
+                operations << [['OBJCP', file], "pushd #{sd.shellescape} &> /dev/null; #{pars[:objcp][:cmd]} #{pars[:objcp][:bin2elf]} #{cdipars[:objcp][:bin2elf]} #{file.shellescape} #{output.shellescape} && popd &> /dev/null"]
             end
         end
 
 
         if dir == 'progs'
-            ret = [['LD', ">#{sd}"], "#{pars[:ld][:cmd]} #{pars[:ld][:flags]} #{cdipars[:ld][:flags]} #{objdir}/#{objprefix}__*.o ../lib/crt/*.o -L../lib -o '#{image_root}/bin/#{File.basename(sd)}' -\\( -lc #{pars[:ld][:libs]} #{cdi ? '-lcdi' : ''} -\\)"]
+            ret = [['LD', ">#{sd}"], "#{pars[:ld][:cmd]} #{pars[:ld][:flags]} #{cdipars[:ld][:flags]} #{objdir}/#{objprefix}__*.o ../lib/crt/*.o -L../lib -o #{"#{image_root}/bin/#{File.basename(sd)}".shellescape} -\\( -lc #{pars[:ld][:libs]} #{cdi ? '-lcdi' : ''} -\\)"]
 
             retirement << ret
         end
@@ -284,7 +285,7 @@ threads = Array.new
     when 'kernel'
         puts('<<< . >>>')
         puts('%-8s%s' % ['LD', '>kernel'])
-        exit 1 unless system("#{pars[:ld][:cmd]} #{pars[:ld][:flags]} obj/*.o -o '#{image_root}/boot/kernel' #{pars[:ld][:libs]}")
+        exit 1 unless system("#{pars[:ld][:cmd]} #{pars[:ld][:flags]} obj/*.o -o #{image_root.shellescape}/boot/kernel #{pars[:ld][:libs]}")
     when 'lib'
         puts('<<< . >>>')
         [ 'c', 'm', 'cdi' ].each do |lib|
@@ -300,7 +301,7 @@ end
 
 
 if target == 'clean'
-    exit 1 unless system("rm -rf '#{image_root}'")
+    exit 1 unless system("rm -rf #{image_root.shellescape}")
 else
     puts("——— blobs ———")
 
@@ -331,14 +332,14 @@ else
             image_dir = pathparts.join('/')
 
             puts('%-8s%s' % ['MKDIR', image_dir])
-            exit 1 unless system("mkdir -p '#{image_root}/#{image_dir}'")
+            exit 1 unless system("mkdir -p #{"#{image_root}/#{image_dir}".shellescape}")
         end
 
         Dir.new(sd).each do |file|
             next unless File.file?("#{sd}/#{file}")
 
             puts('%-8s%s' % ['CP', file])
-            exit 1 unless system("cp '#{sd}/#{file}' '#{image_root}/#{image_dir}/#{file}'")
+            exit 1 unless system("cp #{"#{sd}/#{file}".shellescape} #{"#{image_root}/#{image_dir}/#{file}".shellescape}")
         end
     end
 
