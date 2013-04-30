@@ -197,12 +197,12 @@ puts("Resolving #{$server}...")
 
 dnspipe = Pipe.create("(dns)/#{$server}")
 if !dnspipe
-    $stderr.puts('Could not connect to DNS server.')
+    $stderr.puts("Could not connect to DNS server: #{errno.to_s}")
     exit 1
 end
 
 if dnspipe.readable == 0
-    $stderr.puts("Could not resolve #{$server}.")
+    $stderr.puts("Could not resolve #{$server}: #{errno.to_s}")
     exit 1
 end
 
@@ -214,7 +214,7 @@ puts("Resolved to #{ip}, connecting...")
 
 $con = Pipe.create("(tcp)/#{ip}:6667", Pipe::O_RDWR)
 if !$con
-    $stderr.puts('Could not connect.')
+    $stderr.puts("Could not connect: #{errno.to_s}")
     exit 1
 end
 
