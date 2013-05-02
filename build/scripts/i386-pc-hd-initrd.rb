@@ -56,14 +56,6 @@ exit 1 unless system("tar cf boot/initrd.tar #{initrd_files.map { |f| "'#{f}'" }
 Dir.chdir('..')
 
 
-puts("ZIP")
-
-Find.find('root').select { |f| File.file?(f) }.each do |f|
-    system("gzip -9 '#{f}'")
-    File.rename("#{f}.gz", f)
-end
-
-
 system('cp scripts/i386-pc-hd-initrd-menu.lst root/boot/grub/menu.lst')
 system('cp scripts/i386-pc-default-stage1 root/boot/grub/stage1')
 system('cp scripts/i386-pc-default-stage2 root/boot/grub/stage2')
