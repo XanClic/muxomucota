@@ -18,11 +18,25 @@
  ************************************************************************/
 
 #include <shm.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <vmem.h>
 #include <vfs.h>
+
+
+extern char *_cwd; // FIXME
+
+
+static bool is_absolute_path(const char *path)
+{
+    if ((path[0] == '/') || (path[0] == '('))
+        return true;
+
+    const char *colon = strchr(path, ':');
+    return (colon != NULL) && (colon[1] == '/');
+}
 
 
 int main(int argc, char *argv[])
@@ -49,7 +63,21 @@ int main(int argc, char *argv[])
     }
 
 
-    big_size_t ret = stream_send(fd, argv[1], strlen(argv[1]) + 1, F_MOUNT_FILE);
+    big_size_t ret;
+
+    if (is_absolute_path(argv[1]))
+        ret = stream_send(fd, argv[1], strlen(argv[1]) + 1, F_MOUNT_FILE);
+    else
+    {
+        size_t fplen = strlen(_cwd) + 1 + strlen(argv[1]) + 1;
+
+        char full_path[fplen];
+        strcpy(full_path, _cwd);
+        strcat(full_path, "/");
+        strcat(full_path, argv[1]);
+
+        ret = stream_send(fd, full_path, fplen, F_MOUNT_FILE);
+    }
 
     destroy_pipe(fd, 0);
 
