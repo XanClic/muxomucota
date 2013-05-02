@@ -224,6 +224,8 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
                 return 0;
             }
 
+            /*
+            // FIXME: Sowas wär schon schön, müsste aber funktionieren
             for (int i = 0; i < count; i++)
             {
                 // FIXME: Eigentlich braucht der Benutzer nicht unbedingt VMM_UR-Zugriff, sondern nur irgendeinen Zugriff
@@ -233,6 +235,7 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
                     return 0;
                 }
             }
+            */
 
             return vmmc_make_shm(current_process->vmmc, count, vaddr_list, page_count_list, offset);
         }
