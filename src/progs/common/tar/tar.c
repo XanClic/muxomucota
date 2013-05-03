@@ -142,7 +142,7 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
 
         for (mp = mountpoints; (mp != NULL) && strcmp(mp->name, relpath + 1); mp = mp->next);
 
-        if ((mp == NULL) && !(flags & O_CREAT))
+        if ((mp == NULL) && !(flags & O_CREAT_MOUNT_POINT))
         {
             errno = ENOENT;
             return 0;

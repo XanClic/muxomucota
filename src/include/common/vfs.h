@@ -39,6 +39,9 @@
 #define O_APPEND      (1 << 5)
 #define O_NOFOLLOW    (1 << 6)
 
+// FIXME: Das sollte eigentlich nicht hier sein
+#define O_CREAT_MOUNT_POINT (1 << 16)
+
 // stream_send/stream_recv-Flags
 #define O_TRANS_NC    0xffff
 #define O_NONBLOCK    (1 << 16)

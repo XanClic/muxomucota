@@ -262,7 +262,7 @@ static uintptr_t cdi_fs_create_pipe(const char *path, int flags)
 
     if (fs == NULL)
     {
-        if (!(flags & O_CREAT))
+        if (!(flags & O_CREAT_MOUNT_POINT))
         {
             free(duped);
             errno = ENOENT;
