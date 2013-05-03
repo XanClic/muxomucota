@@ -47,7 +47,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    int fd = create_pipe(argv[2], O_CREAT);
+    int fd = create_pipe(argv[2], O_CREAT_MOUNT_POINT);
 
     if (fd < 0)
     {
