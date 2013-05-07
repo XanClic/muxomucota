@@ -329,7 +329,7 @@ else
     subdirs = Array.new
 
     find('common', "platform/#{platform}", "arch/#{arch}") do |path|
-        subdirs << File.dirname(path) if File.file?(path)
+        subdirs << path if File.directory?(path)
     end
 
 
