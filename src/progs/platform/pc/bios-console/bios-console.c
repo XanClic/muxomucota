@@ -32,6 +32,66 @@
 
 // #define WRONG
 
+// #define STANDARD
+#define SOLARIZED
+
+
+#ifdef STANDARD
+
+static const uint8_t palette[] = {
+    0x00, 0x00, 0x00, // black
+    0xcd, 0x00, 0x00, // red
+    0x00, 0xcd, 0x00, // green
+    0xcd, 0xcd, 0x00, // yellow
+    0x00, 0x00, 0xee, // blue
+    0xcd, 0x00, 0xcd, // magenta
+    0x00, 0xcd, 0xcd, // cyan
+    0xcd, 0xcd, 0xcd, // gray
+    0x7f, 0x7f, 0x7f, // dark gray
+    0xff, 0x00, 0x00, // light red
+    0x00, 0xff, 0x00, // light green
+    0xff, 0xff, 0x00, // light yellow
+    0x5c, 0x5c, 0xff, // light blue
+    0xff, 0x00, 0xff, // light magenta
+    0x00, 0xff, 0xff, // light cyan
+    0xff, 0xff, 0xff  // white
+};
+
+#define DEF_FG     7
+#define DEF_BG     0
+#define DEF_BR_FG 15
+
+#define HAS_BRIGHT
+
+#elif defined SOLARIZED
+
+static const uint8_t palette[] = {
+    0x07, 0x36, 0x42, // base02
+    0xd3, 0x01, 0x02, // red
+    0x85, 0x99, 0x00, // green
+    0xb5, 0x89, 0x00, // yellow
+    0x26, 0x8b, 0xd2, // blue
+    0xd3, 0x36, 0x82, // magenta
+    0x2a, 0xa1, 0x98, // cyan
+    0xee, 0xe8, 0xd5, // white
+    0x00, 0x2b, 0x36, // base03
+    0xcb, 0x4b, 0x16, // orange
+    0x58, 0x6e, 0x75, // base01
+    0x65, 0x7b, 0x83, // base00
+    0x83, 0x94, 0x96, // base0
+    0x6c, 0x71, 0xc4, // violet
+    0x93, 0xa1, 0xa1, // base1
+    0xfd, 0xf6, 0xe3  // base3
+};
+
+#define DEF_FG    12
+#define DEF_BG     8
+#define DEF_BR_FG 15
+
+#else
+#error No color scheme specified.
+#endif
+
 
 uint16_t *text_mem;
 
@@ -49,6 +109,20 @@ struct term_pipe
 extern uint8_t get_c437_from_unicode(unsigned unicode);
 
 
+
+
+static void load_palette(const uint8_t *pal)
+{
+    for (int i = 0; i < 16; i++)
+    {
+        out8(0x3c8, ((i < 8) && (i != 6)) ? i : ((i == 6) ? 20 : (48 + i)));
+        out8(0x3c9, *(pal++) / 4);
+        out8(0x3c9, *(pal++) / 4);
+        out8(0x3c9, *(pal++) / 4);
+    }
+}
+
+
 uintptr_t service_create_pipe(const char *relpath, int flags)
 {
     (void)relpath;
@@ -56,8 +130,8 @@ uintptr_t service_create_pipe(const char *relpath, int flags)
 
     struct term_pipe *ntp = calloc(1, sizeof(struct term_pipe));
 
-    ntp->fg = 7;
-    ntp->bg = 0;
+    ntp->fg = DEF_FG;
+    ntp->bg = DEF_BG;
 
     return (uintptr_t)ntp;
 }
@@ -95,7 +169,7 @@ static void scroll_down(void)
         *(--dst) = *(--src);
 
     for (int i = 0; i < 40; i++)
-        *(--dst) = 0x07200720;
+        *(--dst) = 0x00200020 | (DEF_FG << 8) | (DEF_BG << 12) | (DEF_FG << 24) | (DEF_BG << 28);
 #else
     uint32_t *dst = (uint32_t *)text_mem;
     uint32_t *src = (uint32_t *)(text_mem + 80);
@@ -104,7 +178,7 @@ static void scroll_down(void)
         *(dst++) = *(src++);
 
     for (int i = 0; i < 40; i++)
-        *(dst++) = 0x07200720;
+        *(dst++) = 0x00200020 | (DEF_FG << 8) | (DEF_BG << 12) | (DEF_FG << 24) | (DEF_BG << 28);
 #endif
 }
 
@@ -346,13 +420,18 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
                                     switch (*s)
                                     {
                                         case '0':
-                                            tp->fg = 7;
-                                            tp->bg = 0;
+                                            tp->fg = DEF_FG;
+                                            tp->bg = DEF_BG;
                                             s++;
                                             subformat = -2;
                                             continue;
                                         case '1':
-                                            tp->fg |= 8;
+                                            if (tp->fg == DEF_FG)
+                                                tp->fg = DEF_BR_FG;
+#ifdef HAS_BRIGHT
+                                            else
+                                                tp->fg |= 8;
+#endif
                                             s++;
                                             subformat = -2;
                                             continue;
@@ -381,64 +460,24 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
                                         }
                                         continue;
                                     case '3':
-                                        tp->fg &= 8;
                                         subformat = -2;
-                                        switch (*(s++))
-                                        {
-                                            case '0':
-                                                continue;
-                                            case '1':
-                                                tp->fg |= 4;
-                                                continue;
-                                            case '2':
-                                                tp->fg |= 2;
-                                                continue;
-                                            case '3':
-                                                tp->fg |= 6;
-                                                continue;
-                                            case '4':
-                                                tp->fg |= 1;
-                                                continue;
-                                            case '5':
-                                                tp->fg |= 5;
-                                                continue;
-                                            case '6':
-                                                tp->fg |= 3;
-                                                continue;
-                                            case '7':
-                                                tp->fg |= 7;
-                                                continue;
-                                        }
+                                        if ((*s >= '0') && (*s <= '7'))
+#ifdef HAS_BRIGHT
+                                            tp->fg = (*s - '0') | (tp->fg & 8);
+#else
+                                            tp->fg =  *s - '0';
+#endif
+                                        s++;
                                         continue;
                                     case '4':
-                                        tp->bg &= 8;
                                         subformat = -2;
-                                        switch (*(s++))
-                                        {
-                                            case '0':
-                                                continue;
-                                            case '1':
-                                                tp->bg |= 4;
-                                                continue;
-                                            case '2':
-                                                tp->bg |= 2;
-                                                continue;
-                                            case '3':
-                                                tp->bg |= 6;
-                                                continue;
-                                            case '4':
-                                                tp->bg |= 1;
-                                                continue;
-                                            case '5':
-                                                tp->bg |= 5;
-                                                continue;
-                                            case '6':
-                                                tp->bg |= 3;
-                                                continue;
-                                            case '7':
-                                                tp->bg |= 7;
-                                                continue;
-                                        }
+                                        if ((*s >= '0') && (*s <= '7'))
+#ifdef HAS_BRIGHT
+                                            tp->bg = (*s - '0') | (tp->bg & 8);
+#else
+                                            tp->bg =  *s - '0';
+#endif
+                                        s++;
                                         continue;
                                 }
                             }
@@ -621,14 +660,17 @@ int main(void)
 #endif
 
 
-    // Für display_cursor().
+    // Für VGA-Operationen.
     iopl(3);
+
+
+    load_palette(palette);
 
 
     text_mem = map_memory(0xB8000, 80 * 25 * 2, VMM_UW);
 
     for (int i = 0; i < 80 * 25; i++)
-        text_mem[i] = 0x0700;
+        text_mem[i] = (DEF_FG << 8) | (DEF_BG << 12);
 
 
     daemonize("tty", true);
