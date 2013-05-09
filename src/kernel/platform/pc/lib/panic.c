@@ -47,7 +47,7 @@ noreturn void panic(const char *msg)
                 break;
             default:
                 *(dst++) = *(msg++);
-                *(dst++) = 0x4f;
+                *(dst++) = 0x1f;
                 if (++x >= 80)
                 {
                     x -= 80;
@@ -76,7 +76,7 @@ noreturn void panic(const char *msg)
         {
             int d = (func >> ((7 - i) * 4)) & 0xf;
             *(dst++) = (d > 9) ? (d - 10 + 'a') : (d + '0');
-            *(dst++) = 0x4f;
+            *(dst++) = 0x1f;
         }
 
 
@@ -91,18 +91,18 @@ noreturn void panic(const char *msg)
 
 
         *(dst++) = ' ';
-        *(dst++) = 0x4f;
+        *(dst++) = 0x1f;
         *(dst++) = '(';
-        *(dst++) = 0x4f;
+        *(dst++) = 0x1f;
 
         for (int i = 0; name[i]; i++)
         {
             *(dst++) = name[i];
-            *(dst++) = 0x4f;
+            *(dst++) = 0x1f;
         }
 
         *(dst++) = '+';
-        *(dst++) = 0x4f;
+        *(dst++) = 0x1f;
 
         bool got = false;
         ptrdiff_t diff = func - func_base;
@@ -114,12 +114,12 @@ noreturn void panic(const char *msg)
             if (got)
             {
                 *(dst++) = (d > 9) ? (d - 10 + 'a') : (d + '0');
-                *(dst++) = 0x4f;
+                *(dst++) = 0x1f;
             }
         }
 
         *(dst++) = ')';
-        *(dst++) = 0x4f;
+        *(dst++) = 0x1f;
     }
 
 
