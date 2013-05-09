@@ -120,6 +120,11 @@ static void load_palette(const uint8_t *pal)
         out8(0x3c9, *(pal++) / 4);
         out8(0x3c9, *(pal++) / 4);
     }
+
+    // Blinken deaktivieren
+    in8(0x3da);
+    out8(0x3c0, 0x30);
+    out8(0x3c0, in8(0x3c1) & ~0x08);
 }
 
 
