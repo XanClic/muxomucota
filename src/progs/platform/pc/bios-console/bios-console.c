@@ -30,6 +30,9 @@
 #include <vm86.h>
 
 
+bool echo_keys = true;
+
+
 // #define WRONG
 
 // #define STANDARD
@@ -108,6 +111,8 @@ struct term_pipe
 
 extern uint8_t get_c437_from_unicode(unsigned unicode);
 
+static int input_pipe = -1;
+
 
 
 
@@ -130,8 +135,11 @@ static void load_palette(const uint8_t *pal)
 
 uintptr_t service_create_pipe(const char *relpath, int flags)
 {
-    (void)relpath;
     (void)flags;
+
+    if (!strcmp(relpath, "/input"))
+        return 1;
+
 
     struct term_pipe *ntp = calloc(1, sizeof(struct term_pipe));
 
@@ -146,12 +154,16 @@ void service_destroy_pipe(uintptr_t id, int flags)
 {
     (void)flags;
 
-    free((void *)id);
+    if (id > 1)
+        free((void *)id);
 }
 
 
 uintptr_t service_duplicate_pipe(uintptr_t id)
 {
+    if (id == 1)
+        return 1;
+
     struct term_pipe *ntp = malloc(sizeof(*ntp));
     memcpy(ntp, (struct term_pipe *)id, sizeof(*ntp));
 
@@ -231,26 +243,18 @@ typedef enum
     ANSI_POSITION
 } ansi_type;
 
-big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, int flags)
+static size_t cons_print(struct term_pipe *tp, const char *s, size_t size)
 {
-    (void)flags;
-
-
     static int x, y;
     ansi_type type;
     int subformat;
     const char *saved_pos;
 
 
-    struct term_pipe *tp = (struct term_pipe *)id;
-
-
     lock(&output_lock);
 
     uint16_t *output = recalc_pos(x, y);
 
-
-    const char *s = data;
 
     size_t omsz = size;
 
@@ -564,11 +568,68 @@ big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, 
 }
 
 
+big_size_t service_stream_send(uintptr_t id, const void *data, big_size_t size, int flags)
+{
+    if (id == 1)
+    {
+        if (flags != F_MOUNT_FILE)
+        {
+            errno = EINVAL;
+            return 0;
+        }
+
+        const char *path = data;
+
+        if (!size || path[size - 1])
+        {
+            errno = EINVAL;
+            return 0;
+        }
+
+        int p = create_pipe(path, O_RDONLY);
+
+        if (p < 0)
+            return 0;
+
+
+        if (input_pipe >= 0)
+            destroy_pipe(input_pipe, 0);
+
+        input_pipe = p;
+
+        return strlen(path);
+    }
+
+
+    return cons_print((struct term_pipe *)id, data, size);
+}
+
+
+big_size_t service_stream_recv(uintptr_t id, void *data, big_size_t size, int flags)
+{
+    if (id == 1)
+    {
+        errno = ENOTSUP;
+        return 0;
+    }
+
+    if (input_pipe < 0)
+    {
+        errno = ENOTCONN;
+        return 0;
+    }
+
+    big_size_t ret = stream_recv(input_pipe, data, size, flags);
+    if (ret && echo_keys)
+        cons_print((struct term_pipe *)id, data, ret);
+
+    return ret;
+}
+
+
 bool service_pipe_implements(uintptr_t id, int interface)
 {
-    (void)id;
-
-    return ARRAY_CONTAINS((int[]){ I_TTY }, interface);
+    return (id == 1) ? (interface == I_FS) : (interface == I_TTY);
 }
 
 
@@ -579,6 +640,9 @@ int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
 
     switch (flag)
     {
+        case F_ECHO:
+            echo_keys = (bool)value;
+            return 0;
         case F_FLUSH:
             return 0;
     }
@@ -597,7 +661,7 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
         case F_PRESSURE:
             return 0;
         case F_READABLE:
-            return false;
+            return id > 1;
         case F_WRITABLE:
             return true;
     }
