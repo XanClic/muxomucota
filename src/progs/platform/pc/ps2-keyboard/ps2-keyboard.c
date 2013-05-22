@@ -30,9 +30,6 @@
 #include <vfs.h>
 
 
-static bool echo_keys = true;
-
-
 static unsigned char *fifo_buffer;
 static int fifo_read_idx = 0, fifo_write_idx = 0;
 static lock_t fifo_lock = LOCK_INITIALIZER;
@@ -136,12 +133,10 @@ uintmax_t service_pipe_get_flag(uintptr_t id, int flag)
 int service_pipe_set_flag(uintptr_t id, int flag, uintmax_t value)
 {
     (void)id;
+    (void)value;
 
     switch (flag)
     {
-        case F_ECHO:
-            echo_keys = value;
-            return 0;
         case F_FLUSH:
             return 0;
     }
@@ -355,26 +350,19 @@ static void flush_input_queue(void)
                 continue;
             }
 
-            char echo[5] = { 0, 0, 0, 0, 0 };
             int length = 0;
 
             if (!(table_content & 0x80))
                 length = 1;
-            else if ((table_content & 0xE0) == 0xC0)
+            else if ((table_content & 0xe0) == 0xc0)
                 length = 2;
-            else if ((table_content & 0xF0) == 0xE0)
+            else if ((table_content & 0xf0) == 0xe0)
                 length = 3;
-            else if ((table_content & 0xF8) == 0xF0)
+            else if ((table_content & 0xf8) == 0xf0)
                 length = 4;
 
             for (int i = 0; i < length; i++)
-            {
-                echo[i] = (table_content >> (i * 8)) & 0xFF;
-                fifo_write(echo[i]);
-            }
-
-            if (echo_keys)
-                printf("%s", echo);
+                fifo_write((table_content >> (i * 8)) & 0xff);
         }
         else
         {
