@@ -75,7 +75,7 @@ puts('%-8s%s' % ['MKFS', 'hd.img#p1'])
 exit 1 unless system("sudo mkfs.ext2 -F -q '#{loop_dev}'")
 
 puts('%-8s%s' % ['MOUNT', 'hd.img#p1 -> mp'])
-exit 1 unless system("mkdir -p mp && sudo mount '#{loop_dev}' -o loop -t ext2 mp && sudo chmod ugo+rwx -R mp")
+exit 1 unless system("mkdir -p mp && sudo mount '#{loop_dev}' -t ext2 mp && sudo chmod ugo+rwx -R mp")
 
 puts('%-8s%s' % ['CP', 'root/... -> mp/'])
 exit 1 unless system("cp -r root/{bin,boot,etc} mp")
