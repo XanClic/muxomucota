@@ -39,42 +39,23 @@ extern struct free_block *__first_free;
 
 static void join_memory(void)
 {
-    struct free_block **base = &__first_free, *current = __first_free;
+    struct free_block *current = __first_free;
 
     if (unlikely(current == NULL))
         return;
 
     while (current->next != NULL)
     {
-        if ((uintptr_t)current < (uintptr_t)current->next + current->next->size + 16)
+        if ((uintptr_t)current + current->size + 16 > (uintptr_t)current->next)
             *(volatile void **)NULL = current; // no u
 
-        if ((uintptr_t)current == (uintptr_t)current->next + current->next->size + 16)
-            current = current->next;
-        else if (*base != current)
+        if ((uintptr_t)current + current->size + 16 == (uintptr_t)current->next)
         {
-            /*         _
-             * HDR          current
-             * [block]
-             * ...     _
-             * HDR     _    *base
-             * [block] _| - (*base)->size
-             */
-
-            current->size = (uintptr_t)*base + (*base)->size - (uintptr_t)current;
-            *base = current;
+            current->size += current->next->size + 16;
+            current->next = current->next->next;
         }
         else
-        {
-            base = &current->next;
-            current = *base;
-        }
-    }
-
-    if (*base != current)
-    {
-        current->size = (uintptr_t)*base + (*base)->size - (uintptr_t)current;
-        *base = current;
+            current = current->next;
     }
 }
 
@@ -90,9 +71,7 @@ void free(void *ptr)
 
     struct free_block **fb = &__first_free;
 
-    // Diese Schleife sorgt dafür, dass der Speicher immer umgekehrt geordnet
-    // in der Liste hängt, sodass join_memory() auch gut arbeiten kann.
-    while ((uintptr_t)*fb > (uintptr_t)t)
+    while (((uintptr_t)*fb < (uintptr_t)t) && *fb)
         fb = &(*fb)->next;
 
 #ifndef NDEBUG
