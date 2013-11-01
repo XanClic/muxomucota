@@ -1,0 +1,2 @@
+[abort] Exiting gracefully
+common/stdlib/malloc.c:87: malloc: Assertion 't' failed.
