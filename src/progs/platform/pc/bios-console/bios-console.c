@@ -36,7 +36,8 @@ bool echo_keys = true;
 // #define WRONG
 
 // #define STANDARD
-#define SOLARIZED
+// #define SOLARIZED
+#define SOLARIZED_BRIGHT
 
 
 #ifdef STANDARD
@@ -66,7 +67,7 @@ static const uint8_t palette[] = {
 
 #define HAS_BRIGHT
 
-#elif defined SOLARIZED
+#elif defined SOLARIZED || defined SOLARIZED_BRIGHT
 
 static const uint8_t palette[] = {
     0x07, 0x36, 0x42, // base02
@@ -87,9 +88,19 @@ static const uint8_t palette[] = {
     0xfd, 0xf6, 0xe3  // base3
 };
 
+#ifdef SOLARIZED_BRIGHT
+
+#define DEF_FG    11
+#define DEF_BG    15
+#define DEF_BR_FG 10
+
+#else
+
 #define DEF_FG    12
 #define DEF_BG     8
 #define DEF_BR_FG 15
+
+#endif
 
 #else
 #error No color scheme specified.
@@ -106,6 +117,7 @@ struct term_pipe
     int expected_len;
     int sx, sy;
     int fg, bg;
+    bool reversed;
 };
 
 
@@ -247,7 +259,6 @@ static size_t cons_print(struct term_pipe *tp, const char *s, size_t size)
 {
     static int x, y;
     ansi_type type;
-    int subformat;
     const char *saved_pos;
 
 
@@ -418,88 +429,85 @@ static size_t cons_print(struct term_pipe *tp, const char *s, size_t size)
                             break;
                         }
                     case ANSI_COLOR:
-                        s = saved_pos;
-                        subformat = -1;
-                        for (;;)
-                        {
-                            if ((*s >= '0') && (*s <= '9'))
-                            {
-                                if (subformat == -1)
-                                {
-                                    switch (*s)
-                                    {
-                                        case '0':
-                                            tp->fg = DEF_FG;
-                                            tp->bg = DEF_BG;
-                                            s++;
-                                            subformat = -2;
-                                            continue;
-                                        case '1':
-                                            if (tp->fg == DEF_FG)
-                                                tp->fg = DEF_BR_FG;
-#ifdef HAS_BRIGHT
-                                            else
-                                                tp->fg |= 8;
-#endif
-                                            s++;
-                                            subformat = -2;
-                                            continue;
-                                    }
-                                }
-                                if (subformat == -1)
-                                {
-                                    subformat = *s;
-                                    s++;
-                                    continue;
-                                }
-                                if (subformat == -2)
-                                {
-                                    s++;
-                                    continue;
-                                }
-                                switch (subformat)
-                                {
-                                    case '2':
-                                        subformat = -2;
-                                        switch (*(s++))
-                                        {
-                                            case '2':
-                                                tp->fg &= 7;
-                                                continue;
-                                        }
-                                        continue;
-                                    case '3':
-                                        subformat = -2;
-                                        if ((*s >= '0') && (*s <= '7'))
-#ifdef HAS_BRIGHT
-                                            tp->fg = (*s - '0') | (tp->fg & 8);
-#else
-                                            tp->fg =  *s - '0';
-#endif
-                                        s++;
-                                        continue;
-                                    case '4':
-                                        subformat = -2;
-                                        if ((*s >= '0') && (*s <= '7'))
-#ifdef HAS_BRIGHT
-                                            tp->bg = (*s - '0') | (tp->bg & 8);
-#else
-                                            tp->bg =  *s - '0';
-#endif
-                                        s++;
-                                        continue;
-                                }
-                            }
-                            if (*s == 'm')
-                                break;
-                            if (*s == ';')
-                                subformat = -1;
-                            s++;
-                        }
+                    {
                         s++;
+
+                        int cs_len;
+                        for (cs_len = 0; saved_pos[cs_len] != 'm'; cs_len++);
+
+                        char color_string[cs_len + 1];
+                        for (int i = 0; i < cs_len; i++)
+                            color_string[i] = saved_pos[i];
+                        color_string[cs_len] = 0;
+
+                        STRTOK_FOREACH(color_string, ";", sub)
+                        {
+                            char *end;
+                            int num = strtol(sub, &end, 10);
+
+                            if (num == 0)
+                            {
+                                tp->fg = DEF_FG;
+                                tp->bg = DEF_BG;
+                                tp->reversed = false;
+                            }
+                            else if (num == 1)
+                            {
+                                if (tp->fg == DEF_FG)
+                                    tp->fg = DEF_BR_FG;
+#ifdef HAS_BRIGHT
+                                else
+                                    tp->fg |= 8;
+#endif
+                            }
+                            else if (num == 7)
+                                tp->reversed = true;
+                            else if (num == 22)
+                            {
+#ifdef HAS_BRIGHT
+                                tp->fg &= 7;
+#else
+                                if (tp->fg == DEF_BR_FG)
+                                    tp->fg = DEF_FG;
+#endif
+                            }
+                            else if (num == 27)
+                                tp->reversed = false;
+                            else if ((num >= 30) && (num <= 37))
+                            {
+#ifdef HAS_BRIGHT
+                                tp->fg = (num - 30) | (tp->fg & 8);
+#else
+                                tp->fg =  num - 30;
+#endif
+                            }
+                            else if (num == 39)
+                                tp->fg = DEF_FG; // FIXME: DEF_BR_FG wenn nötig
+                            else if ((num >= 40) && (num <= 47))
+                            {
+#ifdef HAS_BRIGHT
+                                tp->bg = (num - 40) | (tp->bg & 8);
+#else
+                                tp->bg =  num - 40;
+#endif
+                            }
+
+                            else if (num == 49)
+                                tp->bg = DEF_BG;
+                            // "Extensions"
+                            else if ((num >= 70) && (num <= 77))
+                                tp->fg = (num - 70) | 8;
+                            else if (num == 79)
+                                tp->fg = DEF_BG;
+                            else if ((num >= 80) && (num <= 87))
+                                tp->bg = (num - 80) | 8;
+                            else if (num == 89)
+                                tp->bg = DEF_FG;
+                        }
                         if (!size--)
                             return omsz;
                         break;
+                    }
                 }
                 break;
             case '\n':
@@ -535,7 +543,7 @@ static size_t cons_print(struct term_pipe *tp, const char *s, size_t size)
 #else
                 *(output++)
 #endif
-                    = get_c437_from_unicode(uni) | (tp->fg << 8) | (tp->bg << 12);
+                    = get_c437_from_unicode(uni) | (tp->fg << (tp->reversed ? 12 : 8)) | (tp->bg << (tp->reversed ? 8 : 12));
 
                 if (++x >= 80)
                 {
