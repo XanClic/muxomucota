@@ -483,7 +483,7 @@ int main(void)
 
     for (;;)
     {
-        printf("%s$ ", getenv("PWD"));
+        printf("\033[31;1m root \033[7;34m► %s \033[0;34m►\033[0m ", getenv("PWD"));
 
         fflush(stdout);
 
