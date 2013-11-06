@@ -8,7 +8,13 @@ Dir.chdir('build')
 
 ENV['PATH'] += ':/usr/local/sbin:/usr/sbin:/sbin'
 
-system('mkdir -p root/boot/grub2')
+if ENV['PATH'].split(':').find { |p| File.file?("#{p}/grub2-install") }
+    grub_base = 'grub2'
+else
+    grub_base = 'grub'
+end
+
+system("mkdir -p root/boot/#{grub_base}")
 system('mkdir -p root-unstripped')
 
 
@@ -56,7 +62,7 @@ exit 1 unless system("tar cf boot/initrd.tar #{initrd_files.map { |f| "'#{f}'" }
 Dir.chdir('..')
 
 
-system('cp scripts/i386-pc-hd-initrd-grub2-grub.cfg root/boot/grub2/grub.cfg')
+system("cp scripts/i386-pc-hd-initrd-grub2-grub.cfg root/boot/#{grub_base}/grub.cfg")
 
 
 puts('%-8s%s' % ['DD', '/dev/zero -> hd.img'])
@@ -95,7 +101,7 @@ begin
     end
 
     puts('%-8s%s' % ['GRUB2', 'hd.img'])
-    raise 42 unless system("sudo grub2-install --boot-directory=mp/boot --target=i386-pc --modules='part_msdos ext2 biosdisk' images/hd.img")
+    raise 42 unless system("sudo #{grub_base}-install --boot-directory=mp/boot --target=i386-pc --modules='part_msdos ext2 biosdisk' images/hd.img &> /dev/null")
 rescue
     puts('%-8s%s' % ['UMOUNT', 'mp'])
     system("sudo umount mp; sudo losetup -d '#{loop_dev}'; rmdir mp")
