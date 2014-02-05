@@ -195,7 +195,9 @@ void i386_common_isr(struct cpu_state *state)
         uintptr_t cr2;
         __asm__ __volatile__ ("mov %0,cr2" : "=r"(cr2));
 
-        uintptr_t ksp = (state->cs & 3) ? (uintptr_t)(state + 1) : ((uintptr_t)(state + 1) - sizeof(state->ss) - sizeof(state->esp));
+        uintptr_t ksp = (uintptr_t)(state + 1) -
+                        ((state->eflags & 0x20000) ? 0 : (sizeof(state->vm86_ds) + sizeof(state->vm86_es) + sizeof(state->vm86_fs) + sizeof(state->vm86_gs))) -
+                        ((state->cs     &       3) ? 0 : (sizeof(state->ss) + sizeof(state->esp)));
 
         process_t *main_process = (current_process == NULL) ? NULL : find_process(current_process->pgid);
 
