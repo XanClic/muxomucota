@@ -1,0 +1,26 @@
+#ifndef _CSTDDEF
+#define _CSTDDEF
+
+#ifndef NULL
+#define NULL 0
+#endif
+
+
+typedef unsigned int  size_t;
+typedef   signed int ssize_t;
+typedef unsigned long long big_size_t;
+
+typedef signed int ptrdiff_t;
+
+
+#define offsetof(t, m) (reinterpret_cast<size_t>(&(static_cast<t *>(0)->m)))
+
+
+namespace std
+{
+
+typedef decltype(nullptr) nullptr_t;
+
+}
+
+#endif

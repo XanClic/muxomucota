@@ -20,8 +20,13 @@
 #ifndef _SYS__TYPES_H
 #define _SYS__TYPES_H
 
+#ifdef __cplusplus
+#include <cstddef>
+#include <cstdint>
+#else
 #include <stddef.h>
 #include <stdint.h>
+#endif
 
 
 typedef int_fast32_t id_t;

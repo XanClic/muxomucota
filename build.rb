@@ -44,7 +44,7 @@ arch = `uname -m`.chomp
 if arch == 'x86'
     arch = 'i386'
 elsif arch == 'x86_64'
-    arch = File.directory?('src/kernel/arch/x64') ? 'x64' : 'i386'
+    arch = File.directory?('src/kernel++/arch/x64') ? 'x64' : 'i386'
 elsif arch[0..2] == 'arm'
     arch = 'arm'
 end
@@ -115,8 +115,8 @@ platform = opts[:platform]
 image    = opts[:image]
 
 
-Trollop::die('Unsupported architecture') unless File.directory?("src/kernel/arch/#{arch}")
-Trollop::die('Unsupported platform')     unless File.directory?("src/kernel/platform/#{platform}")
+Trollop::die('Unsupported architecture') unless File.directory?("src/kernel++/arch/#{arch}")
+Trollop::die('Unsupported platform')     unless File.directory?("src/kernel++/platform/#{platform}")
 Trollop::die('Unsupported image type')   unless File.file?("build/scripts/#{arch}-#{platform}-#{image}.rb")
 
 
@@ -132,7 +132,7 @@ exit 1 unless system('mkdir -p build/root/{bin,boot,dev,etc}') if target == 'all
 image_root = "#{Dir.pwd}/build/root"
 
 
-exts = ['.c', '.asm', '.S', '.incbin']
+exts = ['.c', '.cpp', '.asm', '.S', '.incbin']
 
 
 $inc_dirs = ['common', "arch/#{arch}", "platform/#{platform}"].map { |d| "#{Dir.pwd}/src/include/#{d}" }
@@ -146,7 +146,7 @@ cores = 4 unless cores && (cores > 0)
 threads = Array.new
 
 
-['kernel', 'lib', 'progs'].each do |dir|
+['kernel++', 'lib', 'progs'].each do |dir|
     puts("——— #{dir} ———") unless target == 'clean'
 
     pushed = Dir.pwd
@@ -209,7 +209,7 @@ threads = Array.new
 
         cdipars = cdi ? eval(IO.read("#{sd}/.cdi")) : {}
 
-        [:cc, :asm, :objcp, :ld].each { |top| cdipars[top] = {} unless cdipars[top] }
+        [:cc, :cxx, :asm, :objcp, :ld].each { |top| cdipars[top] = {} unless cdipars[top] }
 
         if cdi
             cdipars.each do |top, flags|
@@ -238,6 +238,8 @@ threads = Array.new
             case ext
             when '.c'
                 operations << [['CC', file], "#{pars[:cc][:cmd]} #{pars[:cc][:flags]} #{cdipars[:cc][:flags]} -c #{"#{sd}/#{file}".shellescape} -o #{output.shellescape}"]
+            when '.cpp'
+                operations << [['CXX', file], "#{pars[:cxx][:cmd]} #{pars[:cxx][:flags]} #{cdipars[:cxx][:flags]} -c #{"#{sd}/#{file}".shellescape} -o #{output.shellescape}"]
             when '.asm', '.S'
                 operations << [['ASM', file], "#{(cdipars[:asm][:cmd] ? cdipars : pars)[:asm][:cmd]} #{pars[:asm][:flags]} #{cdipars[:asm][:flags]} #{"#{sd}/#{file}".shellescape} #{(cdipars[:asm][:out] ? cdipars : pars)[:asm][:out]} #{output.shellescape}"]
             when '.incbin'
@@ -300,7 +302,7 @@ threads = Array.new
 
 
     case dir
-    when 'kernel'
+    when 'kernel++'
         puts('<<< . >>>')
         puts('%-8s%s' % ['LD', '>kernel'])
         exit 1 unless system("#{pars[:ld][:cmd]} #{pars[:ld][:flags]} obj/*.o -o #{image_root.shellescape}/boot/kernel #{pars[:ld][:libs]}")

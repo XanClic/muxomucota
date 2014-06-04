@@ -1,0 +1,11 @@
+#ifndef _CLIMITS
+#define _CLIMITS
+
+extern "C"
+{
+
+#include <limits.h>
+
+}
+
+#endif

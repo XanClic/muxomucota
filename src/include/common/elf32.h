@@ -127,7 +127,7 @@
 #define R_ARM_TARGET2               41
 #define R_ARM_PREL31                42
 
-// Definiert den erwarteten Wert für e_machine
+// Defines the expected value for e_machine
 #include <arch-elf-machine.h>
 
 typedef uint32_t Elf32_Addr;

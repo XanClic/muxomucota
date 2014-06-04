@@ -31,9 +31,10 @@ typedef unsigned long long uint64_t;
 
 typedef  int32_t  intptr_t;
 typedef uint32_t uintptr_t;
-typedef  int32_t ptrdiff_t;
 
+#ifndef __cplusplus
 typedef uint32_t wchar_t;
+#endif
 
 
 typedef  int8_t   int_fast8_t;
@@ -107,5 +108,6 @@ typedef uint64_t uintmax_t;
 #define UINTMAX_MAX UINT64_MAX
 #define  PTRDIFF_MIN INT32_MIN
 #define  PTRDIFF_MAX INT32_MAX
+#define  SIZE_MAX   UINT32_MAX
 
 #endif

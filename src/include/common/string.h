@@ -29,19 +29,15 @@
     for (char *__lu(saveptr), *target = strtok_r(string, delim, &__lu(saveptr)); target != NULL; target = strtok_r(NULL, delim, &__lu(saveptr)))
 
 
-#if __STDC_VERSION__ >= 199901L
+#if defined(__cplusplus) && !defined(restrict)
+#define restrict __restrict__
+#endif
+
 void *memcpy(void *restrict d, const void *restrict s, size_t n);
 char *strcat(char *restrict d, const char *restrict s);
 char *strcpy(char *restrict d, const char *restrict s);
 char *strncat(char *restrict d, const char *restrict s, size_t n);
 char *strncpy(char *restrict d, const char *restrict s, size_t n);
-#else
-void *memcpy(void *d, const void *s, size_t n);
-char *strcat(char *d, const char *s);
-char *strcpy(char *d, const char *s);
-char *strncat(char *d, const char *s, size_t n);
-char *strncpy(char *d, const char *s, size_t n);
-#endif
 
 static inline int ffsl(long i) { return __builtin_ffsl(i); }
 

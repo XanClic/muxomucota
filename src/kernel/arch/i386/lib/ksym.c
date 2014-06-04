@@ -18,7 +18,7 @@
  ************************************************************************/
 
 #include <arch-constants.h>
-#include <elf.h>
+#include <elf32.h>
 #include <ksym.h>
 #include <stdbool.h>
 #include <stddef.h>
