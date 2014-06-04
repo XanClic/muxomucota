@@ -1,0 +1,15 @@
+-m32
+-ffreestanding
+-nostdinc
+-nostdlibinc
+-Isrc/include/common
+-Isrc/include/arch/i386
+-Isrc/include/platform/pc
+-std=c++11
+-funsigned-char
+-DX86
+-DI386
+-DLITTLE_ENDIAN
+-DHAS_VMEM
+-DKERNEL
+-w
