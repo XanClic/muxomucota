@@ -18,6 +18,7 @@ template<typename T> class const_attribute {
 };
 
 
+#ifdef FUTURE_AWESOME_CXX_VERSION_WITH_THIS_IN_CLASS_TOP_LEVEL_OR_MAYBE_A_NON_STANDARD_COMPATIBLE_GCC
 #define gs_attribute(T, name) \
     template<typename S> class gs_attribute_##name { \
         public: \
@@ -34,5 +35,22 @@ template<typename T> class const_attribute {
     static auto __get_type_##name(void) -> decltype(this); \
     friend class gs_attribute_##name<decltype(__get_type_##name())>; \
     gs_attribute_##name<decltype(__get_type_##name())> name = this
+#else
+#define gs_attribute(O, T, name) \
+    template<typename S> class gs_attribute_##name { \
+        public: \
+            gs_attribute_##name(S addr): srnd(addr) {} \
+            operator T(void) const { return srnd->get_##name(); } \
+            gs_attribute_##name &operator=(T v) { srnd->set_##name(v); return *this; } \
+            T operator++(void) { return srnd->inc_##name(); } \
+            T operator++(int) { T v = srnd->get_##name(); srnd->inc_##name(); return v; } \
+            T operator--(void) { return srnd->dec_##name(); } \
+            T operator--(int) { T v = srnd->get_##name(); srnd->dec_##name(); return v; } \
+        private: \
+            S srnd; \
+    }; \
+    friend class gs_attribute_##name<O *>; \
+    gs_attribute_##name<O *> name = this;
+#endif
 
 #endif

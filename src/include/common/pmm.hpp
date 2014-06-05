@@ -20,8 +20,8 @@ class physptr {
 
         bool alloced(void);
 
-        gs_attribute(bool, cow);
-        gs_attribute(int, users);
+        gs_attribute(physptr, bool, cow);
+        gs_attribute(physptr, int, users);
 
     private:
         uintptr_t address;
