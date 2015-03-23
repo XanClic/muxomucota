@@ -20,6 +20,17 @@
 #ifndef _UNISTD_H
 #define _UNISTD_H
 
+#ifdef __cplusplus
+#include <cerrno>
+#include <cstddef>
+#include <tls.hpp>
+
+#ifdef KERNEL
+#include <cpu-state.hpp>
+#else
+#include <syscall.hpp>
+#endif
+#else
 #include <errno.h>
 #include <stddef.h>
 #include <tls.h>
@@ -29,6 +40,8 @@
 #else
 #include <syscall.h>
 #endif
+#endif
+
 #include <sys/types.h>
 
 
@@ -36,6 +49,9 @@
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #ifdef KERNEL
 pid_t fork(struct cpu_state *current_state);
@@ -63,6 +79,10 @@ static inline pid_t getpgid(pid_t pid)
         return __tls()->pgid;
     else
         return syscall1(SYS_GETPGID, pid);
+}
+#endif
+
+#ifdef __cplusplus
 }
 #endif
 

@@ -7,7 +7,7 @@ extern tss x86_tss;
 
 void process::arch_switch_to(void)
 {
-    x86_tss.esp0 = arch.kernel_stack_top;
+    x86_tss.esp0 = kernel_stack_top;
 
     tls->use();
 

@@ -20,9 +20,15 @@
 #ifndef _STDLIB_H
 #define _STDLIB_H
 
+#ifdef __cplusplus
+#include <cstddef>
+#include <cstdint>
+#include <compiler.hpp>
+#else
 #include <stddef.h>
 #include <stdint.h>
 #include <stdnoreturn.h>
+#endif
 
 
 #define MB_CUR_MAX 4
@@ -53,6 +59,10 @@
 #define RAND_MAX 0x7fffffff
 
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void *sbrk(intptr_t diff);
 
 int clearenv(void);
@@ -70,8 +80,13 @@ void *aligned_alloc(size_t alignment, size_t size);
 
 size_t _alloced_size(const void *ptr);
 
+#ifdef __cplusplus
+void exit(int status) cxx_noreturn;
+void abort(void) cxx_noreturn;
+#else
 noreturn void exit(int status);
 noreturn void abort(void);
+#endif
 
 int atoi(const char *nptr);
 long atol(const char *nptr);
@@ -97,5 +112,9 @@ int system(const char *c);
 int rand(void);
 int rand_r(unsigned *seedp);
 void srand(unsigned seed);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

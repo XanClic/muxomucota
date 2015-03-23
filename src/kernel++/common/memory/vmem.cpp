@@ -6,6 +6,7 @@
 #include <shm.hpp>
 #include <vmem.hpp>
 
+#include <arch-constants.hpp>
 #include <arch-vmem.hpp>
 
 
@@ -24,6 +25,31 @@ vmm_context::vmm_context(void):
     users(0),
     heap_end(nullptr)
 {
+}
+
+
+bool vmm_context::is_valid_user_mem(const void *start, size_t length, unsigned flags)
+{
+    uintptr_t addr = reinterpret_cast<uintptr_t>(start) & ~PAGE_MASK;
+    int pages = (length + (reinterpret_cast<uintptr_t>(start) & PAGE_MASK) + PAGE_SIZE - 1) / PAGE_SIZE;
+
+    while (pages--) {
+        if (IS_KERNEL(addr)) {
+            return false;
+        }
+
+        unsigned flags_set = mapped(reinterpret_cast<void *>(addr), nullptr);
+        if ((flags_set & flags) != flags) {
+            // FIXME: This assumes that RO directly indicates COW
+            if (!(flags & (VMM_UW | VMM_PW)) || (flags_set & (VMM_UW | VMM_PW))) {
+                return false;
+            }
+        }
+
+        addr += PAGE_SIZE;
+    }
+
+    return true;
 }
 
 

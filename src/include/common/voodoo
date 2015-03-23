@@ -1,6 +1,10 @@
 #ifndef _VOODOO
 #define _VOODOO
 
+#include <cstdint>
+#include <cstdlib>
+
+
 template<typename T> class const_attribute {
     public:
         const_attribute(void) {}
@@ -8,14 +12,31 @@ template<typename T> class const_attribute {
         const_attribute(const T &&val): value(val) {}
 
         operator const T &(void) const { return value; }
-
-        const T *operator&(void) { return &value; }
+        const T *operator&(void) const { return &value; }
 
         void set(const T &val) { value = val; }
 
     private:
         T value;
 };
+
+
+// Written so GCC won't complain
+#define broken_as_hell_offsetof(t, m) (reinterpret_cast<size_t>(&(reinterpret_cast<t *>(1)->m)) - 1)
+
+#define s_attribute(O, T, name) \
+    template<typename S> class s_attribute_##name { \
+        public: \
+            operator const T &(void) const { return value; } \
+            const T *operator&(void) const { return &value; } \
+            s_attribute_##name &operator=(const T &v) { srnd()->set_##name(v); return *this; } \
+            void set(const T &v) { value = v; } \
+        private: \
+            S *srnd(void) { return reinterpret_cast<S *>(reinterpret_cast<uintptr_t>(this) - broken_as_hell_offsetof(S, name)); } \
+            T value; \
+    }; \
+    friend class s_attribute_##name<O>; \
+    s_attribute_##name<O> name;
 
 
 #ifdef FUTURE_AWESOME_CXX_VERSION_WITH_THIS_IN_CLASS_TOP_LEVEL_OR_MAYBE_A_NON_STANDARD_COMPATIBLE_GCC

@@ -6,6 +6,8 @@
 
 
 struct cpu_state {
+    void kiopl(int level);
+
     uint32_t ebp, edi, esi, edx, ecx, ebx, eax;
     uint32_t es, ds;
     uint32_t int_vector, err_code;

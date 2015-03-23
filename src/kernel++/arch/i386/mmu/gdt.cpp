@@ -23,8 +23,7 @@ void init_gdt(void)
     gdt[5] |= (tss_base & 0x00ffffff) << 16;
     gdt[5] |= (tss_base & 0xff000000) << 32;
 
-    static struct
-    {
+    static struct {
         uint16_t limit;
         uintptr_t base;
     } cxx_packed gdtr = {

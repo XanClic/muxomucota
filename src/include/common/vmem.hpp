@@ -35,6 +35,13 @@ class vmm_context: public arch_vmm_context {
         void *map(uintptr_t *phys, int pages, unsigned flags);
 
         void unmap(void *virt, size_t length);
+
+        bool do_cow(void *address);
+        bool do_lazy_map(void *address);
+
+        bool is_valid_user_mem(const void *start, size_t length, unsigned flags);
+
+        void *sbrk(ptrdiff_t inc);
 };
 
 

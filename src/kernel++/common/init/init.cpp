@@ -1,4 +1,5 @@
 #include <boot.hpp>
+#include <isr.hpp>
 #include <platform.hpp>
 #include <pmm.hpp>
 #include <vmem.hpp>
@@ -17,4 +18,7 @@ void main(boot_info *bi)
     }
 
     init_pmm();
+
+
+    init_interrupts();
 }
