@@ -96,6 +96,9 @@ typedef struct process
 
 
     char name[32]; // FIXME
+    // 32 Zeichen pro Eintrag
+    char *aliases;
+    int alias_count;
 
     struct tls *tls;
 
@@ -195,6 +198,7 @@ pid_t create_process_from_image(int argc, const char *const *argv, const void *a
 bool load_image_to_process(process_t *proc, const void *address, void **heap_start, void (**entry)(void));
 
 
+void process_add_alias(process_t *proc, const char *alias);
 void daemonize_process(process_t *proc, const char *name);
 void daemonize_from_irq_handler(process_t *proc);
 
