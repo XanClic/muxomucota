@@ -38,6 +38,9 @@
 #define VMM_PW (1 << 4)
 #define VMM_PX (1 << 5)
 
+// cache disable
+#define VMM_CD (1 << 6)
+
 
 typedef struct
 {

@@ -330,7 +330,11 @@ void vmmc_map_user_page_unlocked(const vmm_context_t *context, void *virt, uintp
         memsetptr(pt, lazy_flags, 1024);
     }
 
-    pt[pti] = (phys & ~0xFFF) | MAP_PR | (flags & (VMM_UW | VMM_PW) ? MAP_RW : 0) | (flags & (VMM_UR | VMM_UW | VMM_UX) ? MAP_US : 0) | MAP_CC | MAP_LC;
+    pt[pti] = (phys & ~0xFFF) | MAP_PR
+            | (flags & (VMM_UW | VMM_PW) ? MAP_RW : 0)
+            | (flags & (VMM_UR | VMM_UW | VMM_UX) ? MAP_US : 0)
+            | (flags & VMM_CD ? MAP_NC : MAP_CC)
+            | MAP_LC;
 
     kernel_unmap(pt, 4096);
 }

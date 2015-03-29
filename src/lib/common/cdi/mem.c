@@ -67,7 +67,7 @@ struct cdi_mem_area *cdi_mem_alloc(size_t size, cdi_mem_flags_t flags)
     area->paddr.items[0].size = size;
 
 
-    area->vaddr = map_memory(area->paddr.items[0].start, size, VMM_UR | VMM_UW);
+    area->vaddr = map_memory(area->paddr.items[0].start, size, VMM_UR | VMM_UW | VMM_CD);
 
 
     return area;
@@ -103,7 +103,7 @@ struct cdi_mem_area *cdi_mem_map(uintptr_t paddr, size_t size)
     area->paddr.items[0].start = paddr;
     area->paddr.items[0].size  = size;
 
-    area->vaddr = map_memory(paddr, size, VMM_UR | VMM_UW);
+    area->vaddr = map_memory(paddr, size, VMM_UR | VMM_UW | VMM_CD);
 
 
     return area;

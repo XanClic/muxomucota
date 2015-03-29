@@ -56,7 +56,7 @@ void cdi_pci_alloc_memory(struct cdi_pci_device *device)
 
     for (int i = 0; (res = cdi_list_get(device->resources, i)) != NULL; i++)
         if (res->type == CDI_PCI_MEMORY)
-            res->address = map_memory(res->start, res->length, VMM_UR | VMM_UW);
+            res->address = map_memory(res->start, res->length, VMM_UR | VMM_UW | VMM_CD);
 }
 
 void cdi_pci_free_memory(struct cdi_pci_device *device)
