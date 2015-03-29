@@ -773,8 +773,5 @@ void cdi_fs_driver_register(struct cdi_fs_driver *driver)
     __cdi_pipe_implements = cdi_fs_pipe_implements;
     __cdi_is_symlink      = cdi_fs_is_symlink;
 
-    driver->drv.init();
-
-
     fs_driver = driver;
 }

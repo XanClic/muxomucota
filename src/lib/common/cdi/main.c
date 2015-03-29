@@ -17,16 +17,22 @@
  * along with µxoµcota.  If not, see <http://www.gnu.org/licenses/>.    *
  ************************************************************************/
 
+#include <assert.h>
 #include <cdi.h>
 #include <drivers.h>
+#include <ipc.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <usb-ipc.h>
 #include <cdi.h>
 #include <cdi/fs.h>
 #include <cdi/lists.h>
+#include <cdi/misc.h>
 #include <cdi/net.h>
+#include <cdi/scsi.h>
 #include <cdi/storage.h>
+#include <cdi/usb.h>
 #include <drivers/ports.h>
 
 
@@ -34,14 +40,33 @@ extern struct cdi_driver *__start_cdi_drivers, *__stop_cdi_drivers;
 
 
 extern void cdi_osdep_pci_collect(struct cdi_driver *drv);
+extern void cdi_osdep_set_up_usb_dd_ipc(struct cdi_driver *drv);
+extern void cdi_osdep_handle_usb_device(struct cdi_usb_bus_device_pattern *p);
 
 extern void cdi_net_driver_register(struct cdi_net_driver *driver);
 extern void cdi_storage_driver_register(struct cdi_storage_driver *driver);
+extern void cdi_usb_driver_register(struct cdi_usb_driver *driver);
+
+extern void cdi_osdep_provide_hc(struct cdi_usb_hc *hc);
 
 
 void cdi_osdep_device_found(void);
 
 static bool found_any = false;
+
+
+static void provide_devices(struct cdi_driver *drv)
+{
+    switch ((int)drv->bus) {
+        case CDI_PCI:
+            cdi_osdep_pci_collect(drv);
+            break;
+
+        case CDI_USB:
+            cdi_osdep_set_up_usb_dd_ipc(drv);
+            break;
+    }
+}
 
 
 int main(void)
@@ -63,35 +88,43 @@ int main(void)
     }
 
     bool vfs = false;
+    struct cdi_driver *drv = __start_cdi_drivers;
 
-    switch ((int)__start_cdi_drivers->type)
+    drv->init();
+
+    switch ((int)drv->type)
     {
         case CDI_NETWORK:
-            cdi_net_driver_register((struct cdi_net_driver *)__start_cdi_drivers);
-            if (__start_cdi_drivers->init_device != NULL)
-                cdi_osdep_pci_collect(__start_cdi_drivers);
+            cdi_net_driver_register(CDI_UPCAST(drv, struct cdi_net_driver, drv));
             break;
 
         case CDI_FILESYSTEM:
-            cdi_fs_driver_register((struct cdi_fs_driver *)__start_cdi_drivers);
+            cdi_fs_driver_register(CDI_UPCAST(drv, struct cdi_fs_driver, drv));
             vfs = true;
             break;
 
         case CDI_STORAGE:
-            cdi_storage_driver_register((struct cdi_storage_driver *)__start_cdi_drivers);
-            if (__start_cdi_drivers->init_device != NULL)
-                cdi_osdep_pci_collect(__start_cdi_drivers);
+            cdi_storage_driver_register(CDI_UPCAST(drv, struct cdi_storage_driver, drv));
             vfs = true;
             break;
 
-        default:
-            fprintf(stderr, "Unknown driver type %i for %s.\n", __start_cdi_drivers->type, __start_cdi_drivers->name);
-            return 1;
+        case CDI_SCSI:
+            cdi_scsi_driver_register(CDI_UPCAST(drv, struct cdi_scsi_driver, drv));
+            vfs = true;
+            break;
+
+        case CDI_USB:
+            cdi_usb_driver_register(CDI_UPCAST(drv, struct cdi_usb_driver, drv));
+            break;
     }
 
+    if (drv->init_device != NULL) {
+        provide_devices(drv);
+    }
 
-    if ((__start_cdi_drivers->type == CDI_FILESYSTEM) || found_any)
-        daemonize(__start_cdi_drivers->name, vfs);
+    if ((drv->type == CDI_FILESYSTEM) || (drv->type == CDI_USB) || (drv->bus == CDI_USB) || found_any) {
+        daemonize(drv->name, vfs);
+    }
 
     return 1;
 }
@@ -122,7 +155,89 @@ void cdi_init(void)
 }
 
 
+void cdi_handle_bus_device(struct cdi_driver *drv, struct cdi_bus_device_pattern *pattern)
+{
+    (void)drv;
+
+    switch ((int)pattern->bus_type) {
+        case CDI_USB:
+            cdi_osdep_handle_usb_device(CDI_UPCAST(pattern, struct cdi_usb_bus_device_pattern, pattern));
+            break;
+    }
+}
+
+
 void cdi_osdep_device_found(void)
 {
     found_any = true;
+}
+
+
+extern void cdi_osdep_provide_usb_device_to(struct cdi_usb_device *dev, pid_t pid);
+
+int cdi_provide_device(struct cdi_bus_data *device)
+{
+    if (device->bus_type != CDI_USB) {
+        return -1;
+    }
+
+    struct cdi_usb_device *usb_dev = CDI_UPCAST(device, struct cdi_usb_device, bus_data);
+
+    pid_t pid;
+    char name[32];
+
+    sprintf(name, "usb-%04x-%04x", usb_dev->vendor_id, usb_dev->product_id);
+    pid = find_daemon_by_name(name);
+    if (pid >= 0) {
+        cdi_osdep_provide_usb_device_to(usb_dev, pid);
+        return 0;
+    }
+
+    sprintf(name, "usb-%02x-%02x-%02x", usb_dev->class_id,
+            usb_dev->subclass_id, usb_dev->protocol_id);
+    pid = find_daemon_by_name(name);
+    if (pid >= 0) {
+        cdi_osdep_provide_usb_device_to(usb_dev, pid);
+        return 0;
+    }
+
+    sprintf(name, "usb-%02x-%02x-?", usb_dev->class_id,
+            usb_dev->subclass_id);
+    pid = find_daemon_by_name(name);
+    if (pid >= 0) {
+        cdi_osdep_provide_usb_device_to(usb_dev, pid);
+        return 0;
+    }
+
+    sprintf(name, "usb-%02x-?-?", usb_dev->class_id);
+    pid = find_daemon_by_name(name);
+    if (pid >= 0) {
+        cdi_osdep_provide_usb_device_to(usb_dev, pid);
+        return 0;
+    }
+
+    return -1;
+}
+
+
+void cdi_osdep_new_device(struct cdi_driver *drv, struct cdi_device *dev);
+
+void cdi_osdep_new_device(struct cdi_driver *drv, struct cdi_device *dev)
+{
+    if (!dev) {
+        return;
+    }
+
+    dev->driver = drv;
+    cdi_list_push(drv->devices, dev);
+
+    switch ((int)drv->type) {
+        case CDI_USB_HCD:
+            cdi_osdep_provide_hc(CDI_UPCAST(dev, struct cdi_usb_hc, dev));
+            break;
+
+        case CDI_SCSI:
+            cdi_scsi_device_init(CDI_UPCAST(dev, struct cdi_scsi_device, dev));
+            break;
+    }
 }

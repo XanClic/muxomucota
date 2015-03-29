@@ -557,9 +557,10 @@ bool (*__cdi_is_symlink)(const char *relpath, char *linkpath);
 
 void cdi_storage_driver_register(struct cdi_storage_driver *driver);
 
-
 void cdi_storage_driver_register(struct cdi_storage_driver *driver)
 {
+    (void)driver;
+
     __cdi_create_pipe     = cdi_storage_create_pipe;
     __cdi_duplicate_pipe  = cdi_storage_duplicate_pipe;
     __cdi_destroy_pipe    = cdi_storage_destroy_pipe;
@@ -569,6 +570,4 @@ void cdi_storage_driver_register(struct cdi_storage_driver *driver)
     __cdi_pipe_set_flag   = cdi_storage_pipe_set_flag;
     __cdi_pipe_implements = cdi_storage_pipe_implements;
     __cdi_is_symlink      = cdi_storage_is_symlink;
-
-    driver->drv.init();
 }

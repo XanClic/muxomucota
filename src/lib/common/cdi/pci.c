@@ -26,13 +26,18 @@
 #include <vfs.h>
 #include <cdi.h>
 #include <cdi/lists.h>
+#include <cdi/misc.h>
 #include <cdi/pci.h>
+#include <cdi/usb_hcd.h>
 #include <drivers/memory.h>
 #include <drivers/pci.h>
 
 #ifdef X86
 #include <drivers/ports.h>
 #endif
+
+
+extern void cdi_osdep_new_device(struct cdi_driver *drv, struct cdi_device *dev);
 
 
 #ifdef X86
@@ -247,6 +252,8 @@ static void serve_device(struct cdi_driver *drv, const char *devname, struct pci
             free(cdi_pci_dev);
 
             return;
+        } else {
+            cdi_osdep_new_device(drv, dev);
         }
     }
 }
