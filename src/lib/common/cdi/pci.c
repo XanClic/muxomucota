@@ -69,6 +69,43 @@ void cdi_pci_free_memory(struct cdi_pci_device *device)
 }
 
 
+#ifdef X86
+// FIXME
+#define __pci_inX(n, w, off_mask) \
+    uint##w##_t cdi_pci_config_read##n(struct cdi_pci_device *device, uint8_t offset) \
+    { \
+        uint##w##_t ret; \
+        out32(0xcf8, 0x80000000 \
+                     | ((device->bus & 0xff) << 16) \
+                     | ((device->dev & 0x1f) << 11) \
+                     | ((device->function & 0x07) << 8) \
+                     | (offset & 0xfc)); \
+        ret = in##w(0xcfc + (offset & off_mask)); \
+        return ret; \
+    }
+
+__pci_inX(b,  8, 3)
+__pci_inX(w, 16, 2)
+__pci_inX(l, 32, 0)
+
+
+#define __pci_outX(n, w, off_mask) \
+    void cdi_pci_config_write##n(struct cdi_pci_device *device, uint8_t offset, uint##w##_t value) \
+    { \
+        out32(0xcf8, 0x80000000 \
+                     | ((device->bus & 0xff) << 16) \
+                     | ((device->dev& 0x1f) << 11) \
+                     | ((device->function & 0x07) << 8) \
+                     | (offset & 0xfc)); \
+        out##w(0xcfc + (offset & off_mask), value); \
+    }
+
+__pci_outX(b,  8, 3)
+__pci_outX(w, 16, 2)
+__pci_outX(l, 32, 0)
+#endif
+
+
 static void serve_device(struct cdi_driver *drv, const char *devname, struct pci_config_space *conf_space, int bus, int device, int function, cdi_list_t list)
 {
     if (conf_space->header_type & 0x7f)
