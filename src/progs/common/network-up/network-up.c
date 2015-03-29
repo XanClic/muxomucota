@@ -77,9 +77,6 @@ int main(void)
 
         sprintf(fname, "(ip)/%s", &ifcs[i]);
         destroy_pipe(create_pipe(fname, O_CREAT), 0);
-
-        sprintf(fname, "(udp)/%s", &ifcs[i]);
-        destroy_pipe(create_pipe(fname, O_CREAT), 0);
     }
 
 
