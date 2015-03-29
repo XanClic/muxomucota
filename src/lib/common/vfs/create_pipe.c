@@ -199,32 +199,30 @@ int create_pipe(const char *path, int flags)
             }
 
 
-            _pipes[i].id = ipc_message_synced(_pipes[i].pid, CREATE_PIPE, ipc_cp, sizeof(int) + strlen(ipc_cp->relpath) + 1);
-
-            if (!_pipes[i].id)
+            if (!(flags & O_NOFOLLOW))
             {
-                if (!(flags & O_NOFOLLOW))
+                uintptr_t shmid = shm_create(4096);
+                char *npath = shm_open(shmid, VMM_UR);
+
+                if (ipc_shm_message_synced(_pipes[i].pid, IS_SYMLINK, shmid, ipc_cp->relpath, strlen(ipc_cp->relpath) + 1))
                 {
-                    uintptr_t shmid = shm_create(4096);
-                    char *npath = shm_open(shmid, VMM_UR);
+                    lock(&_pipe_allocation_lock);
+                    _pipes[i].pid = 0;
+                    unlock(&_pipe_allocation_lock);
 
-                    if (ipc_shm_message_synced(_pipes[i].pid, IS_SYMLINK, shmid, ipc_cp->relpath, strlen(ipc_cp->relpath) + 1))
-                    {
-                        lock(&_pipe_allocation_lock);
-                        _pipes[i].pid = 0;
-                        unlock(&_pipe_allocation_lock);
-
-                        // FIXME: ELOOP
-                        int fd = create_pipe(npath, flags);
-
-                        shm_close(shmid, npath, true);
-
-                        return fd;
-                    }
+                    // FIXME: ELOOP
+                    int fd = create_pipe(npath, flags);
 
                     shm_close(shmid, npath, true);
+
+                    return fd;
                 }
 
+                shm_close(shmid, npath, true);
+            }
+
+            _pipes[i].id = ipc_message_synced(_pipes[i].pid, CREATE_PIPE, ipc_cp, sizeof(int) + strlen(ipc_cp->relpath) + 1);
+            if (!_pipes[i].id) {
                 goto error_after_allocation;
             }
 
