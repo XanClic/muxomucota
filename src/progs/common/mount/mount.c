@@ -115,16 +115,16 @@ int main(int argc, char *argv[])
 
         if (!(child = fork()))
         {
-            printf("mount '%s' '%s'\n", file, temp_mp);
-            execlp("mount", "mount", file, temp_mp, NULL);
+            printf("mount -t vfs '%s' '%s'\n", file, temp_mp);
+            execlp("mount", "mount", "-t", "vfs", file, temp_mp, NULL);
         }
 
         waitpid(child, NULL, 0);
 
         if (!(child = fork()))
         {
-            printf("mount '%s' '%s'\n", temp_mp, mountpoint);
-            execlp("mount", "mount", temp_mp, mountpoint, NULL);
+            printf("mount -t vfs '%s' '%s'\n", temp_mp, mountpoint);
+            execlp("mount", "mount", "-t", "vfs", temp_mp, mountpoint, NULL);
         }
 
         waitpid(child, NULL, 0);
@@ -134,7 +134,7 @@ int main(int argc, char *argv[])
     }
 
 
-    int fd = create_pipe(mountpoint, O_CREAT_MOUNT_POINT);
+    int fd = create_pipe(mountpoint, O_CREAT_MOUNT_POINT | O_NOFOLLOW);
 
     if (fd < 0)
     {
