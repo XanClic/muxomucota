@@ -34,4 +34,6 @@
 
 #define assert(assertion) do { if (!(assertion)) { printf(__FILE__ ":" __quote(__LINE__) ": "); printf(__func__); printf(": Assertion '" #assertion "' failed.\n"); abort(); } } while (0)
 
+#define static_assert _Static_assert
+
 #endif
