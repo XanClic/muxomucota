@@ -1,5 +1,5 @@
 /************************************************************************
- * Copyright (C) 2013 by Hanna Reitz                                    *
+ * Copyright (C) 2015 by Hanna Reitz                                    *
  *                                                                      *
  * This file is part of µxoµcota.                                       *
  *                                                                      *
@@ -17,17 +17,11 @@
  * along with µxoµcota.  If not, see <http://www.gnu.org/licenses/>.    *
  ************************************************************************/
 
-#ifndef _KMALLOC_H
-#define _KMALLOC_H
-
-#include <stddef.h>
-#include <string.h>
+#include <drivers.h>
+#include <syscall.h>
 
 
-void *kmalloc(size_t size);
-void *krealloc(void *ptr, size_t size);
-void kfree(void *ptr);
-
-static inline void *kcalloc(size_t size) { return memset(kmalloc(size), 0, size); }
-
-#endif
+void process_add_alias(const char *name)
+{
+    syscall1(SYS_ADD_ALIAS, (uintptr_t)name);
+}

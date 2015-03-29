@@ -61,7 +61,8 @@ enum syscall_number
     SYS_ELAPSED_MS,
     SYS_VM86,
     SYS_POPUP_SET_ANSWER,
-    SYS_POPUP_GET_ANSWER
+    SYS_POPUP_GET_ANSWER,
+    SYS_ADD_ALIAS, // 20
 };
 
 

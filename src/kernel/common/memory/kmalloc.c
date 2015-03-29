@@ -64,3 +64,32 @@ void kfree(void *ptr)
     for (int i = 0; i < frame_count; i++)
         pmm_free(kernel_unmap((void *)((uintptr_t)ptr + ((uintptr_t)i << PAGE_SHIFT)), PAGE_SIZE));
 }
+
+
+void *krealloc(void *ptr, size_t size)
+{
+    if (!ptr) {
+        return kmalloc(size);
+    }
+
+    size_t *szptr = (size_t *)ptr - 1;
+    kassert(!((uintptr_t)szptr & 0xFFF));
+    size_t csz = *szptr;
+
+    if (size < csz) {
+        return ptr;
+    }
+
+    int old_frame_count = (csz  + PAGE_SIZE) >> PAGE_SHIFT;
+    int new_frame_count = (size + PAGE_SIZE) >> PAGE_SHIFT;
+
+    if (old_frame_count == new_frame_count) {
+        *szptr = size;
+        return ptr;
+    }
+
+    void *nptr = kmalloc(size);
+    memcpy(nptr, ptr, csz);
+
+    return nptr;
+}

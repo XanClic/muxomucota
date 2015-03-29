@@ -25,5 +25,6 @@
 
 
 noreturn void daemonize(const char *service, bool vfs);
+void process_add_alias(const char *name);
 
 #endif

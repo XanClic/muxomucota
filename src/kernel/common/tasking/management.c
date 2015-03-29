@@ -422,7 +422,20 @@ void q_unregister_process(process_t **list, process_t *proc)
 pid_t find_daemon_by_name(const char *name)
 {
     process_t *p;
-    for (p = daemons; (p != NULL) && strncmp(p->name, name, sizeof(p->name)); p = p->next);
+    for (p = daemons; p; p = p->next) {
+        if (!strncmp(name, p->name, sizeof(p->name))) {
+            break;
+        }
+        int i;
+        for (i = 0; i < p->alias_count; i++) {
+            if (!strncmp(name, p->aliases + i * sizeof(p->name), sizeof(p->name))) {
+                break;
+            }
+        }
+        if (i < p->alias_count) {
+            break;
+        }
+    }
 
     return (p != NULL) ? p->pid : -1;
 }
@@ -749,6 +762,14 @@ void daemonize_process(process_t *proc, const char *name)
         for (;;)
             yield();
     }
+}
+
+
+void process_add_alias(process_t *proc, const char *name)
+{
+    int i = proc->alias_count++;
+    proc->aliases = krealloc(proc->aliases, proc->alias_count * sizeof(proc->name));
+    strncpy(proc->aliases + i * sizeof(proc->name), name, sizeof(proc->name));
 }
 
 

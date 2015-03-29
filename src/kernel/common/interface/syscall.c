@@ -513,6 +513,17 @@ uintptr_t syscall_krn(int syscall_nr, uintptr_t p0, uintptr_t p1, uintptr_t p2, 
 
             return size;
         }
+
+        case SYS_ADD_ALIAS:
+        {
+            if (!is_valid_user_mem(current_process->vmmc, (const char *)p0, 32, VMM_PR)) {
+                current_process->tls->errno = EFAULT;
+                return 0;
+            }
+
+            process_add_alias(current_process, (const char *)p0);
+            return 0;
+        }
     }
 
     current_process->tls->errno = ENOSYS;
