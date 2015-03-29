@@ -23,20 +23,36 @@
 #include <vfs.h>
 
 
+static inline size_t min(size_t a, size_t b)
+{
+    return a < b ? a : b;
+}
+
+
+static void cat(int fd)
+{
+    bool file = pipe_implements(fd, I_FILE);
+
+    while (pipe_get_flag(fd, F_READABLE)) {
+        size_t press = min(65536, pipe_get_flag(fd, F_PRESSURE));
+
+        if (!press && file) {
+            break;
+        }
+
+        char inp[press];
+        stream_recv(fd, inp, press, 0);
+        stream_send(filepipe(stdout), inp, press, 0);
+    }
+}
+
+
 int main(int argc, char *argv[])
 {
     if (argc <= 1)
     {
         int fd = filepipe(stdin);
-
-        while (pipe_get_flag(fd, F_READABLE))
-        {
-            size_t press = pipe_get_flag(fd, F_PRESSURE);
-            char inp[press];
-
-            stream_recv(fd, inp, press, 0);
-            stream_send(filepipe(stdout), inp, press, 0);
-        }
+        cat(fd);
 
         return 0;
     }
@@ -52,14 +68,7 @@ int main(int argc, char *argv[])
             continue;
         }
 
-        while (pipe_get_flag(fd, F_READABLE))
-        {
-            size_t press = pipe_get_flag(fd, F_PRESSURE);
-            char inp[press];
-
-            stream_recv(fd, inp, press, 0);
-            stream_send(filepipe(stdout), inp, press, 0);
-        }
+        cat(fd);
     }
 
 
