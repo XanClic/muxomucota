@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <syscall.h>
+#include <system-timer.h>
 #include <cdi.h>
 #include <cdi/lists.h>
 #include <cdi/misc.h>
@@ -114,6 +115,12 @@ int cdi_wait_irq(uint8_t irq, uint32_t timeout)
 void cdi_sleep_ms(uint32_t ms)
 {
     msleep(ms);
+}
+
+
+uint64_t cdi_elapsed_ms(void)
+{
+    return elapsed_ms();
 }
 
 
