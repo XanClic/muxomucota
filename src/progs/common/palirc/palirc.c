@@ -97,7 +97,7 @@ static char *my_fgets(char *s, int size, int stream)
     return s;
 }
 
-static int8_t kbd_thread_stack[1024];
+static int8_t kbd_thread_stack[8192];
 static int quit = 0, joined = 0;
 static char current_channel[64], current_nick[64];
 static int con;
@@ -243,7 +243,7 @@ int main(int argc, char *argv[])
 
     input_buffer = malloc(256);
 
-    pid_t pid = create_thread(&kbd_thread, &kbd_thread_stack[1020], NULL);
+    pid_t pid = create_thread(&kbd_thread, &kbd_thread_stack[8188], NULL);
     if (!pid)
     {
         destroy_pipe(con, 0);
